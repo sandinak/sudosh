@@ -20,8 +20,8 @@ void signal_handler(int sig) {
             exit(EXIT_FAILURE);
             break;
         case SIGCHLD:
-            /* Handle child process termination */
-            while (waitpid(-1, NULL, WNOHANG) > 0);
+            /* Don't reap children here - let execute_command handle it */
+            /* This prevents the "waitpid: no child process" error */
             break;
     }
 }
@@ -41,9 +41,8 @@ void setup_signal_handlers(void) {
     sigaction(SIGINT, &sa, NULL);
     sigaction(SIGTERM, &sa, NULL);
     sigaction(SIGQUIT, &sa, NULL);
-    
-    /* Handle child process signals */
-    sa.sa_flags |= SA_NOCLDSTOP;
+
+    /* Handle child process signals - but don't reap them */
     sigaction(SIGCHLD, &sa, NULL);
 
     /* Ignore some signals */

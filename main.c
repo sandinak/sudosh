@@ -59,6 +59,12 @@ int main_loop(void) {
         return EXIT_FAILURE;
     }
 
+    /* Initialize command history logging */
+    if (init_command_history(username) != 0) {
+        /* Not a fatal error, just warn */
+        fprintf(stderr, "Warning: Could not initialize command history logging\n");
+    }
+
     /* Log session start */
     log_session_start(username);
 
@@ -82,6 +88,12 @@ int main_loop(void) {
             free(command_line);
             continue;
         }
+
+        /* Log the input command */
+        log_session_input(command_line);
+
+        /* Log command to history */
+        log_command_history(command_line);
 
         /* Check for built-in commands */
         builtin_result = handle_builtin_command(command_line);
@@ -123,6 +135,9 @@ int main_loop(void) {
     /* Log session end */
     log_session_end(username);
 
+    /* Close command history logging */
+    close_command_history();
+
     /* Clean up */
     free_user_info(user);
     free(username);
@@ -135,24 +150,35 @@ int main_loop(void) {
  */
 int main(int argc, char *argv[]) {
     int exit_code;
+    char *session_logfile = NULL;
+    int i;
 
     /* Parse command line arguments */
-    if (argc > 1) {
-        if (strcmp(argv[1], "--help") == 0 || strcmp(argv[1], "-h") == 0) {
+    for (i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
             printf("Usage: %s [options]\n\n", argv[0]);
             printf("sudosh - Interactive sudo shell\n\n");
             printf("Options:\n");
-            printf("  -h, --help     Show this help message\n");
-            printf("  -v, --version  Show version information\n\n");
+            printf("  -h, --help              Show this help message\n");
+            printf("  -v, --version           Show version information\n");
+            printf("  -l, --log-session FILE  Log entire session to FILE\n\n");
             printf("sudosh provides an interactive shell with sudo privileges.\n");
             printf("All commands are authenticated and logged to syslog.\n");
+            printf("Use -l to also log the complete session to a file.\n");
             return EXIT_SUCCESS;
-        } else if (strcmp(argv[1], "--version") == 0 || strcmp(argv[1], "-v") == 0) {
+        } else if (strcmp(argv[i], "--version") == 0 || strcmp(argv[i], "-v") == 0) {
             printf("sudosh %s\n", SUDOSH_VERSION);
             printf("Interactive sudo shell with command logging\n");
             return EXIT_SUCCESS;
+        } else if (strcmp(argv[i], "--log-session") == 0 || strcmp(argv[i], "-l") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "sudosh: option '%s' requires an argument\n", argv[i]);
+                fprintf(stderr, "Try '%s --help' for more information.\n", argv[0]);
+                return EXIT_FAILURE;
+            }
+            session_logfile = argv[++i];
         } else {
-            fprintf(stderr, "sudosh: unknown option '%s'\n", argv[1]);
+            fprintf(stderr, "sudosh: unknown option '%s'\n", argv[i]);
             fprintf(stderr, "Try '%s --help' for more information.\n", argv[0]);
             return EXIT_FAILURE;
         }
@@ -161,11 +187,23 @@ int main(int argc, char *argv[]) {
     /* Initialize logging */
     init_logging();
 
+    /* Initialize session logging if requested */
+    if (session_logfile) {
+        if (init_session_logging(session_logfile) != 0) {
+            fprintf(stderr, "sudosh: failed to initialize session logging to '%s'\n", session_logfile);
+            return EXIT_FAILURE;
+        }
+        printf("Session logging enabled to: %s\n", session_logfile);
+    }
+
     /* Initialize security measures */
     init_security();
 
     /* Run main program loop */
     exit_code = main_loop();
+
+    /* Close session logging */
+    close_session_logging();
 
     /* Clean up and exit */
     cleanup_and_exit(exit_code);

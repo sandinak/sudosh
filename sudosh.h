@@ -17,6 +17,7 @@
 #include <ctype.h>
 #include <sys/stat.h>
 #include <limits.h>
+#include <time.h>
 
 #ifndef MOCK_AUTH
 #include <security/pam_appl.h>
@@ -155,6 +156,17 @@ void log_error(const char *message);
 void log_security_violation(const char *username, const char *violation);
 void close_logging(void);
 
+/* Session logging functions */
+int init_session_logging(const char *logfile);
+void log_session_input(const char *input);
+void log_session_output(const char *output);
+void close_session_logging(void);
+
+/* Command history functions */
+int init_command_history(const char *username);
+void log_command_history(const char *command);
+void close_command_history(void);
+
 /* Security functions */
 void sanitize_environment(void);
 void setup_signal_handlers(void);
@@ -170,6 +182,7 @@ void cleanup_security(void);
 /* Utility functions */
 void print_banner(void);
 void print_help(void);
+void print_commands(void);
 char *trim_whitespace(char *str);
 int is_empty_command(const char *command);
 char *read_command(void);

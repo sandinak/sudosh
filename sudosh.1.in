@@ -4,6 +4,9 @@ sudosh \- interactive sudo shell with comprehensive logging
 .SH SYNOPSIS
 .B sudosh
 [\fIOPTION\fR]...
+.br
+.B sudosh
+[\fB\-l\fR \fIFILE\fR] [\fB\-h\fR] [\fB\-v\fR]
 .SH DESCRIPTION
 .B sudosh
 is an interactive sudo shell that provides a command prompt for executing privileged commands with comprehensive logging to syslog. It uses PAM (Pluggable Authentication Modules) for secure user authentication and logs all commands in the same format as sudo.
@@ -17,6 +20,9 @@ Display help message and exit.
 .TP
 .BR \-v ", " \-\-version
 Display version information and exit.
+.TP
+.BR \-l " \fIFILE\fR, " \-\-log\-session " \fIFILE\fR"
+Log the entire session (input and output) to the specified file. This creates a detailed log of all commands entered and their output with timestamps.
 
 .SH USAGE
 When started, sudosh performs the following steps:
@@ -25,14 +31,25 @@ Checks if the current user has sudo privileges (member of wheel or sudo group)
 .IP 2. 4
 Prompts for password authentication via PAM
 .IP 3. 4
-Provides an interactive shell prompt: \fBsudosh#\fR
+Provides an interactive shell prompt: \fBsudosh:/current/directory#\fR
 .IP 4. 4
 Logs all commands and authentication attempts to syslog
+.IP 5. 4
+Automatically logs command history to ~/.sudosh_history with timestamps
 
 .SH BUILT-IN COMMANDS
 .TP
 .B help
 Show available commands and usage examples.
+.TP
+.B commands
+List all available commands, including built-in commands and system commands found in PATH.
+.TP
+.B cd \fI[directory]\fR
+Change the current working directory. If no directory is specified, changes to the user's home directory.
+.TP
+.B pwd
+Print the current working directory.
 .TP
 .BR exit ", " quit
 Exit the sudosh shell.
@@ -47,12 +64,57 @@ Start sudosh:
 .TP
 Execute commands in sudosh:
 .nf
-sudosh# ls -la /root
-sudosh# systemctl restart nginx
-sudosh# apt update && apt upgrade
-sudosh# help
-sudosh# exit
+sudosh:/home/user# ls -la /root
+sudosh:/home/user# systemctl restart nginx
+sudosh:/home/user# apt update && apt upgrade
+sudosh:/home/user# cd /var/log
+sudosh:/var/log# pwd
+sudosh:/var/log# commands
+sudosh:/var/log# help
+sudosh:/var/log# exit
 .fi
+.TP
+Start sudosh with session logging:
+.B sudosh -l /tmp/my_session.log
+
+.SH LINE EDITING
+sudosh provides basic line editing capabilities similar to readline:
+.TP
+.B Ctrl-A
+Move cursor to the beginning of the line.
+.TP
+.B Ctrl-E
+Move cursor to the end of the line.
+.TP
+.B Ctrl-B
+Move cursor one character backward.
+.TP
+.B Ctrl-F
+Move cursor one character forward.
+.TP
+.B Ctrl-D
+Delete the character at the cursor position.
+.TP
+.B Ctrl-K
+Delete from cursor to end of line.
+.TP
+.B Ctrl-U
+Delete the entire line.
+.TP
+.B Backspace
+Delete the character before the cursor.
+
+.SH LOGGING FEATURES
+sudosh provides comprehensive logging capabilities:
+
+.SS Syslog Integration
+All authentication attempts, commands, and security events are logged to syslog with detailed information including hostname, TTY, working directory, and timestamps.
+
+.SS Command History
+All commands executed in sudosh are automatically logged to \fB~/.sudosh_history\fR with timestamps. This file is created with 0600 permissions (readable/writable by owner only) for security.
+
+.SS Session Logging
+When the \fB-l\fR option is used, sudosh logs the complete session including all input and output to the specified file. This creates a detailed transcript of the entire session with timestamps.
 
 .SH SECURITY FEATURES
 .SS Environment Sanitization
