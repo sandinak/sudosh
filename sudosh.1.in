@@ -1,0 +1,204 @@
+.TH SUDOSH 1 "July 2025" "sudosh @VERSION@" "User Commands"
+.SH NAME
+sudosh \- interactive sudo shell with comprehensive logging
+.SH SYNOPSIS
+.B sudosh
+[\fIOPTION\fR]...
+.SH DESCRIPTION
+.B sudosh
+is an interactive sudo shell that provides a command prompt for executing privileged commands with comprehensive logging to syslog. It uses PAM (Pluggable Authentication Modules) for secure user authentication and logs all commands in the same format as sudo.
+
+Unlike traditional sudo which executes single commands, sudosh provides an interactive shell session where multiple commands can be executed with elevated privileges while maintaining full audit trails.
+
+.SH OPTIONS
+.TP
+.BR \-h ", " \-\-help
+Display help message and exit.
+.TP
+.BR \-v ", " \-\-version
+Display version information and exit.
+
+.SH USAGE
+When started, sudosh performs the following steps:
+.IP 1. 4
+Checks if the current user has sudo privileges (member of wheel or sudo group)
+.IP 2. 4
+Prompts for password authentication via PAM
+.IP 3. 4
+Provides an interactive shell prompt: \fBsudosh#\fR
+.IP 4. 4
+Logs all commands and authentication attempts to syslog
+
+.SH BUILT-IN COMMANDS
+.TP
+.B help
+Show available commands and usage examples.
+.TP
+.BR exit ", " quit
+Exit the sudosh shell.
+.TP
+.I command
+Execute any other command with root privileges.
+
+.SH EXAMPLES
+.TP
+Start sudosh:
+.B sudosh
+.TP
+Execute commands in sudosh:
+.nf
+sudosh# ls -la /root
+sudosh# systemctl restart nginx
+sudosh# apt update && apt upgrade
+sudosh# help
+sudosh# exit
+.fi
+
+.SH SECURITY FEATURES
+.SS Environment Sanitization
+sudosh removes dangerous environment variables such as LD_PRELOAD, CDPATH, and others that could be used for privilege escalation attacks. It sets a secure PATH and appropriate umask.
+
+.SS Command Validation
+All commands are validated for security issues including:
+.IP \(bu 4
+Null byte injection attempts
+.IP \(bu 4
+Excessive command length
+.IP \(bu 4
+Path traversal attempts (../)
+
+.SS Privilege Management
+.IP \(bu 4
+Requires setuid root or running as root
+.IP \(bu 4
+Proper privilege escalation for command execution
+.IP \(bu 4
+Signal handling for clean shutdown
+
+.SS Authentication
+.IP \(bu 4
+PAM-based authentication
+.IP \(bu 4
+Group membership validation (wheel/sudo groups)
+.IP \(bu 4
+Failed authentication logging
+
+.SH LOGGING
+All sudosh activity is logged to syslog with facility LOG_AUTHPRIV. Log entries include:
+.IP \(bu 4
+Authentication attempts (success/failure)
+.IP \(bu 4
+Session start/end events
+.IP \(bu 4
+Command executions with full context (TTY, PWD, USER, COMMAND)
+.IP \(bu 4
+Security violations
+
+Log format matches sudo for compatibility with existing log analysis tools:
+.nf
+username : TTY=tty ; PWD=directory ; USER=root ; COMMAND=command
+.fi
+
+.SH CONFIGURATION
+sudosh uses the system's PAM configuration. It attempts to use the "sudo" PAM service, which typically inherits from the system authentication configuration.
+
+On systems without PAM support, sudosh falls back to mock authentication for demonstration purposes.
+
+.SH FILES
+.TP
+.I /etc/pam.d/sudo
+PAM configuration file used by sudosh
+.TP
+.I /etc/group
+Group membership file (wheel/sudo groups)
+.TP
+.I /var/log/auth.log
+Authentication log file (Debian/Ubuntu)
+.TP
+.I /var/log/secure
+Security log file (Red Hat/CentOS)
+
+.SH EXIT STATUS
+.TP
+.B 0
+Success
+.TP
+.B 1
+General failure
+.TP
+.B 2
+Authentication failure
+.TP
+.B 127
+Command not found
+
+.SH SECURITY CONSIDERATIONS
+.IP \(bu 4
+sudosh should only be used in trusted environments
+.IP \(bu 4
+Regular security audits are recommended
+.IP \(bu 4
+Monitor logs for suspicious activity
+.IP \(bu 4
+Keep the system and dependencies updated
+.IP \(bu 4
+The binary must be installed with setuid root permissions for production use
+
+.SH INSTALLATION
+To install sudosh with proper permissions:
+.nf
+make
+sudo make install
+.fi
+
+This installs the binary to /usr/local/bin/sudosh with setuid root permissions.
+
+.SH VIEWING LOGS
+To view sudosh logs:
+.nf
+# On systems with journald
+sudo journalctl -t sudosh
+
+# On systems with traditional syslog
+sudo tail -f /var/log/auth.log
+sudo tail -f /var/log/secure
+.fi
+
+.SH TROUBLESHOOTING
+.SS Permission Denied
+Ensure sudosh is installed with setuid root:
+.nf
+ls -l /usr/local/bin/sudosh
+# Should show: -rwsr-xr-x ... root root ... sudosh
+.fi
+
+.SS Authentication Issues
+Check PAM configuration:
+.nf
+ls /etc/pam.d/sudo
+.fi
+
+.SS User Not in Sudoers
+Add user to appropriate group:
+.nf
+# Debian/Ubuntu
+sudo usermod -aG sudo username
+
+# Red Hat/CentOS
+sudo usermod -aG wheel username
+.fi
+
+.SH AUTHOR
+Written for secure system administration and audit compliance.
+
+.SH REPORTING BUGS
+Report bugs and security issues through appropriate channels.
+
+.SH COPYRIGHT
+This is free software; see the source for copying conditions.
+
+.SH SEE ALSO
+.BR sudo (8),
+.BR su (1),
+.BR pam (8),
+.BR syslog (3)

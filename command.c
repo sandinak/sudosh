@@ -1,0 +1,255 @@
+#include "sudosh.h"
+
+/**
+ * Parse command line input into command structure
+ */
+int parse_command(const char *input, struct command_info *cmd) {
+    char *input_copy, *token, *saveptr;
+    int argc = 0;
+    int argv_size = 16;
+
+    if (!input || !cmd) {
+        return -1;
+    }
+
+    /* Initialize command structure */
+    memset(cmd, 0, sizeof(struct command_info));
+
+    /* Make a copy of input for tokenization */
+    input_copy = strdup(input);
+    if (!input_copy) {
+        return -1;
+    }
+
+    /* Allocate initial argv array */
+    cmd->argv = malloc(argv_size * sizeof(char *));
+    if (!cmd->argv) {
+        free(input_copy);
+        return -1;
+    }
+
+    /* Tokenize the command */
+    token = strtok_r(input_copy, " \t\n", &saveptr);
+    while (token != NULL) {
+        /* Resize argv if needed */
+        if (argc >= argv_size - 1) {
+            argv_size *= 2;
+            char **new_argv = realloc(cmd->argv, argv_size * sizeof(char *));
+            if (!new_argv) {
+                free_command_info(cmd);
+                free(input_copy);
+                return -1;
+            }
+            cmd->argv = new_argv;
+        }
+
+        /* Store the token */
+        cmd->argv[argc] = strdup(token);
+        if (!cmd->argv[argc]) {
+            free_command_info(cmd);
+            free(input_copy);
+            return -1;
+        }
+        argc++;
+
+        token = strtok_r(NULL, " \t\n", &saveptr);
+    }
+
+    /* Null-terminate argv */
+    cmd->argv[argc] = NULL;
+    cmd->argc = argc;
+
+    /* Store the full command */
+    cmd->command = strdup(input);
+    if (!cmd->command) {
+        free_command_info(cmd);
+        free(input_copy);
+        return -1;
+    }
+
+    free(input_copy);
+    return 0;
+}
+
+/**
+ * Execute command with elevated privileges
+ */
+int execute_command(struct command_info *cmd, struct user_info *user) {
+    pid_t pid;
+    int status;
+    char *command_path;
+
+    if (!cmd || !cmd->argv || !cmd->argv[0]) {
+        return -1;
+    }
+
+    /* Find the command in PATH if it's not an absolute path */
+    if (cmd->argv[0][0] != '/') {
+        command_path = find_command_in_path(cmd->argv[0]);
+        if (!command_path) {
+            fprintf(stderr, "sudosh: %s: command not found\n", cmd->argv[0]);
+            return EXIT_COMMAND_NOT_FOUND;
+        }
+    } else {
+        command_path = strdup(cmd->argv[0]);
+        if (!command_path) {
+            return -1;
+        }
+    }
+
+    /* Check if command exists and is executable */
+    if (access(command_path, X_OK) != 0) {
+        fprintf(stderr, "sudosh: %s: permission denied or not found\n", command_path);
+        free(command_path);
+        return EXIT_COMMAND_NOT_FOUND;
+    }
+
+    /* Fork and execute */
+    pid = fork();
+    if (pid == -1) {
+        perror("fork");
+        free(command_path);
+        return -1;
+    }
+
+    if (pid == 0) {
+        /* Child process */
+        
+        /* Set up environment */
+        if (cmd->envp) {
+            environ = cmd->envp;
+        }
+
+        /* Change to root privileges */
+        if (setgid(0) != 0) {
+            perror("setgid");
+            exit(EXIT_FAILURE);
+        }
+
+        if (setuid(0) != 0) {
+            perror("setuid");
+            exit(EXIT_FAILURE);
+        }
+
+        /* Execute the command */
+        execv(command_path, cmd->argv);
+        
+        /* If we get here, exec failed */
+        perror("execv");
+        exit(EXIT_COMMAND_NOT_FOUND);
+    } else {
+        /* Parent process */
+        free(command_path);
+        
+        /* Wait for child to complete */
+        if (waitpid(pid, &status, 0) == -1) {
+            perror("waitpid");
+            return -1;
+        }
+
+        /* Return the exit status */
+        if (WIFEXITED(status)) {
+            return WEXITSTATUS(status);
+        } else if (WIFSIGNALED(status)) {
+            fprintf(stderr, "Command terminated by signal %d\n", WTERMSIG(status));
+            return 128 + WTERMSIG(status);
+        }
+    }
+
+    return 0;
+}
+
+/**
+ * Find command in PATH
+ */
+char *find_command_in_path(const char *command) {
+    char *path_env, *path_copy, *dir, *saveptr;
+    char *full_path;
+    size_t path_len;
+
+    if (!command) {
+        return NULL;
+    }
+
+    /* Get PATH environment variable */
+    path_env = getenv("PATH");
+    if (!path_env) {
+        path_env = "/usr/local/bin:/usr/bin:/bin";
+    }
+
+    path_copy = strdup(path_env);
+    if (!path_copy) {
+        return NULL;
+    }
+
+    /* Search each directory in PATH */
+    dir = strtok_r(path_copy, ":", &saveptr);
+    while (dir != NULL) {
+        path_len = strlen(dir) + strlen(command) + 2;
+        full_path = malloc(path_len);
+        if (!full_path) {
+            free(path_copy);
+            return NULL;
+        }
+
+        snprintf(full_path, path_len, "%s/%s", dir, command);
+
+        /* Check if file exists and is executable */
+        if (access(full_path, X_OK) == 0) {
+            free(path_copy);
+            return full_path;
+        }
+
+        free(full_path);
+        dir = strtok_r(NULL, ":", &saveptr);
+    }
+
+    free(path_copy);
+    return NULL;
+}
+
+/**
+ * Free command_info structure
+ */
+void free_command_info(struct command_info *cmd) {
+    int i;
+
+    if (!cmd) {
+        return;
+    }
+
+    if (cmd->command) {
+        free(cmd->command);
+        cmd->command = NULL;
+    }
+
+    if (cmd->argv) {
+        for (i = 0; i < cmd->argc; i++) {
+            if (cmd->argv[i]) {
+                free(cmd->argv[i]);
+            }
+        }
+        free(cmd->argv);
+        cmd->argv = NULL;
+    }
+
+    cmd->argc = 0;
+}
+
+/**
+ * Check if command is empty or whitespace only
+ */
+int is_empty_command(const char *command) {
+    if (!command) {
+        return 1;
+    }
+
+    while (*command) {
+        if (*command != ' ' && *command != '\t' && *command != '\n') {
+            return 0;
+        }
+        command++;
+    }
+
+    return 1;
+}
