@@ -16,6 +16,7 @@
 #include <sys/resource.h>
 #include <ctype.h>
 #include <sys/stat.h>
+#include <limits.h>
 
 #ifndef MOCK_AUTH
 #include <security/pam_appl.h>
@@ -113,6 +114,7 @@ int check_sudo_privileges(const char *username);
 int check_sudo_privileges_fallback(const char *username);
 int check_sudo_privileges_enhanced(const char *username);
 int check_nopasswd_privileges_enhanced(const char *username);
+int check_nopasswd_sudo_l(const char *username);
 
 /* NSS configuration functions */
 struct nss_config *read_nss_config(void);

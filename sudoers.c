@@ -1,5 +1,6 @@
 #include "sudosh.h"
 #include <fcntl.h>
+#include <dirent.h>
 
 /* Default sudoers file path */
 #define SUDOERS_PATH "/etc/sudoers"
@@ -240,6 +241,99 @@ static struct sudoers_userspec *parse_sudoers_line(const char *line) {
 }
 
 /**
+ * Check if filename is valid for sudoers include
+ * Valid files must not contain '.' or '~' and must be regular files
+ */
+static int is_valid_sudoers_file(const char *filename) {
+    /* Skip files with dots (except at start for hidden files) */
+    if (strchr(filename, '.') != NULL) {
+        return 0;
+    }
+
+    /* Skip files with tildes (backup files) */
+    if (strchr(filename, '~') != NULL) {
+        return 0;
+    }
+
+    /* Skip files starting with '#' (comments) */
+    if (filename[0] == '#') {
+        return 0;
+    }
+
+    return 1;
+}
+
+/**
+ * Parse all files in an include directory
+ */
+static void parse_sudoers_directory(const char *dirname, struct sudoers_config *config, struct sudoers_userspec **last_spec) {
+    DIR *dir;
+    struct dirent *entry;
+    char filepath[PATH_MAX];
+    FILE *fp;
+    char *line = NULL;
+    size_t len = 0;
+    ssize_t read;
+
+    if (!dirname || !config) {
+        return;
+    }
+
+    dir = opendir(dirname);
+    if (!dir) {
+        /* Directory doesn't exist or can't be read, not an error */
+        return;
+    }
+
+    while ((entry = readdir(dir)) != NULL) {
+        /* Skip . and .. */
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
+            continue;
+        }
+
+        /* Check if filename is valid for sudoers include */
+        if (!is_valid_sudoers_file(entry->d_name)) {
+            continue;
+        }
+
+        /* Build full file path */
+        snprintf(filepath, sizeof(filepath), "%s/%s", dirname, entry->d_name);
+
+        /* Try to open the file */
+        fp = fopen(filepath, "r");
+        if (!fp) {
+            continue;  /* Skip files we can't read */
+        }
+
+        /* Parse the file line by line */
+        while ((read = getline(&line, &len, fp)) != -1) {
+            /* Remove newline */
+            if (read > 0 && line[read - 1] == '\n') {
+                line[read - 1] = '\0';
+            }
+
+            struct sudoers_userspec *spec = parse_sudoers_line(line);
+            if (spec) {
+                if (!config->userspecs) {
+                    config->userspecs = spec;
+                    *last_spec = spec;
+                } else {
+                    (*last_spec)->next = spec;
+                    *last_spec = spec;
+                }
+            }
+        }
+
+        fclose(fp);
+    }
+
+    if (line) {
+        free(line);
+    }
+    closedir(dir);
+}
+
+/**
  * Parse sudoers file
  */
 struct sudoers_config *parse_sudoers_file(const char *filename) {
@@ -273,7 +367,29 @@ struct sudoers_config *parse_sudoers_file(const char *filename) {
         if (read > 0 && line[read - 1] == '\n') {
             line[read - 1] = '\0';
         }
-        
+
+        /* Check for #includedir directive */
+        char *trimmed = line;
+        while (*trimmed && isspace(*trimmed)) {
+            trimmed++;
+        }
+
+        if (strncmp(trimmed, "#includedir", 11) == 0) {
+            /* Parse includedir directive */
+            char *dir_path = trimmed + 11;
+            while (*dir_path && isspace(*dir_path)) {
+                dir_path++;
+            }
+
+            if (*dir_path) {
+                /* Update the includedir in config and parse the directory */
+                free(config->includedir);
+                config->includedir = strdup(dir_path);
+                parse_sudoers_directory(dir_path, config, &last_spec);
+            }
+            continue;
+        }
+
         struct sudoers_userspec *spec = parse_sudoers_line(line);
         if (spec) {
             if (!config->userspecs) {

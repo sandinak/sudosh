@@ -311,6 +311,48 @@ int check_nopasswd_privileges_enhanced(const char *username) {
     }
 
     free_nss_config(nss_config);
+
+    /* If no NOPASSWD found via NSS sources, try sudo -l method */
+    if (!has_nopasswd) {
+        has_nopasswd = check_nopasswd_sudo_l(username);
+    }
+
+    return has_nopasswd;
+}
+
+/**
+ * Check if user has NOPASSWD privileges using sudo -l
+ */
+int check_nopasswd_sudo_l(const char *username) {
+    char command[256];
+    FILE *fp;
+    char buffer[1024];
+    int has_nopasswd = 0;
+
+    /* Check for NULL or empty username */
+    if (!username || *username == '\0') {
+        return 0;
+    }
+
+    /* Build sudo -l command for the user */
+    snprintf(command, sizeof(command), "sudo -l -U %s 2>/dev/null", username);
+
+    /* Execute sudo -l to check privileges */
+    fp = popen(command, "r");
+    if (!fp) {
+        return 0;
+    }
+
+    /* Read output and look for NOPASSWD indicators */
+    while (fgets(buffer, sizeof(buffer), fp)) {
+        /* Look for NOPASSWD in the output */
+        if (strstr(buffer, "NOPASSWD:")) {
+            has_nopasswd = 1;
+            break;
+        }
+    }
+
+    pclose(fp);
     return has_nopasswd;
 }
 
