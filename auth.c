@@ -226,11 +226,16 @@ int check_sudo_privileges_enhanced(const char *username) {
     for (source = nss_config->sudoers_sources; source && !has_privileges; source = source->next) {
         switch (source->type) {
             case NSS_SOURCE_FILES:
-                /* Parse and check sudoers file */
+                /* Parse and check sudoers file with privilege escalation */
                 sudoers_config = parse_sudoers_file(NULL);
                 if (sudoers_config) {
                     has_privileges = check_sudoers_privileges(username, hostname, sudoers_config);
                     free_sudoers_config(sudoers_config);
+                    /* If we successfully parsed sudoers, don't fall back to sudo -l */
+                    if (has_privileges) {
+                        free_nss_config(nss_config);
+                        return has_privileges;
+                    }
                 }
                 break;
 
@@ -250,9 +255,23 @@ int check_sudo_privileges_enhanced(const char *username) {
 
     free_nss_config(nss_config);
 
-    /* If no privileges found via NSS sources, fall back to original method */
+    /* If no privileges found via NSS sources, try direct sudoers parsing */
     if (!has_privileges) {
-        has_privileges = check_sudo_privileges(username);
+        /* Try to parse sudoers file directly (will escalate privileges if needed) */
+        struct sudoers_config *sudoers_config = parse_sudoers_file(NULL);
+        if (sudoers_config) {
+            char hostname[256];
+            if (gethostname(hostname, sizeof(hostname)) != 0) {
+                strcpy(hostname, "localhost");
+            }
+            has_privileges = check_sudoers_privileges(username, hostname, sudoers_config);
+            free_sudoers_config(sudoers_config);
+        }
+
+        /* If still no privileges, fall back to sudo -l method */
+        if (!has_privileges) {
+            has_privileges = check_sudo_privileges(username);
+        }
     }
 
     return has_privileges;
@@ -288,11 +307,16 @@ int check_nopasswd_privileges_enhanced(const char *username) {
     for (source = nss_config->sudoers_sources; source && !has_nopasswd; source = source->next) {
         switch (source->type) {
             case NSS_SOURCE_FILES:
-                /* Parse and check sudoers file for NOPASSWD */
+                /* Parse and check sudoers file for NOPASSWD with privilege escalation */
                 sudoers_config = parse_sudoers_file(NULL);
                 if (sudoers_config) {
                     has_nopasswd = check_sudoers_nopasswd(username, hostname, sudoers_config);
                     free_sudoers_config(sudoers_config);
+                    /* If we successfully parsed sudoers, don't fall back to sudo -l */
+                    if (has_nopasswd) {
+                        free_nss_config(nss_config);
+                        return has_nopasswd;
+                    }
                 }
                 break;
 
@@ -312,9 +336,23 @@ int check_nopasswd_privileges_enhanced(const char *username) {
 
     free_nss_config(nss_config);
 
-    /* If no NOPASSWD found via NSS sources, try sudo -l method */
+    /* If no NOPASSWD found via NSS sources, try direct sudoers parsing */
     if (!has_nopasswd) {
-        has_nopasswd = check_nopasswd_sudo_l(username);
+        /* Try to parse sudoers file directly (will escalate privileges if needed) */
+        struct sudoers_config *sudoers_config = parse_sudoers_file(NULL);
+        if (sudoers_config) {
+            char hostname[256];
+            if (gethostname(hostname, sizeof(hostname)) != 0) {
+                strcpy(hostname, "localhost");
+            }
+            has_nopasswd = check_sudoers_nopasswd(username, hostname, sudoers_config);
+            free_sudoers_config(sudoers_config);
+        }
+
+        /* If still no NOPASSWD found, fall back to sudo -l method */
+        if (!has_nopasswd) {
+            has_nopasswd = check_nopasswd_sudo_l(username);
+        }
     }
 
     return has_nopasswd;

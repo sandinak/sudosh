@@ -241,6 +241,43 @@ static struct sudoers_userspec *parse_sudoers_line(const char *line) {
 }
 
 /**
+ * Temporarily escalate privileges to read sudoers file
+ * Returns 1 if escalation was needed and successful, 0 if not needed, -1 on error
+ */
+static int escalate_for_sudoers_read(uid_t *saved_euid) {
+    uid_t real_uid = get_real_uid();
+    uid_t effective_uid = geteuid();
+
+    /* If we're already running as root, no escalation needed */
+    if (effective_uid == 0) {
+        return 0;
+    }
+
+    /* If we're not setuid root, we can't escalate */
+    if (real_uid == effective_uid) {
+        return -1;
+    }
+
+    /* Save current effective UID and escalate to root */
+    *saved_euid = effective_uid;
+    if (seteuid(0) != 0) {
+        return -1;
+    }
+
+    return 1;
+}
+
+/**
+ * Drop privileges back after reading sudoers file
+ */
+static void drop_after_sudoers_read(int escalated, uid_t saved_euid) {
+    if (escalated == 1) {
+        /* Restore original effective UID */
+        seteuid(saved_euid);
+    }
+}
+
+/**
  * Check if filename is valid for sudoers include
  * Valid files must not contain '.' or '~' and must be regular files
  */
@@ -274,14 +311,20 @@ static void parse_sudoers_directory(const char *dirname, struct sudoers_config *
     char *line = NULL;
     size_t len = 0;
     ssize_t read;
+    uid_t saved_euid;
+    int escalated;
 
     if (!dirname || !config) {
         return;
     }
 
+    /* Temporarily escalate privileges to read sudoers directory */
+    escalated = escalate_for_sudoers_read(&saved_euid);
+
     dir = opendir(dirname);
     if (!dir) {
-        /* Directory doesn't exist or can't be read, not an error */
+        /* Drop privileges and return */
+        drop_after_sudoers_read(escalated, saved_euid);
         return;
     }
 
@@ -331,7 +374,12 @@ static void parse_sudoers_directory(const char *dirname, struct sudoers_config *
         free(line);
     }
     closedir(dir);
+
+    /* Drop privileges back to original level */
+    drop_after_sudoers_read(escalated, saved_euid);
 }
+
+
 
 /**
  * Parse sudoers file
@@ -343,21 +391,28 @@ struct sudoers_config *parse_sudoers_file(const char *filename) {
     ssize_t read;
     struct sudoers_config *config;
     struct sudoers_userspec *last_spec = NULL;
-    
+    uid_t saved_euid;
+    int escalated;
+
     if (!filename) {
         filename = SUDOERS_PATH;
     }
-    
+
     config = malloc(sizeof(struct sudoers_config));
     if (!config) {
         return NULL;
     }
-    
+
     config->userspecs = NULL;
     config->includedir = strdup(SUDOERS_DIR);
-    
+
+    /* Temporarily escalate privileges to read sudoers file */
+    escalated = escalate_for_sudoers_read(&saved_euid);
+
     fp = fopen(filename, "r");
     if (!fp) {
+        /* Drop privileges before returning */
+        drop_after_sudoers_read(escalated, saved_euid);
         /* If we can't read sudoers, return empty config */
         return config;
     }
@@ -404,7 +459,10 @@ struct sudoers_config *parse_sudoers_file(const char *filename) {
     
     free(line);
     fclose(fp);
-    
+
+    /* Drop privileges back to original level */
+    drop_after_sudoers_read(escalated, saved_euid);
+
     return config;
 }
 
@@ -520,7 +578,12 @@ int check_sudoers_nopasswd(const char *username, const char *hostname, struct su
             if (spec->hosts) {
                 for (int i = 0; spec->hosts[i]; i++) {
                     if (match_pattern(spec->hosts[i], hostname)) {
-                        return spec->nopasswd;  /* Return NOPASSWD status */
+                        /* If this rule has NOPASSWD, return YES immediately */
+                        if (spec->nopasswd) {
+                            return 1;
+                        }
+                        /* If this rule doesn't have NOPASSWD, continue checking other rules */
+                        /* Don't return 0 here - there might be other rules with NOPASSWD */
                     }
                 }
             }
@@ -528,5 +591,5 @@ int check_sudoers_nopasswd(const char *username, const char *hostname, struct su
         spec = spec->next;
     }
 
-    return 0;
+    return 0;  /* No matching rule with NOPASSWD found */
 }

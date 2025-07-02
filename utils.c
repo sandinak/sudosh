@@ -1,4 +1,5 @@
 #include "sudosh.h"
+#define _GNU_SOURCE  /* For getresuid on Linux */
 #include <ctype.h>
 
 /**
@@ -164,11 +165,42 @@ int handle_builtin_command(const char *command) {
 }
 
 /**
- * Get current username
+ * Get real user ID (the user who invoked sudosh)
+ * This mimics how sudo determines the real user
+ */
+uid_t get_real_uid(void) {
+    uid_t ruid, euid;
+
+#ifdef __linux__
+    uid_t suid;
+    /* Get all three UIDs: real, effective, saved */
+    if (getresuid(&ruid, &euid, &suid) == 0) {
+        /* If we have different real and effective UIDs, we're running suid */
+        if (ruid != euid) {
+            return ruid;  /* Return the real UID (the invoking user) */
+        }
+    }
+#else
+    /* On macOS and other systems, use getuid() and geteuid() */
+    ruid = getuid();
+    euid = geteuid();
+
+    /* If we have different real and effective UIDs, we're running suid */
+    if (ruid != euid) {
+        return ruid;  /* Return the real UID (the invoking user) */
+    }
+#endif
+
+    /* Fallback to getuid() if UIDs are the same or functions fail */
+    return getuid();
+}
+
+/**
+ * Get current username (the real user who invoked sudosh)
  */
 char *get_current_username(void) {
     struct passwd *pwd;
-    uid_t uid = getuid();
+    uid_t uid = get_real_uid();
 
     pwd = getpwuid(uid);
     if (!pwd) {
@@ -176,6 +208,20 @@ char *get_current_username(void) {
     }
 
     return strdup(pwd->pw_name);
+}
+
+/**
+ * Get real user info (the user who invoked sudosh)
+ */
+struct user_info *get_real_user_info(void) {
+    uid_t real_uid = get_real_uid();
+    struct passwd *pwd = getpwuid(real_uid);
+
+    if (!pwd) {
+        return NULL;
+    }
+
+    return get_user_info(pwd->pw_name);
 }
 
 /**

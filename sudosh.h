@@ -31,6 +31,10 @@ extern char **environ;
 #define MAX_PASSWORD_LENGTH 256
 #define SUDOSH_VERSION "1.0.0"
 
+/* Sudoers file paths */
+#define SUDOERS_PATH "/etc/sudoers"
+#define SUDOERS_DIR "/etc/sudoers.d"
+
 /* Exit codes */
 #define EXIT_SUCCESS 0
 #define EXIT_FAILURE 1
@@ -170,7 +174,9 @@ char *trim_whitespace(char *str);
 int is_empty_command(const char *command);
 char *read_command(void);
 int handle_builtin_command(const char *command);
+uid_t get_real_uid(void);
 char *get_current_username(void);
+struct user_info *get_real_user_info(void);
 int is_whitespace_only(const char *str);
 char *safe_strdup(const char *str);
 
