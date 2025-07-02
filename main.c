@@ -21,25 +21,34 @@ int main_loop(void) {
     /* Set username for signal handler */
     set_current_username(username);
 
-    /* Check if user has sudo privileges */
-    if (!check_sudo_privileges(username)) {
+    /* Check if user has sudo privileges using enhanced checking */
+    if (!check_sudo_privileges_enhanced(username)) {
         fprintf(stderr, "sudosh: %s is not in the sudoers file. This incident will be reported.\n", username);
         log_security_violation(username, "user not in sudoers");
         free(username);
         return EXIT_AUTH_FAILURE;
     }
 
-    /* Authenticate user */
-    printf("We trust you have received the usual lecture from the local System\n");
-    printf("Administrator. It usually boils down to these three things:\n\n");
-    printf("    #1) Respect the privacy of others.\n");
-    printf("    #2) Think before you type.\n");
-    printf("    #3) With great power comes great responsibility.\n\n");
-    
-    if (!authenticate_user(username)) {
-        fprintf(stderr, "sudosh: authentication failed\n");
-        free(username);
-        return EXIT_AUTH_FAILURE;
+    /* Check if user has NOPASSWD privileges */
+    int has_nopasswd = check_nopasswd_privileges_enhanced(username);
+
+    if (!has_nopasswd) {
+        /* Authenticate user with password */
+        printf("We trust you have received the usual lecture from the local System\n");
+        printf("Administrator. It usually boils down to these three things:\n\n");
+        printf("    #1) Respect the privacy of others.\n");
+        printf("    #2) Think before you type.\n");
+        printf("    #3) With great power comes great responsibility.\n\n");
+
+        if (!authenticate_user(username)) {
+            fprintf(stderr, "sudosh: authentication failed\n");
+            free(username);
+            return EXIT_AUTH_FAILURE;
+        }
+    } else {
+        /* User has NOPASSWD privileges, skip authentication */
+        printf("sudosh: NOPASSWD privileges detected, skipping authentication\n");
+        log_authentication(username, 1);  /* Log successful authentication */
     }
 
     /* Get user information */

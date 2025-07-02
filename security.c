@@ -84,24 +84,7 @@ void sanitize_environment(void) {
         NULL
     };
 
-    /* List of variables to preserve */
-    const char *preserve_vars[] = {
-        "PATH",
-        "HOME",
-        "USER",
-        "LOGNAME",
-        "SHELL",
-        "TERM",
-        "DISPLAY",
-        "LANG",
-        "LC_ALL",
-        "LC_CTYPE",
-        "TZ",
-        NULL
-    };
-
     int i;
-    char *value;
 
     /* Remove dangerous variables */
     for (i = 0; dangerous_vars[i]; i++) {

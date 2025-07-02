@@ -1,8 +1,5 @@
 #include "sudosh.h"
 
-/* Global variable for password input */
-static char *g_password = NULL;
-
 #ifdef MOCK_AUTH
 /* Mock authentication for systems without PAM */
 static int mock_authenticate(const char *username) {
@@ -33,6 +30,7 @@ static int mock_authenticate(const char *username) {
  */
 int pam_conversation(int num_msg, const struct pam_message **msg,
                     struct pam_response **resp, void *appdata_ptr) {
+    (void)appdata_ptr;  /* Suppress unused parameter warning */
     struct pam_response *responses;
     int i;
 
@@ -199,37 +197,189 @@ int authenticate_user(const char *username) {
 }
 
 /**
- * Check if user has sudo privileges
- * This is a simplified check - in a real implementation,
- * you would parse /etc/sudoers or use sudo's API
+ * Enhanced sudo privilege checking using NSS, sudoers parsing, and SSSD
  */
-int check_sudo_privileges(const char *username) {
-    struct group *wheel_group;
-    char **member;
+int check_sudo_privileges_enhanced(const char *username) {
+    struct nss_config *nss_config = NULL;
+    struct sudoers_config *sudoers_config = NULL;
+    struct nss_source *source;
+    int has_privileges = 0;
+    char hostname[256];
 
     /* Check for NULL or empty username */
     if (!username || *username == '\0') {
         return 0;
     }
 
-    /* Check if user is in wheel group */
-    wheel_group = getgrnam("wheel");
-    if (!wheel_group) {
-        /* Try sudo group on Debian/Ubuntu systems */
-        wheel_group = getgrnam("sudo");
-        if (!wheel_group) {
-            return 0;
+    /* Get hostname */
+    if (gethostname(hostname, sizeof(hostname)) != 0) {
+        strcpy(hostname, "localhost");
+    }
+
+    /* Read NSS configuration */
+    nss_config = read_nss_config();
+    if (!nss_config) {
+        return check_sudo_privileges_fallback(username);
+    }
+
+    /* Check each sudoers source according to NSS configuration */
+    for (source = nss_config->sudoers_sources; source && !has_privileges; source = source->next) {
+        switch (source->type) {
+            case NSS_SOURCE_FILES:
+                /* Parse and check sudoers file */
+                sudoers_config = parse_sudoers_file(NULL);
+                if (sudoers_config) {
+                    has_privileges = check_sudoers_privileges(username, hostname, sudoers_config);
+                    free_sudoers_config(sudoers_config);
+                }
+                break;
+
+            case NSS_SOURCE_SSSD:
+                /* Check SSSD for sudo privileges */
+                has_privileges = check_sssd_privileges(username);
+                break;
+
+            case NSS_SOURCE_LDAP:
+                /* LDAP support would go here */
+                break;
+
+            default:
+                continue;
         }
     }
 
-    /* Check if gr_mem is NULL */
-    if (!wheel_group->gr_mem) {
+    free_nss_config(nss_config);
+
+    /* If no privileges found via NSS sources, fall back to original method */
+    if (!has_privileges) {
+        has_privileges = check_sudo_privileges(username);
+    }
+
+    return has_privileges;
+}
+
+/**
+ * Check if user has NOPASSWD privileges using enhanced checking
+ */
+int check_nopasswd_privileges_enhanced(const char *username) {
+    struct nss_config *nss_config = NULL;
+    struct sudoers_config *sudoers_config = NULL;
+    struct nss_source *source;
+    int has_nopasswd = 0;
+    char hostname[256];
+
+    /* Check for NULL or empty username */
+    if (!username || *username == '\0') {
         return 0;
     }
 
-    for (member = wheel_group->gr_mem; *member; member++) {
-        if (strcmp(*member, username) == 0) {
-            return 1;
+    /* Get hostname */
+    if (gethostname(hostname, sizeof(hostname)) != 0) {
+        strcpy(hostname, "localhost");
+    }
+
+    /* Read NSS configuration */
+    nss_config = read_nss_config();
+    if (!nss_config) {
+        return 0;
+    }
+
+    /* Check each sudoers source according to NSS configuration */
+    for (source = nss_config->sudoers_sources; source && !has_nopasswd; source = source->next) {
+        switch (source->type) {
+            case NSS_SOURCE_FILES:
+                /* Parse and check sudoers file for NOPASSWD */
+                sudoers_config = parse_sudoers_file(NULL);
+                if (sudoers_config) {
+                    has_nopasswd = check_sudoers_nopasswd(username, hostname, sudoers_config);
+                    free_sudoers_config(sudoers_config);
+                }
+                break;
+
+            case NSS_SOURCE_SSSD:
+                /* SSSD NOPASSWD checking would go here */
+                /* For now, assume SSSD doesn't provide NOPASSWD info */
+                break;
+
+            case NSS_SOURCE_LDAP:
+                /* LDAP NOPASSWD checking would go here */
+                break;
+
+            default:
+                continue;
+        }
+    }
+
+    free_nss_config(nss_config);
+    return has_nopasswd;
+}
+
+/**
+ * Check if user has sudo privileges by calling sudo -l
+ * This properly checks the sudoers configuration
+ */
+int check_sudo_privileges(const char *username) {
+    char command[256];
+    FILE *fp;
+    char buffer[1024];
+    int has_privileges = 0;
+
+    /* Check for NULL or empty username */
+    if (!username || *username == '\0') {
+        return 0;
+    }
+
+    /* Build sudo -l command for the user */
+    snprintf(command, sizeof(command), "sudo -l -U %s 2>/dev/null", username);
+
+    /* Execute sudo -l to check privileges */
+    fp = popen(command, "r");
+    if (!fp) {
+        /* If we can't run sudo -l, fall back to group check */
+        return check_sudo_privileges_fallback(username);
+    }
+
+    /* Read output and look for privilege indicators */
+    while (fgets(buffer, sizeof(buffer), fp)) {
+        /* Look for common sudo privilege patterns */
+        if (strstr(buffer, "(ALL)") ||
+            strstr(buffer, "may run the following commands") ||
+            strstr(buffer, "NOPASSWD:")) {
+            has_privileges = 1;
+            break;
+        }
+    }
+
+    pclose(fp);
+    return has_privileges;
+}
+
+/**
+ * Fallback check using group membership
+ * Used when sudo -l is not available
+ */
+int check_sudo_privileges_fallback(const char *username) {
+    struct group *admin_group;
+    char **member;
+    const char *groups_to_check[] = {"wheel", "sudo", "admin", NULL};
+    int i;
+
+    /* Check for NULL or empty username */
+    if (!username || *username == '\0') {
+        return 0;
+    }
+
+    /* Check multiple possible admin groups */
+    for (i = 0; groups_to_check[i] != NULL; i++) {
+        admin_group = getgrnam(groups_to_check[i]);
+        if (!admin_group || !admin_group->gr_mem) {
+            continue;
+        }
+
+        for (member = admin_group->gr_mem; *member; member++) {
+            if (strcmp(*member, username) == 0) {
+                return 1;
+            }
         }
     }
 

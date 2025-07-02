@@ -75,6 +75,7 @@ int parse_command(const char *input, struct command_info *cmd) {
  * Execute command with elevated privileges
  */
 int execute_command(struct command_info *cmd, struct user_info *user) {
+    (void)user;  /* Suppress unused parameter warning */
     pid_t pid;
     int status;
     char *command_path;

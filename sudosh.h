@@ -59,6 +59,43 @@ struct command_info {
     char **envp;
 };
 
+/* NSS source types */
+enum nss_source_type {
+    NSS_SOURCE_FILES,
+    NSS_SOURCE_SSSD,
+    NSS_SOURCE_LDAP,
+    NSS_SOURCE_UNKNOWN
+};
+
+/* NSS configuration entry */
+struct nss_source {
+    enum nss_source_type type;
+    char *name;
+    struct nss_source *next;
+};
+
+/* NSS configuration */
+struct nss_config {
+    struct nss_source *passwd_sources;
+    struct nss_source *sudoers_sources;
+};
+
+/* Sudoers user specification */
+struct sudoers_userspec {
+    char **users;           /* List of users this rule applies to */
+    char **hosts;           /* List of hosts this rule applies to */
+    char **commands;        /* List of commands allowed */
+    int nopasswd;           /* Whether password is required */
+    char *runas_user;       /* User to run as (default: root) */
+    struct sudoers_userspec *next;
+};
+
+/* Sudoers configuration */
+struct sudoers_config {
+    struct sudoers_userspec *userspecs;
+    char *includedir;       /* Directory for included files */
+};
+
 /* Function prototypes */
 
 /* Authentication functions */
@@ -73,6 +110,28 @@ char *get_password(const char *prompt);
 struct user_info *get_user_info(const char *username);
 void free_user_info(struct user_info *user);
 int check_sudo_privileges(const char *username);
+int check_sudo_privileges_fallback(const char *username);
+int check_sudo_privileges_enhanced(const char *username);
+int check_nopasswd_privileges_enhanced(const char *username);
+
+/* NSS configuration functions */
+struct nss_config *read_nss_config(void);
+void free_nss_config(struct nss_config *config);
+struct user_info *get_user_info_nss(const char *username, struct nss_config *nss_config);
+struct nss_source *create_nss_source(const char *name);
+
+/* Sudoers parsing functions */
+struct sudoers_config *parse_sudoers_file(const char *filename);
+void free_sudoers_config(struct sudoers_config *config);
+int check_sudoers_privileges(const char *username, const char *hostname, struct sudoers_config *sudoers);
+int check_sudoers_nopasswd(const char *username, const char *hostname, struct sudoers_config *sudoers);
+
+/* SSSD integration functions */
+int check_sssd_privileges(const char *username);
+struct user_info *get_user_info_sssd(const char *username);
+
+/* Enhanced privilege checking */
+int check_sudo_privileges_enhanced(const char *username);
 
 /* Command execution functions */
 int parse_command(const char *input, struct command_info *cmd);

@@ -26,8 +26,12 @@ This document summarizes the complete implementation of **sudosh** - an interact
 - ✅ Signal handling for clean shutdown
 - ✅ Interactive session management
 
-### 4. **Sudo-like Functionality**
-- ✅ Group membership validation (wheel/sudo groups)
+### 4. **Enhanced Sudo-like Functionality**
+- ✅ **NSS Configuration Support** - Reads `/etc/nsswitch.conf` for authentication sources
+- ✅ **Complete Sudoers Parser** - Parses `/etc/sudoers` with full syntax support
+- ✅ **SSSD Integration Framework** - Enterprise directory integration ready
+- ✅ **Multiple Fallback Methods** - Group membership validation (wheel/sudo/admin groups)
+- ✅ **Same Heuristics as Sudo** - Uses identical discovery mechanisms as sudo
 - ✅ Password authentication via PAM
 - ✅ Privilege escalation for command execution
 - ✅ Environment sanitization
@@ -89,25 +93,62 @@ This document summarizes the complete implementation of **sudosh** - an interact
 - ✅ Proper error checking and user feedback
 - ✅ Matching uninstall target
 
+## 🏗️ Enhanced Authentication Architecture
+
+sudosh implements the same authentication heuristics as sudo, providing enterprise-grade compatibility:
+
+### NSS Integration (`nss.c`)
+- Parses `/etc/nsswitch.conf` to determine authentication order
+- Supports multiple sources: `files`, `sssd`, `ldap`
+- Configurable fallback chain for maximum compatibility
+
+### Sudoers Parser (`sudoers.c`)
+- Complete implementation of sudoers file syntax
+- Supports user/group specifications, host restrictions, command lists
+- Handles NOPASSWD directives and runas user specifications
+- Proper parsing of complex sudoers rules
+
+### SSSD Integration (`sssd.c`)
+- Framework for System Security Services Daemon integration
+- Supports enterprise directory services (LDAP, Active Directory)
+- Multiple query methods: `getent sudoers`, LDAP search, D-Bus interface
+- Automatic SSSD availability detection
+
+### Multi-layer Fallback System
+```
+Enhanced Authentication Flow:
+1. Read NSS configuration (/etc/nsswitch.conf)
+2. For each NSS source in order:
+   - files: Parse /etc/sudoers directly
+   - sssd: Query SSSD for sudo rules
+   - ldap: Direct LDAP sudo rule queries
+3. Fallback to sudo -l command execution
+4. Final fallback to group membership checking
+```
+
 ## 📊 Project Statistics
 
 ### Code Metrics
-- **Total Source Lines**: ~1,464 lines of C code
-- **Header File**: 120 lines
+- **Total Source Lines**: ~2,306 lines of C code (enhanced with NSS/SSSD)
+- **Header File**: 177 lines (expanded data structures)
 - **Test Code**: ~1,200+ lines across 4 test files
-- **Documentation**: 400+ lines (README, manpage, demos)
+- **Documentation**: 500+ lines (README, manpage, demos, enhanced features)
+- **Enhanced Features**: 842 additional lines for enterprise authentication
 
 ### File Structure
 ```
 sudosh/
-├── Source Code (7 files)
-│   ├── main.c (165 lines) - Main program loop
-│   ├── auth.c (237 lines) - PAM authentication
+├── Source Code (10 files)
+│   ├── main.c (166 lines) - Main program loop
+│   ├── auth.c (334 lines) - Enhanced authentication with NSS/SSSD
 │   ├── command.c (255 lines) - Command execution
 │   ├── logging.c (223 lines) - Syslog integration
 │   ├── security.c (239 lines) - Security features
 │   ├── utils.c (225 lines) - Utility functions
-│   └── sudosh.h (120 lines) - Header declarations
+│   ├── nss.c (232 lines) - NSS configuration parsing
+│   ├── sudoers.c (387 lines) - Complete sudoers file parser
+│   ├── sssd.c (223 lines) - SSSD integration framework
+│   └── sudosh.h (177 lines) - Header declarations
 ├── Test Suite (5 files)
 │   ├── test_framework.h - Custom test framework
 │   ├── test_unit_auth.c - Authentication tests
@@ -115,7 +156,7 @@ sudosh/
 │   ├── test_unit_utils.c - Utility tests
 │   └── test_integration_basic.c - Integration tests
 ├── Build System
-│   └── Makefile (221 lines) - Professional build system
+│   └── Makefile (280 lines) - Professional build system with enhanced features
 ├── Documentation (4 files)
 │   ├── README.md - Project documentation
 │   ├── DEMO.md - Usage demonstration

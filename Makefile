@@ -47,7 +47,7 @@ BINDIR = bin
 TESTDIR = tests
 
 # Source files
-SOURCES = main.c auth.c command.c logging.c security.c utils.c
+SOURCES = main.c auth.c command.c logging.c security.c utils.c nss.c sudoers.c sssd.c
 OBJECTS = $(SOURCES:%.c=$(OBJDIR)/%.o)
 
 # Test files
@@ -56,7 +56,7 @@ TEST_OBJECTS = $(TEST_SOURCES:$(TESTDIR)/%.c=$(OBJDIR)/$(TESTDIR)/%.o)
 TEST_TARGETS = $(TEST_SOURCES:$(TESTDIR)/test_%.c=$(BINDIR)/test_%)
 
 # Library objects (excluding main.c for testing)
-LIB_SOURCES = auth.c command.c logging.c security.c utils.c
+LIB_SOURCES = auth.c command.c logging.c security.c utils.c nss.c sudoers.c sssd.c
 LIB_OBJECTS = $(LIB_SOURCES:%.c=$(OBJDIR)/%.o)
 
 # Target executable
@@ -200,6 +200,47 @@ static-analysis:
 		echo "cppcheck not available, skipping static analysis"; \
 	fi
 
+# Set suid and root ownership for testing (requires sudo)
+test-suid: $(TARGET)
+	@echo "Setting up sudosh for suid testing..."
+	@if [ ! -f "$(TARGET)" ]; then \
+		echo "Error: $(TARGET) not found. Run 'make' first."; \
+		exit 1; \
+	fi
+	@echo "Setting root ownership and suid bit on $(TARGET)..."
+ifeq ($(UNAME_S),Darwin)
+	sudo chown root:wheel $(TARGET)
+else
+	sudo chown root:root $(TARGET)
+endif
+	sudo chmod 4755 $(TARGET)
+	@echo "Successfully configured $(TARGET) with:"
+ifeq ($(UNAME_S),Darwin)
+	@echo "  - Owner: root:wheel"
+else
+	@echo "  - Owner: root:root"
+endif
+	@echo "  - Permissions: 4755 (suid bit set)"
+	@echo "  - Ready for testing with elevated privileges"
+	@echo ""
+	@echo "WARNING: This binary now has setuid root privileges!"
+	@echo "Use 'make clean-suid' to remove suid privileges when done testing."
+
+# Remove suid privileges and reset ownership for safety
+clean-suid: $(TARGET)
+	@echo "Removing suid privileges from $(TARGET)..."
+	@if [ ! -f "$(TARGET)" ]; then \
+		echo "Warning: $(TARGET) not found."; \
+		exit 0; \
+	fi
+	@if [ -u "$(TARGET)" ]; then \
+		sudo chmod 755 $(TARGET); \
+		sudo chown $(USER):$(shell id -gn) $(TARGET); \
+		echo "Suid privileges removed and ownership reset to $(USER):$(shell id -gn)"; \
+	else \
+		echo "$(TARGET) does not have suid privileges set."; \
+	fi
+
 # Show help
 help:
 	@echo "Available targets:"
@@ -208,6 +249,8 @@ help:
 	@echo "  test             - Run all tests"
 	@echo "  unit-test        - Run unit tests only"
 	@echo "  integration-test - Run integration tests only"
+	@echo "  test-suid        - Set suid root for testing (requires sudo)"
+	@echo "  clean-suid       - Remove suid privileges (requires sudo)"
 	@echo "  install          - Install sudosh and manpage (requires root)"
 	@echo "  uninstall        - Remove sudosh and manpage (requires root)"
 	@echo "  clean            - Remove build files"
@@ -217,6 +260,12 @@ help:
 	@echo "  coverage-report  - Generate coverage report"
 	@echo "  static-analysis  - Run static code analysis"
 	@echo "  help             - Show this help message"
+	@echo ""
+	@echo "Enhanced Features:"
+	@echo "  - NSS configuration support (/etc/nsswitch.conf)"
+	@echo "  - Sudoers file parsing (/etc/sudoers)"
+	@echo "  - SSSD integration framework"
+	@echo "  - Multiple authentication fallback methods"
 
 # Dependencies
 $(OBJDIR)/main.o: main.c sudosh.h
@@ -225,5 +274,8 @@ $(OBJDIR)/command.o: command.c sudosh.h
 $(OBJDIR)/logging.o: logging.c sudosh.h
 $(OBJDIR)/security.o: security.c sudosh.h
 $(OBJDIR)/utils.o: utils.c sudosh.h
+$(OBJDIR)/nss.o: nss.c sudosh.h
+$(OBJDIR)/sudoers.o: sudoers.c sudosh.h
+$(OBJDIR)/sssd.o: sssd.c sudosh.h
 
-.PHONY: all tests test unit-test integration-test install uninstall clean rebuild debug coverage coverage-report static-analysis help
+.PHONY: all tests test unit-test integration-test test-suid clean-suid install uninstall clean rebuild debug coverage coverage-report static-analysis help

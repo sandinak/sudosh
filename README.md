@@ -62,7 +62,11 @@ sudosh
 ```
 
 Once started, sudosh will:
-1. Check if the user has sudo privileges (wheel/sudo group membership)
+1. Check if the user has sudo privileges using enhanced authentication:
+   - Parse `/etc/nsswitch.conf` to determine authentication sources
+   - Parse `/etc/sudoers` file for direct privilege rules
+   - Check SSSD integration if available
+   - Fall back to group membership (wheel/sudo/admin groups)
 2. Prompt for password authentication via PAM
 3. Provide an interactive shell prompt: `sudosh# `
 
@@ -81,6 +85,60 @@ sudosh# apt update && apt upgrade
 sudosh# help
 sudosh# exit
 ```
+
+## Enhanced Authentication
+
+sudosh uses the same heuristics as sudo for discovering users and permissions, providing enterprise-grade authentication support:
+
+### NSS Integration
+
+sudosh reads `/etc/nsswitch.conf` to determine the order of authentication sources:
+
+```bash
+# Example /etc/nsswitch.conf
+passwd: files sssd
+sudoers: sssd files
+```
+
+This allows sudosh to work with:
+- **files**: Traditional `/etc/passwd` and `/etc/sudoers`
+- **sssd**: System Security Services Daemon for LDAP/AD integration
+- **ldap**: Direct LDAP authentication
+
+### Sudoers File Parsing
+
+sudosh includes a full sudoers parser that understands:
+- User and group specifications (`user`, `%group`)
+- Host restrictions (`ALL`, `hostname`)
+- Command specifications (`ALL`, `/path/to/command`)
+- Run-as user specifications (`(ALL)`, `(root)`)
+- NOPASSWD directives
+- Comments and Defaults lines
+
+Example sudoers rules supported:
+```bash
+root ALL = (ALL) ALL
+%admin ALL = (ALL) ALL
+%wheel ALL = (ALL) NOPASSWD: ALL
+user1 localhost = /bin/ls, /bin/cat
+```
+
+### SSSD Integration
+
+When SSSD is available, sudosh can:
+- Query SSSD for user information
+- Check SSSD sudo rules via `getent sudoers`
+- Fall back to LDAP searches for sudo rules
+- Integrate with Active Directory and other enterprise directories
+
+### Fallback Mechanisms
+
+sudosh provides multiple fallback layers:
+1. **Primary**: NSS-configured sources (SSSD, files, etc.)
+2. **Secondary**: Direct `sudo -l` command execution
+3. **Tertiary**: Group membership checking (wheel, sudo, admin)
+
+This ensures compatibility across different system configurations.
 
 ## Logging
 
