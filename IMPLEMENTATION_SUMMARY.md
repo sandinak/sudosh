@@ -114,26 +114,40 @@ sudosh implements the same authentication heuristics as sudo, providing enterpri
 - Multiple query methods: `getent sudoers`, LDAP search, D-Bus interface
 - Automatic SSSD availability detection
 
+### Real UID Detection and Direct Sudoers Reading
+```
+Sudo-like User Identification:
+1. Detect real UID using getresuid() (Linux) or getuid()/geteuid() (macOS)
+2. Get username from real UID (not effective UID)
+3. Temporarily escalate to effective UID (root) for file reading
+4. Read /etc/sudoers and included directories directly
+5. Drop privileges back to original level
+6. Check permissions for real user, not effective user
+```
+
 ### Multi-layer Fallback System
 ```
 Enhanced Authentication Flow:
-1. Read NSS configuration (/etc/nsswitch.conf)
-2. For each NSS source in order:
+1. Direct sudoers file parsing (primary method)
+   - Escalate privileges to read /etc/sudoers
+   - Parse main file and #includedir files
+   - Check privileges for real user
+2. NSS-configured sources (if direct parsing fails)
    - files: Parse /etc/sudoers directly
    - sssd: Query SSSD for sudo rules
    - ldap: Direct LDAP sudo rule queries
-3. Fallback to sudo -l command execution
-4. Final fallback to group membership checking
+3. External sudo -l command execution (fallback)
+4. Group membership checking (final fallback)
 ```
 
 ## 📊 Project Statistics
 
 ### Code Metrics
-- **Total Source Lines**: ~2,306 lines of C code (enhanced with NSS/SSSD)
-- **Header File**: 177 lines (expanded data structures)
+- **Total Source Lines**: ~2,500+ lines of C code (enhanced with NSS/SSSD/direct sudoers reading)
+- **Header File**: 184 lines (expanded data structures and function declarations)
 - **Test Code**: ~1,200+ lines across 4 test files
-- **Documentation**: 500+ lines (README, manpage, demos, enhanced features)
-- **Enhanced Features**: 842 additional lines for enterprise authentication
+- **Documentation**: 600+ lines (README, manpage, demos, enhanced features)
+- **Enhanced Features**: 1,000+ additional lines for enterprise authentication and direct sudoers reading
 
 ### File Structure
 ```

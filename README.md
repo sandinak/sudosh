@@ -90,6 +90,23 @@ sudosh# exit
 
 sudosh uses the same heuristics as sudo for discovering users and permissions, providing enterprise-grade authentication support:
 
+### Real UID Detection
+
+sudosh correctly identifies the real user who invoked the command, even when running with suid root privileges:
+
+- **Cross-platform UID detection**: Uses `getresuid()` on Linux, fallback methods on macOS
+- **Real vs Effective UID**: Distinguishes between the invoking user and the effective root user
+- **Same as sudo**: Uses identical user identification logic as the sudo command
+
+### Direct Sudoers Reading
+
+sudosh reads sudoers files directly instead of calling external commands:
+
+- **Privilege escalation**: Temporarily escalates to root to read `/etc/sudoers`
+- **Direct file parsing**: No dependency on `sudo -l` command execution
+- **Efficient processing**: Faster than spawning external processes
+- **Complete access**: Reads main sudoers file and all included directories
+
 ### NSS Integration
 
 sudosh reads `/etc/nsswitch.conf` to determine the order of authentication sources:
@@ -105,15 +122,16 @@ This allows sudosh to work with:
 - **sssd**: System Security Services Daemon for LDAP/AD integration
 - **ldap**: Direct LDAP authentication
 
-### Sudoers File Parsing
+### Complete Sudoers Parser
 
 sudosh includes a full sudoers parser that understands:
 - User and group specifications (`user`, `%group`)
 - Host restrictions (`ALL`, `hostname`)
 - Command specifications (`ALL`, `/path/to/command`)
 - Run-as user specifications (`(ALL)`, `(root)`)
-- NOPASSWD directives
-- Comments and Defaults lines
+- NOPASSWD directives with proper precedence
+- `#includedir` directives for additional sudoers files
+- Comments and Defaults lines (properly ignored)
 
 Example sudoers rules supported:
 ```bash
@@ -121,7 +139,16 @@ root ALL = (ALL) ALL
 %admin ALL = (ALL) ALL
 %wheel ALL = (ALL) NOPASSWD: ALL
 user1 localhost = /bin/ls, /bin/cat
+#includedir /etc/sudoers.d
 ```
+
+### Include Directory Support
+
+sudosh fully supports `#includedir` directives:
+- **Automatic directory scanning**: Processes all valid files in included directories
+- **File filtering**: Skips backup files (`.bak`, `~`) and invalid files
+- **Rule merging**: Combines rules from main file and included files
+- **NOPASSWD precedence**: Any matching rule with NOPASSWD grants password-free access
 
 ### SSSD Integration
 
@@ -131,14 +158,15 @@ When SSSD is available, sudosh can:
 - Fall back to LDAP searches for sudo rules
 - Integrate with Active Directory and other enterprise directories
 
-### Fallback Mechanisms
+### Multi-layer Authentication
 
-sudosh provides multiple fallback layers:
-1. **Primary**: NSS-configured sources (SSSD, files, etc.)
-2. **Secondary**: Direct `sudo -l` command execution
-3. **Tertiary**: Group membership checking (wheel, sudo, admin)
+sudosh provides multiple authentication layers with intelligent fallbacks:
+1. **Primary**: Direct sudoers file parsing (with privilege escalation)
+2. **Secondary**: NSS-configured sources (SSSD, files, etc.)
+3. **Tertiary**: External `sudo -l` command execution
+4. **Final**: Group membership checking (wheel, sudo, admin)
 
-This ensures compatibility across different system configurations.
+This ensures maximum compatibility across different system configurations while maintaining efficiency and security.
 
 ## Logging
 
