@@ -52,7 +52,7 @@ OBJECTS = $(SOURCES:%.c=$(OBJDIR)/%.o)
 
 # Test files
 TEST_SOURCES = $(wildcard $(TESTDIR)/test_*.c)
-TEST_OBJECTS = $(TEST_SOURCES:%.c=$(OBJDIR)/%.o)
+TEST_OBJECTS = $(TEST_SOURCES:$(TESTDIR)/%.c=$(OBJDIR)/$(TESTDIR)/%.o)
 TEST_TARGETS = $(TEST_SOURCES:$(TESTDIR)/test_%.c=$(BINDIR)/test_%)
 
 # Library objects (excluding main.c for testing)
@@ -85,18 +85,24 @@ $(OBJDIR)/%.o: $(SRCDIR)/%.c | $(OBJDIR)
 
 # Compile test files
 $(OBJDIR)/$(TESTDIR)/%.o: $(TESTDIR)/%.c | $(OBJDIR)
-	mkdir -p $(OBJDIR)/$(TESTDIR)
+	@mkdir -p $(OBJDIR)/$(TESTDIR)
 	$(CC) $(CFLAGS) -I$(SRCDIR) -c $< -o $@
+
+# Ensure test directory exists
+$(OBJDIR)/$(TESTDIR):
+	@mkdir -p $(OBJDIR)/$(TESTDIR)
 
 # Build individual test executables
 $(BINDIR)/test_%: $(OBJDIR)/$(TESTDIR)/test_%.o $(LIB_OBJECTS) | $(BINDIR)
 	$(CC) $^ -o $@ $(LDFLAGS)
 
 # Build all tests
+tests: $(LIB_OBJECTS) | $(OBJDIR)/$(TESTDIR)
 tests: $(TEST_TARGETS)
 
 # Run all tests
-test: tests
+test: $(LIB_OBJECTS) tests
+	@mkdir -p obj/tests
 	@echo "Running sudosh test suite..."
 	@for test in $(TEST_TARGETS); do \
 		echo "Running $$test..."; \
@@ -106,6 +112,7 @@ test: tests
 
 # Run unit tests only
 unit-test: tests
+	@mkdir -p obj/tests
 	@echo "Running unit tests..."
 	@for test in $(TEST_TARGETS); do \
 		if echo $$test | grep -q "unit"; then \
@@ -117,6 +124,7 @@ unit-test: tests
 
 # Run integration tests only
 integration-test: tests
+	@mkdir -p obj/tests
 	@echo "Running integration tests..."
 	@for test in $(TEST_TARGETS); do \
 		if echo $$test | grep -q "integration"; then \

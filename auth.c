@@ -207,6 +207,11 @@ int check_sudo_privileges(const char *username) {
     struct group *wheel_group;
     char **member;
 
+    /* Check for NULL or empty username */
+    if (!username || *username == '\0') {
+        return 0;
+    }
+
     /* Check if user is in wheel group */
     wheel_group = getgrnam("wheel");
     if (!wheel_group) {
@@ -215,6 +220,11 @@ int check_sudo_privileges(const char *username) {
         if (!wheel_group) {
             return 0;
         }
+    }
+
+    /* Check if gr_mem is NULL */
+    if (!wheel_group->gr_mem) {
+        return 0;
     }
 
     for (member = wheel_group->gr_mem; *member; member++) {
