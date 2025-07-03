@@ -55,6 +55,10 @@ TEST_SOURCES = $(wildcard $(TESTDIR)/test_*.c)
 TEST_OBJECTS = $(TEST_SOURCES:$(TESTDIR)/%.c=$(OBJDIR)/$(TESTDIR)/%.o)
 TEST_TARGETS = $(TEST_SOURCES:$(TESTDIR)/test_%.c=$(BINDIR)/test_%)
 
+# Security test files
+SECURITY_TEST_SOURCES = $(wildcard $(TESTDIR)/test_security_*.c)
+SECURITY_TEST_BINARIES = $(SECURITY_TEST_SOURCES:$(TESTDIR)/%.c=$(BINDIR)/%)
+
 # Library objects (excluding main.c for testing)
 LIB_SOURCES = auth.c command.c logging.c security.c utils.c nss.c sudoers.c sssd.c
 LIB_OBJECTS = $(LIB_SOURCES:%.c=$(OBJDIR)/%.o)
@@ -121,6 +125,28 @@ unit-test: tests
 		fi; \
 	done
 	@echo "Unit tests passed!"
+
+# Security test targets
+security-tests: $(SECURITY_TEST_BINARIES)
+	@echo "Security tests built successfully."
+
+security-test: security-tests
+	@echo "Running comprehensive security assessment..."
+	@if [ -x "$(BINDIR)/test_security_comprehensive" ]; then \
+		$(BINDIR)/test_security_comprehensive; \
+	else \
+		echo "Security test suite not built. Run 'make security-tests' first."; \
+		exit 1; \
+	fi
+
+security-quick: security-tests
+	@echo "Running individual security tests..."
+	@for test in $(SECURITY_TEST_BINARIES); do \
+		if [ -x "$$test" ] && [ "$$test" != "$(BINDIR)/test_security_comprehensive" ]; then \
+			echo "Running $$test..."; \
+			$$test; \
+		fi; \
+	done
 
 # Run integration tests only
 integration-test: tests
