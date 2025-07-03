@@ -81,10 +81,10 @@ int test_set_current_username() {
 
 /* Test command validation */
 int test_validate_command_security() {
-    /* Test valid commands */
+    /* Test valid commands that don't trigger interactive prompts */
     TEST_ASSERT_EQ(1, validate_command("ls"), "simple command should be valid");
     TEST_ASSERT_EQ(1, validate_command("ls -la /home"), "command with args should be valid");
-    TEST_ASSERT_EQ(1, validate_command("/usr/bin/systemctl status nginx"), "absolute path should be valid");
+    TEST_ASSERT_EQ(1, validate_command("ps aux"), "process listing should be valid");
     
     /* Test invalid commands */
     TEST_ASSERT_EQ(0, validate_command(NULL), "NULL command should be invalid");
@@ -107,7 +107,39 @@ int test_validate_command_security() {
         TEST_ASSERT_EQ(0, validate_command(long_cmd), "overly long command should be invalid");
         free(long_cmd);
     }
-    
+
+    /* Test shell command detection (these should be blocked without prompts) */
+    TEST_ASSERT_EQ(0, validate_command("bash"), "bash should be blocked");
+    TEST_ASSERT_EQ(0, validate_command("sh -c 'ls'"), "sh with command should be blocked");
+    TEST_ASSERT_EQ(0, validate_command("/bin/zsh"), "absolute shell path should be blocked");
+
+    return 1;
+}
+
+/* Test dangerous command detection functions directly */
+int test_dangerous_command_detection() {
+    /* Test dangerous command detection */
+    TEST_ASSERT_EQ(1, is_dangerous_command("init"), "init should be detected as dangerous");
+    TEST_ASSERT_EQ(1, is_dangerous_command("shutdown"), "shutdown should be detected as dangerous");
+    TEST_ASSERT_EQ(1, is_dangerous_command("reboot"), "reboot should be detected as dangerous");
+    TEST_ASSERT_EQ(1, is_dangerous_command("systemctl poweroff"), "systemctl poweroff should be dangerous");
+    TEST_ASSERT_EQ(0, is_dangerous_command("ls"), "ls should not be dangerous");
+    TEST_ASSERT_EQ(0, is_dangerous_command("ps aux"), "ps aux should not be dangerous");
+
+    /* Test dangerous flags detection */
+    TEST_ASSERT_EQ(1, check_dangerous_flags("rm -rf /tmp"), "rm -rf should be detected as dangerous");
+    TEST_ASSERT_EQ(1, check_dangerous_flags("chmod -R 777 /"), "chmod -R should be detected as dangerous");
+    TEST_ASSERT_EQ(1, check_dangerous_flags("chown -R user /"), "chown -R should be detected as dangerous");
+    TEST_ASSERT_EQ(0, check_dangerous_flags("ls -la"), "ls -la should not have dangerous flags");
+    TEST_ASSERT_EQ(0, check_dangerous_flags("find . -name test"), "find should not have dangerous flags");
+
+    /* Test system directory access detection */
+    TEST_ASSERT_EQ(1, check_system_directory_access("ls /dev"), "/dev access should be detected");
+    TEST_ASSERT_EQ(1, check_system_directory_access("cat /proc/version"), "/proc access should be detected");
+    TEST_ASSERT_EQ(1, check_system_directory_access("ls /sys"), "/sys access should be detected");
+    TEST_ASSERT_EQ(0, check_system_directory_access("ls /home"), "/home access should be allowed");
+    TEST_ASSERT_EQ(0, check_system_directory_access("ls /tmp"), "/tmp access should be allowed");
+
     return 1;
 }
 
@@ -201,6 +233,7 @@ TEST_SUITE_BEGIN("Unit Tests - Security")
     RUN_TEST(test_setup_signal_handlers);
     RUN_TEST(test_set_current_username);
     RUN_TEST(test_validate_command_security);
+    RUN_TEST(test_dangerous_command_detection);
     RUN_TEST(test_secure_terminal);
     RUN_TEST(test_init_security);
     RUN_TEST(test_is_interrupted);

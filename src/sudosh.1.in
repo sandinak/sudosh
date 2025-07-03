@@ -147,6 +147,51 @@ Null byte injection attempts
 Excessive command length
 .IP \(bu 4
 Path traversal attempts (../)
+.IP \(bu 4
+Shell command blocking (bash, sh, zsh, etc.)
+.IP \(bu 4
+Dangerous command detection with user confirmation prompts
+
+.SS Gut Check Commands
+sudosh implements "gut check" warnings for potentially dangerous commands that require user confirmation before execution:
+
+.B Dangerous System Commands:
+.IP \(bu 4
+.B init, shutdown, halt, reboot, poweroff
+- System control commands
+.IP \(bu 4
+.B systemctl poweroff, systemctl reboot, systemctl halt
+- Systemd power management
+.IP \(bu 4
+.B systemctl emergency, systemctl rescue
+- Emergency system modes
+
+.B Dangerous Command Flags:
+.IP \(bu 4
+.B rm -rf, rm -R
+- Recursive file removal
+.IP \(bu 4
+.B chmod -R, chmod --recursive
+- Recursive permission changes
+.IP \(bu 4
+.B chown -R, chown --recursive
+- Recursive ownership changes
+.IP \(bu 4
+.B chgrp -R, chgrp --recursive
+- Recursive group changes
+
+.B Critical System Directory Access:
+.IP \(bu 4
+.B /dev/*
+- Device files and hardware interfaces
+.IP \(bu 4
+.B /proc/*
+- Process and kernel information
+.IP \(bu 4
+.B /sys/*
+- System and kernel parameters
+
+When these commands are detected, sudosh displays a warning message and prompts for explicit confirmation with "yes" before proceeding. This helps prevent accidental execution of potentially destructive operations.
 
 .SS Privilege Management
 .IP \(bu 4
