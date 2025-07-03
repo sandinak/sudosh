@@ -5,6 +5,32 @@ All notable changes to sudosh will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2024-12-15
+
+### Added
+- **SSH Command Blocking**: Prevents outbound SSH connections when running as root
+- **Safe Command Access**: Allows basic commands (ls, pwd, whoami, etc.) without sudoers privileges
+- **Interactive Editor Blocking**: Prevents shell escapes through vi/vim/emacs/nano/etc.
+- **Comprehensive Security Pipeline**: Multi-layered command validation and blocking
+
+### Enhanced
+- **Security Architecture**: Three-tier security validation (shells, SSH, editors, dangerous commands)
+- **User Experience**: Clear error messages with helpful guidance for blocked commands
+- **Privilege Management**: Granular access control with safe command exceptions
+- **Attack Surface Reduction**: Prevents major privilege escalation vectors
+
+### Security
+- **SSH Blocking**: Prevents privilege escalation through SSH key forwarding and outbound connections
+- **Editor Blocking**: Prevents shell escapes through interactive editors (vi :!command, emacs M-x shell, etc.)
+- **Safe Commands**: Allows information gathering without full privileges (reduces need for broad sudoers access)
+- **Comprehensive Logging**: All security violations logged with detailed context
+
+### Technical
+- **Enhanced Test Suite**: 31 comprehensive unit tests covering all security features
+- **Modular Security Functions**: Clean separation of security validation logic
+- **Performance Optimized**: Efficient command parsing and validation
+- **Cross-Platform**: Works on Linux and macOS with proper editor detection
+
 ## [1.2.0] - 2024-12-15
 
 ### Added
