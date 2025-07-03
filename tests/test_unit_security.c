@@ -115,6 +115,18 @@ int test_validate_command_security() {
     TEST_ASSERT_EQ(0, validate_command("sh -c 'ls'"), "sh with command should be blocked");
     TEST_ASSERT_EQ(0, validate_command("/bin/zsh"), "absolute shell path should be blocked");
 
+    /* Test SSH command detection (these should be blocked) */
+    TEST_ASSERT_EQ(0, validate_command("ssh user@host"), "ssh command should be blocked");
+    TEST_ASSERT_EQ(0, validate_command("ssh -p 22 user@host"), "ssh with options should be blocked");
+    TEST_ASSERT_EQ(0, validate_command("/usr/bin/ssh user@host"), "absolute ssh path should be blocked");
+    TEST_ASSERT_EQ(0, validate_command("ssh"), "bare ssh command should be blocked");
+
+    /* Test interactive editor detection (these should be blocked) */
+    TEST_ASSERT_EQ(0, validate_command("vi /etc/passwd"), "vi command should be blocked");
+    TEST_ASSERT_EQ(0, validate_command("vim file.txt"), "vim command should be blocked");
+    TEST_ASSERT_EQ(0, validate_command("/usr/bin/emacs file.txt"), "absolute emacs path should be blocked");
+    TEST_ASSERT_EQ(0, validate_command("nano"), "bare nano command should be blocked");
+
     return 1;
 }
 
@@ -141,6 +153,90 @@ int test_dangerous_command_detection() {
     TEST_ASSERT_EQ(1, check_system_directory_access("ls /sys"), "/sys access should be detected");
     TEST_ASSERT_EQ(0, check_system_directory_access("ls /home"), "/home access should be allowed");
     TEST_ASSERT_EQ(0, check_system_directory_access("ls /tmp"), "/tmp access should be allowed");
+
+    return 1;
+}
+
+/* Test SSH command detection functions directly */
+int test_ssh_command_detection() {
+    /* Test SSH command detection */
+    TEST_ASSERT_EQ(1, is_ssh_command("ssh"), "bare ssh should be detected");
+    TEST_ASSERT_EQ(1, is_ssh_command("ssh user@host"), "ssh with user@host should be detected");
+    TEST_ASSERT_EQ(1, is_ssh_command("ssh -p 22 user@host"), "ssh with options should be detected");
+    TEST_ASSERT_EQ(1, is_ssh_command("/usr/bin/ssh user@host"), "absolute ssh path should be detected");
+    TEST_ASSERT_EQ(1, is_ssh_command("/bin/ssh user@host"), "bin ssh path should be detected");
+    TEST_ASSERT_EQ(1, is_ssh_command("/usr/local/bin/ssh user@host"), "local bin ssh path should be detected");
+
+    /* Test non-SSH commands */
+    TEST_ASSERT_EQ(0, is_ssh_command("ls"), "ls should not be detected as ssh");
+    TEST_ASSERT_EQ(0, is_ssh_command("ps aux"), "ps aux should not be detected as ssh");
+    TEST_ASSERT_EQ(0, is_ssh_command("sshd"), "sshd should not be detected as ssh");
+    TEST_ASSERT_EQ(0, is_ssh_command("ssh-keygen"), "ssh-keygen should not be detected as ssh");
+    TEST_ASSERT_EQ(0, is_ssh_command("rsync"), "rsync should not be detected as ssh");
+    TEST_ASSERT_EQ(0, is_ssh_command(NULL), "NULL should not be detected as ssh");
+
+    return 1;
+}
+
+/* Test interactive editor detection functions directly */
+int test_interactive_editor_detection() {
+    /* Test interactive editor detection */
+    TEST_ASSERT_EQ(1, is_interactive_editor("vi"), "vi should be detected as interactive editor");
+    TEST_ASSERT_EQ(1, is_interactive_editor("vi /etc/passwd"), "vi with file should be detected");
+    TEST_ASSERT_EQ(1, is_interactive_editor("/usr/bin/vi"), "absolute vi path should be detected");
+    TEST_ASSERT_EQ(1, is_interactive_editor("/bin/vi"), "bin vi path should be detected");
+    TEST_ASSERT_EQ(1, is_interactive_editor("vim"), "vim should be detected as interactive editor");
+    TEST_ASSERT_EQ(1, is_interactive_editor("vim file.txt"), "vim with file should be detected");
+    TEST_ASSERT_EQ(1, is_interactive_editor("/usr/bin/vim"), "absolute vim path should be detected");
+    TEST_ASSERT_EQ(1, is_interactive_editor("nvim"), "nvim should be detected as interactive editor");
+    TEST_ASSERT_EQ(1, is_interactive_editor("emacs"), "emacs should be detected as interactive editor");
+    TEST_ASSERT_EQ(1, is_interactive_editor("emacs -nw file.txt"), "emacs with args should be detected");
+    TEST_ASSERT_EQ(1, is_interactive_editor("/usr/bin/emacs"), "absolute emacs path should be detected");
+    TEST_ASSERT_EQ(1, is_interactive_editor("nano"), "nano should be detected as interactive editor");
+    TEST_ASSERT_EQ(1, is_interactive_editor("nano file.txt"), "nano with file should be detected");
+    TEST_ASSERT_EQ(1, is_interactive_editor("pico"), "pico should be detected as interactive editor");
+    TEST_ASSERT_EQ(1, is_interactive_editor("joe"), "joe should be detected as interactive editor");
+    TEST_ASSERT_EQ(1, is_interactive_editor("mcedit"), "mcedit should be detected as interactive editor");
+    TEST_ASSERT_EQ(1, is_interactive_editor("ed"), "ed should be detected as interactive editor");
+    TEST_ASSERT_EQ(1, is_interactive_editor("ex"), "ex should be detected as interactive editor");
+    TEST_ASSERT_EQ(1, is_interactive_editor("view"), "view should be detected as interactive editor");
+
+    /* Test non-editor commands */
+    TEST_ASSERT_EQ(0, is_interactive_editor("ls"), "ls should not be detected as editor");
+    TEST_ASSERT_EQ(0, is_interactive_editor("cat"), "cat should not be detected as editor");
+    TEST_ASSERT_EQ(0, is_interactive_editor("grep"), "grep should not be detected as editor");
+    TEST_ASSERT_EQ(0, is_interactive_editor("sed"), "sed should not be detected as editor");
+    TEST_ASSERT_EQ(0, is_interactive_editor("awk"), "awk should not be detected as editor");
+    TEST_ASSERT_EQ(0, is_interactive_editor("less"), "less should not be detected as editor");
+    TEST_ASSERT_EQ(0, is_interactive_editor("more"), "more should not be detected as editor");
+    TEST_ASSERT_EQ(0, is_interactive_editor(NULL), "NULL should not be detected as editor");
+
+    return 1;
+}
+
+/* Test safe command detection functions directly */
+int test_safe_command_detection() {
+    /* Test safe command detection */
+    TEST_ASSERT_EQ(1, is_safe_command("ls"), "ls should be detected as safe");
+    TEST_ASSERT_EQ(1, is_safe_command("ls -la"), "ls with args should be detected as safe");
+    TEST_ASSERT_EQ(1, is_safe_command("/bin/ls"), "absolute ls path should be detected as safe");
+    TEST_ASSERT_EQ(1, is_safe_command("/usr/bin/ls"), "usr bin ls path should be detected as safe");
+    TEST_ASSERT_EQ(1, is_safe_command("pwd"), "pwd should be detected as safe");
+    TEST_ASSERT_EQ(1, is_safe_command("whoami"), "whoami should be detected as safe");
+    TEST_ASSERT_EQ(1, is_safe_command("id"), "id should be detected as safe");
+    TEST_ASSERT_EQ(1, is_safe_command("date"), "date should be detected as safe");
+    TEST_ASSERT_EQ(1, is_safe_command("uptime"), "uptime should be detected as safe");
+    TEST_ASSERT_EQ(1, is_safe_command("w"), "w should be detected as safe");
+    TEST_ASSERT_EQ(1, is_safe_command("who"), "who should be detected as safe");
+
+    /* Test non-safe commands */
+    TEST_ASSERT_EQ(0, is_safe_command("rm"), "rm should not be detected as safe");
+    TEST_ASSERT_EQ(0, is_safe_command("sudo"), "sudo should not be detected as safe");
+    TEST_ASSERT_EQ(0, is_safe_command("systemctl"), "systemctl should not be detected as safe");
+    TEST_ASSERT_EQ(0, is_safe_command("chmod"), "chmod should not be detected as safe");
+    TEST_ASSERT_EQ(0, is_safe_command("chown"), "chown should not be detected as safe");
+    TEST_ASSERT_EQ(0, is_safe_command("ssh"), "ssh should not be detected as safe");
+    TEST_ASSERT_EQ(0, is_safe_command(NULL), "NULL should not be detected as safe");
 
     return 1;
 }
@@ -257,6 +353,9 @@ TEST_SUITE_BEGIN("Unit Tests - Security")
     RUN_TEST(test_set_current_username);
     RUN_TEST(test_validate_command_security);
     RUN_TEST(test_dangerous_command_detection);
+    RUN_TEST(test_ssh_command_detection);
+    RUN_TEST(test_interactive_editor_detection);
+    RUN_TEST(test_safe_command_detection);
     RUN_TEST(test_signal_handling);
     RUN_TEST(test_secure_terminal);
     RUN_TEST(test_init_security);
