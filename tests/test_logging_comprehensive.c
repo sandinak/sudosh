@@ -1,5 +1,5 @@
 #include "test_framework.h"
-#include "../sudosh.h"
+#include "sudosh.h"
 #include <syslog.h>
 #include <sys/wait.h>
 #include <fcntl.h>

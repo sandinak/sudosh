@@ -1,5 +1,5 @@
 #include "test_framework.h"
-#include "../sudosh.h"
+#include "sudosh.h"
 #include <sys/types.h>
 #include <grp.h>
 

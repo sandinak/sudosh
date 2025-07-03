@@ -152,7 +152,7 @@ Enhanced Authentication Flow:
 ### File Structure
 ```
 sudosh/
-├── Source Code (10 files)
+├── src/ - Source Code (10 files)
 │   ├── main.c (166 lines) - Main program loop
 │   ├── auth.c (334 lines) - Enhanced authentication with NSS/SSSD
 │   ├── command.c (255 lines) - Command execution
@@ -163,17 +163,19 @@ sudosh/
 │   ├── sudoers.c (387 lines) - Complete sudoers file parser
 │   ├── sssd.c (223 lines) - SSSD integration framework
 │   └── sudosh.h (177 lines) - Header declarations
-├── Test Suite (5 files)
+├── tests/ - Test Suite (5 files)
 │   ├── test_framework.h - Custom test framework
 │   ├── test_unit_auth.c - Authentication tests
 │   ├── test_unit_security.c - Security tests
 │   ├── test_unit_utils.c - Utility tests
 │   └── test_integration_basic.c - Integration tests
-├── Build System
-│   └── Makefile (280 lines) - Professional build system with enhanced features
-├── Documentation (4 files)
+├── docs/ - Documentation (4 files)
 │   ├── README.md - Project documentation
 │   ├── DEMO.md - Usage demonstration
+│   ├── IMPLEMENTATION_SUMMARY.md - Technical overview
+│   └── sudosh.1.in - Manual page template
+├── Build System
+│   └── Makefile (280 lines) - Professional build system with enhanced features
 │   ├── sudosh.1.in - Manpage template
 │   └── IMPLEMENTATION_SUMMARY.md - This file
 └── Testing

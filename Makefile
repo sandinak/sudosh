@@ -41,7 +41,7 @@ else
 endif
 
 # Directories
-SRCDIR = .
+SRCDIR = src
 OBJDIR = obj
 BINDIR = bin
 TESTDIR = tests
@@ -136,7 +136,7 @@ integration-test: tests
 
 # Generate manpage
 sudosh.1: docs/sudosh.1.in
-	sed 's/@VERSION@/$(shell grep SUDOSH_VERSION sudosh.h | cut -d'"' -f2)/g' docs/sudosh.1.in > sudosh.1
+	sed 's/@VERSION@/$(shell grep SUDOSH_VERSION $(SRCDIR)/sudosh.h | cut -d'"' -f2)/g' docs/sudosh.1.in > sudosh.1
 
 # Install target (requires root privileges)
 install: $(TARGET) sudosh.1
@@ -268,14 +268,14 @@ help:
 	@echo "  - Multiple authentication fallback methods"
 
 # Dependencies
-$(OBJDIR)/main.o: main.c sudosh.h
-$(OBJDIR)/auth.o: auth.c sudosh.h
-$(OBJDIR)/command.o: command.c sudosh.h
-$(OBJDIR)/logging.o: logging.c sudosh.h
-$(OBJDIR)/security.o: security.c sudosh.h
-$(OBJDIR)/utils.o: utils.c sudosh.h
-$(OBJDIR)/nss.o: nss.c sudosh.h
-$(OBJDIR)/sudoers.o: sudoers.c sudosh.h
-$(OBJDIR)/sssd.o: sssd.c sudosh.h
+$(OBJDIR)/main.o: $(SRCDIR)/main.c $(SRCDIR)/sudosh.h
+$(OBJDIR)/auth.o: $(SRCDIR)/auth.c $(SRCDIR)/sudosh.h
+$(OBJDIR)/command.o: $(SRCDIR)/command.c $(SRCDIR)/sudosh.h
+$(OBJDIR)/logging.o: $(SRCDIR)/logging.c $(SRCDIR)/sudosh.h
+$(OBJDIR)/security.o: $(SRCDIR)/security.c $(SRCDIR)/sudosh.h
+$(OBJDIR)/utils.o: $(SRCDIR)/utils.c $(SRCDIR)/sudosh.h
+$(OBJDIR)/nss.o: $(SRCDIR)/nss.c $(SRCDIR)/sudosh.h
+$(OBJDIR)/sudoers.o: $(SRCDIR)/sudoers.c $(SRCDIR)/sudosh.h
+$(OBJDIR)/sssd.o: $(SRCDIR)/sssd.c $(SRCDIR)/sudosh.h
 
 .PHONY: all tests test unit-test integration-test test-suid clean-suid install uninstall clean rebuild debug coverage coverage-report static-analysis help

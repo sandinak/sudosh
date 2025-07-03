@@ -204,6 +204,11 @@ struct user_info *get_real_user_info(void);
 int is_whitespace_only(const char *str);
 char *safe_strdup(const char *str);
 
+/* Tab completion functions */
+char **complete_path(const char *text, int start, int end);
+char *find_completion_start(const char *buffer, int pos);
+void insert_completion(char *buffer, int *pos, int *len, const char *completion, const char *prefix);
+
 /* Main program functions */
 int main_loop(void);
 void cleanup_and_exit(int exit_code);

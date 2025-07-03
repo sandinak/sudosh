@@ -116,6 +116,14 @@ int execute_command(struct command_info *cmd, struct user_info *user) {
     if (pid == 0) {
         /* Child process */
 
+        /* Reset signal handlers to default for the child */
+        signal(SIGINT, SIG_DFL);
+        signal(SIGQUIT, SIG_DFL);
+        signal(SIGTSTP, SIG_DFL);
+        signal(SIGPIPE, SIG_DFL);
+        signal(SIGHUP, SIG_DFL);
+        signal(SIGCHLD, SIG_DFL);
+
         /* Make stdout and stderr unbuffered for immediate output */
         setvbuf(stdout, NULL, _IONBF, 0);
         setvbuf(stderr, NULL, _IONBF, 0);
@@ -138,17 +146,42 @@ int execute_command(struct command_info *cmd, struct user_info *user) {
 
         /* Execute the command */
         execv(command_path, cmd->argv);
-        
+
         /* If we get here, exec failed */
         perror("execv");
         exit(EXIT_COMMAND_NOT_FOUND);
     } else {
         /* Parent process */
         free(command_path);
-        
+
+        /* Set up signal handling for interactive programs */
+        struct sigaction old_sigint, old_sigquit, old_sigtstp;
+        struct sigaction ignore_action;
+
+        ignore_action.sa_handler = SIG_IGN;
+        sigemptyset(&ignore_action.sa_mask);
+        ignore_action.sa_flags = 0;
+
+        /* Temporarily ignore signals that should be handled by the child */
+        sigaction(SIGINT, &ignore_action, &old_sigint);
+        sigaction(SIGQUIT, &ignore_action, &old_sigquit);
+        sigaction(SIGTSTP, &ignore_action, &old_sigtstp);
+
         /* Wait for child to complete */
-        if (waitpid(pid, &status, 0) == -1) {
-            perror("waitpid");
+        int wait_result;
+        do {
+            wait_result = waitpid(pid, &status, 0);
+        } while (wait_result == -1 && errno == EINTR);
+
+        /* Restore original signal handlers */
+        sigaction(SIGINT, &old_sigint, NULL);
+        sigaction(SIGQUIT, &old_sigquit, NULL);
+        sigaction(SIGTSTP, &old_sigtstp, NULL);
+
+        if (wait_result == -1) {
+            if (errno != ECHILD) {  /* Don't report error if child already reaped */
+                perror("waitpid");
+            }
             return -1;
         }
 
@@ -156,8 +189,12 @@ int execute_command(struct command_info *cmd, struct user_info *user) {
         if (WIFEXITED(status)) {
             return WEXITSTATUS(status);
         } else if (WIFSIGNALED(status)) {
-            fprintf(stderr, "Command terminated by signal %d\n", WTERMSIG(status));
-            return 128 + WTERMSIG(status);
+            int sig = WTERMSIG(status);
+            /* Don't print message for common interactive program signals */
+            if (sig != SIGPIPE && sig != SIGINT && sig != SIGQUIT && sig != SIGTERM) {
+                fprintf(stderr, "Command terminated by signal %d\n", sig);
+            }
+            return 128 + sig;
         }
     }
 

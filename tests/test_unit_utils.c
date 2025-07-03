@@ -1,5 +1,5 @@
 #include "test_framework.h"
-#include "../sudosh.h"
+#include "sudosh.h"
 
 /* Global test counters */
 int test_count = 0;

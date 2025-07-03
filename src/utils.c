@@ -466,8 +466,14 @@ char *read_command(void) {
                 fflush(stdout);
             }
         } else if (c == 4) {
-            /* Ctrl-D: Delete character at cursor */
-            if (pos < len) {
+            /* Ctrl-D: Delete character at cursor or exit if line is empty */
+            if (len == 0) {
+                /* Empty line - exit gracefully */
+                tcsetattr(STDIN_FILENO, TCSANOW, &old_termios);
+                printf("\n");  /* Move to next line for clean exit */
+                return NULL;
+            } else if (pos < len) {
+                /* Delete character at cursor */
                 memmove(&buffer[pos], &buffer[pos + 1], len - pos);
                 len--;
                 buffer[len] = '\0';
@@ -562,6 +568,77 @@ char *read_command(void) {
                     }
                 }
                 /* Ignore other escape sequences */
+            }
+        } else if (c == '\t') {
+            /* Tab - perform path completion */
+            char *prefix = find_completion_start(buffer, pos);
+            if (prefix) {
+                char **matches = complete_path(prefix, 0, strlen(prefix));
+                if (matches && matches[0]) {
+                    if (matches[1] == NULL) {
+                        /* Single match - complete it */
+                        insert_completion(buffer, &pos, &len, matches[0], prefix);
+
+                        /* Redraw line */
+                        printf("\r\033[K");
+                        print_prompt();
+                        printf("%s", buffer);
+
+                        /* Move cursor to correct position */
+                        if (pos < len) {
+                            printf("\033[%dD", len - pos);
+                        }
+                        fflush(stdout);
+                    } else {
+                        /* Multiple matches - show them */
+                        printf("\n");
+                        for (int i = 0; matches[i]; i++) {
+                            printf("%s  ", matches[i]);
+                            if ((i + 1) % 4 == 0) {
+                                printf("\n");
+                            }
+                        }
+                        if (matches[0] && strlen(matches[0]) > 0) {
+                            /* Find common prefix among matches */
+                            char common[256] = {0};
+                            int common_len = 0;
+                            int max_common = strlen(matches[0]);
+
+                            for (int i = 1; matches[i] && common_len < max_common; i++) {
+                                for (int j = 0; j < max_common && j < (int)strlen(matches[i]); j++) {
+                                    if (matches[0][j] != matches[i][j]) {
+                                        max_common = j;
+                                        break;
+                                    }
+                                }
+                            }
+
+                            if (max_common > (int)strlen(prefix)) {
+                                strncpy(common, matches[0], max_common);
+                                common[max_common] = '\0';
+                                insert_completion(buffer, &pos, &len, common, prefix);
+                            }
+                        }
+                        printf("\n");
+
+                        /* Redraw prompt and line */
+                        print_prompt();
+                        printf("%s", buffer);
+
+                        /* Move cursor to correct position */
+                        if (pos < len) {
+                            printf("\033[%dD", len - pos);
+                        }
+                        fflush(stdout);
+                    }
+
+                    /* Free matches */
+                    for (int i = 0; matches[i]; i++) {
+                        free(matches[i]);
+                    }
+                    free(matches);
+                }
+                free(prefix);
             }
         } else if (c >= 32 && c < 127) {
             /* Printable character */
@@ -778,4 +855,187 @@ void cleanup_and_exit(int exit_code) {
     cleanup_security();
     close_logging();
     exit(exit_code);
+}
+
+/**
+ * Find the start of the word to complete at the given position
+ */
+char *find_completion_start(const char *buffer, int pos) {
+    int start = pos;
+
+    /* Move backwards to find the start of the current word */
+    while (start > 0 && buffer[start - 1] != ' ' && buffer[start - 1] != '\t') {
+        start--;
+    }
+
+    /* Return a copy of the prefix to complete */
+    int prefix_len = pos - start;
+    if (prefix_len <= 0) {
+        return strdup("");
+    }
+
+    char *prefix = malloc(prefix_len + 1);
+    if (!prefix) {
+        return NULL;
+    }
+
+    strncpy(prefix, buffer + start, prefix_len);
+    prefix[prefix_len] = '\0';
+
+    return prefix;
+}
+
+/**
+ * Complete file/directory paths
+ */
+char **complete_path(const char *text, int start, int end) {
+    (void)start; /* Suppress unused parameter warning */
+    (void)end;   /* Suppress unused parameter warning */
+
+    char **matches = NULL;
+    int match_count = 0;
+    int match_capacity = 16;
+
+    /* Allocate initial matches array */
+    matches = malloc(match_capacity * sizeof(char *));
+    if (!matches) {
+        return NULL;
+    }
+
+    /* Extract directory and filename parts */
+    char *dir_path = NULL;
+    char *filename_prefix = NULL;
+
+    char *last_slash = strrchr(text, '/');
+    if (last_slash) {
+        /* Path contains directory separator */
+        int dir_len = last_slash - text + 1;
+        dir_path = malloc(dir_len + 1);
+        if (!dir_path) {
+            free(matches);
+            return NULL;
+        }
+        strncpy(dir_path, text, dir_len);
+        dir_path[dir_len] = '\0';
+
+        filename_prefix = strdup(last_slash + 1);
+    } else {
+        /* No directory separator - complete in current directory */
+        dir_path = strdup("./");
+        filename_prefix = strdup(text);
+    }
+
+    if (!filename_prefix) {
+        free(dir_path);
+        free(matches);
+        return NULL;
+    }
+
+    /* Open directory */
+    DIR *dir = opendir(dir_path);
+    if (!dir) {
+        free(dir_path);
+        free(filename_prefix);
+        free(matches);
+        return NULL;
+    }
+
+    /* Read directory entries */
+    struct dirent *entry;
+    int prefix_len = strlen(filename_prefix);
+
+    while ((entry = readdir(dir)) != NULL) {
+        /* Skip hidden files unless prefix starts with '.' */
+        if (entry->d_name[0] == '.' && (prefix_len == 0 || filename_prefix[0] != '.')) {
+            continue;
+        }
+
+        /* Check if entry matches prefix */
+        if (strncmp(entry->d_name, filename_prefix, prefix_len) == 0) {
+            /* Expand matches array if needed */
+            if (match_count >= match_capacity - 1) {
+                match_capacity *= 2;
+                char **new_matches = realloc(matches, match_capacity * sizeof(char *));
+                if (!new_matches) {
+                    /* Clean up on failure */
+                    for (int i = 0; i < match_count; i++) {
+                        free(matches[i]);
+                    }
+                    free(matches);
+                    free(dir_path);
+                    free(filename_prefix);
+                    closedir(dir);
+                    return NULL;
+                }
+                matches = new_matches;
+            }
+
+            /* Create full path for the match */
+            char *full_match;
+            if (strcmp(dir_path, "./") == 0) {
+                full_match = strdup(entry->d_name);
+            } else {
+                int full_len = strlen(dir_path) + strlen(entry->d_name) + 1;
+                full_match = malloc(full_len);
+                if (full_match) {
+                    strcpy(full_match, dir_path);
+                    strcat(full_match, entry->d_name);
+                }
+            }
+
+            if (full_match) {
+                /* Check if it's a directory and add trailing slash */
+                struct stat st;
+                if (stat(full_match, &st) == 0 && S_ISDIR(st.st_mode)) {
+                    char *dir_match = malloc(strlen(full_match) + 2);
+                    if (dir_match) {
+                        strcpy(dir_match, full_match);
+                        strcat(dir_match, "/");
+                        free(full_match);
+                        full_match = dir_match;
+                    }
+                }
+
+                matches[match_count++] = full_match;
+            }
+        }
+    }
+
+    closedir(dir);
+    free(dir_path);
+    free(filename_prefix);
+
+    /* Null-terminate the matches array */
+    matches[match_count] = NULL;
+
+    return matches;
+}
+
+/**
+ * Insert completion into buffer at current position
+ */
+void insert_completion(char *buffer, int *pos, int *len, const char *completion, const char *prefix) {
+    int prefix_len = strlen(prefix);
+    int completion_len = strlen(completion);
+    int insert_len = completion_len - prefix_len;
+
+    if (insert_len <= 0) {
+        return; /* Nothing to insert */
+    }
+
+    /* Check if there's enough space in buffer */
+    if (*len + insert_len >= 1023) { /* Leave room for null terminator */
+        return;
+    }
+
+    /* Move existing text to make room */
+    memmove(&buffer[*pos + insert_len], &buffer[*pos], *len - *pos);
+
+    /* Insert the new text */
+    memcpy(&buffer[*pos], completion + prefix_len, insert_len);
+
+    /* Update position and length */
+    *pos += insert_len;
+    *len += insert_len;
+    buffer[*len] = '\0';
 }

@@ -217,15 +217,25 @@ sudo tail -f /var/log/secure
 
 ```
 sudosh/
-├── main.c          # Main program and command loop
-├── auth.c          # PAM authentication functions
-├── command.c       # Command parsing and execution
-├── logging.c       # Syslog integration
-├── security.c      # Security measures and validation
-├── utils.c         # Utility functions
-├── sudosh.h        # Header file with declarations
-├── Makefile        # Build configuration
-└── README.md       # This file
+├── src/            # Source code directory
+│   ├── main.c      # Main program and command loop
+│   ├── auth.c      # PAM authentication functions
+│   ├── command.c   # Command parsing and execution
+│   ├── logging.c   # Syslog integration
+│   ├── security.c  # Security measures and validation
+│   ├── utils.c     # Utility functions
+│   ├── nss.c       # NSS integration
+│   ├── sudoers.c   # Sudoers file parsing
+│   ├── sssd.c      # SSSD integration
+│   └── sudosh.h    # Header file with declarations
+├── docs/           # Documentation directory
+│   ├── README.md   # Main documentation
+│   ├── DEMO.md     # Demo and examples
+│   └── sudosh.1.in # Manual page template
+├── tests/          # Test suite
+├── obj/            # Build objects (generated)
+├── bin/            # Binary output (generated)
+└── Makefile        # Build configuration
 ```
 
 ## Configuration

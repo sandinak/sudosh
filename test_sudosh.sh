@@ -38,7 +38,7 @@ echo
 # Test 4: Check project structure
 echo "Test 4: Project structure"
 echo "Source files:"
-for file in main.c auth.c command.c logging.c security.c utils.c sudosh.h; do
+for file in src/main.c src/auth.c src/command.c src/logging.c src/security.c src/utils.c src/sudosh.h; do
     if [ -f "$file" ]; then
         echo "✓ $file ($(wc -l < "$file") lines)"
     else
@@ -48,7 +48,7 @@ done
 echo
 
 echo "Documentation and build files:"
-for file in Makefile README.md DEMO.md sudosh.1.in; do
+for file in Makefile docs/README.md docs/DEMO.md docs/sudosh.1.in; do
     if [ -f "$file" ]; then
         echo "✓ $file"
     else
