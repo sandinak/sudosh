@@ -34,11 +34,10 @@ int main_loop(void) {
     set_current_username(username);
 
     /* Check if user has sudo privileges using enhanced checking */
-    if (!check_sudo_privileges_enhanced(username)) {
-        fprintf(stderr, "sudosh: %s is not in the sudoers file. This incident will be reported.\n", username);
-        log_security_violation(username, "user not in sudoers");
-        free(username);
-        return EXIT_AUTH_FAILURE;
+    int has_sudo_privileges = check_sudo_privileges_enhanced(username);
+    if (!has_sudo_privileges) {
+        printf("Note: You have limited privileges. Only safe commands (ls, pwd, whoami, etc.) are available.\n");
+        log_security_violation(username, "user not in sudoers - limited to safe commands");
     }
 
     /* If target user specified, validate and check permissions */
@@ -166,6 +165,16 @@ int main_loop(void) {
         /* Validate command for security */
         if (!validate_command(command_line)) {
             fprintf(stderr, "sudosh: command rejected for security reasons\n");
+            free(command_line);
+            continue;
+        }
+
+        /* Check if user has privileges for this command */
+        if (!has_sudo_privileges && !is_safe_command(command_line)) {
+            fprintf(stderr, "sudosh: %s is not in the sudoers file and '%s' is not a safe command\n",
+                    username, command_line);
+            fprintf(stderr, "Available safe commands: ls, pwd, whoami, id, date, uptime, w, who\n");
+            log_security_violation(username, "attempted privileged command without sudoers access");
             free(command_line);
             continue;
         }

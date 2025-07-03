@@ -171,6 +171,48 @@ void secure_terminal(void) {
 }
 
 /**
+ * Check if command is a safe command that should always be allowed
+ */
+int is_safe_command(const char *command) {
+    if (!command) return 0;
+
+    /* Create a copy for parsing */
+    char *cmd_copy = strdup(command);
+    if (!cmd_copy) return 0;
+
+    /* Get the first token (command name) */
+    char *cmd_name = strtok(cmd_copy, " \t");
+    if (!cmd_name) {
+        free(cmd_copy);
+        return 0;
+    }
+
+    /* List of safe commands that should always be allowed */
+    const char *safe_commands[] = {
+        "ls", "/bin/ls", "/usr/bin/ls",
+        "pwd", "/bin/pwd", "/usr/bin/pwd",
+        "whoami", "/usr/bin/whoami", "/bin/whoami",
+        "id", "/usr/bin/id", "/bin/id",
+        "date", "/bin/date", "/usr/bin/date",
+        "uptime", "/usr/bin/uptime", "/bin/uptime",
+        "w", "/usr/bin/w", "/bin/w",
+        "who", "/usr/bin/who", "/bin/who",
+        NULL
+    };
+
+    /* Check if it's a safe command */
+    for (int i = 0; safe_commands[i]; i++) {
+        if (strcmp(cmd_name, safe_commands[i]) == 0) {
+            free(cmd_copy);
+            return 1;
+        }
+    }
+
+    free(cmd_copy);
+    return 0;
+}
+
+/**
  * Check if command is an SSH command
  */
 int is_ssh_command(const char *command) {

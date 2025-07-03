@@ -172,6 +172,33 @@ int test_ssh_command_detection() {
     return 1;
 }
 
+/* Test safe command detection functions directly */
+int test_safe_command_detection() {
+    /* Test safe command detection */
+    TEST_ASSERT_EQ(1, is_safe_command("ls"), "ls should be detected as safe");
+    TEST_ASSERT_EQ(1, is_safe_command("ls -la"), "ls with args should be detected as safe");
+    TEST_ASSERT_EQ(1, is_safe_command("/bin/ls"), "absolute ls path should be detected as safe");
+    TEST_ASSERT_EQ(1, is_safe_command("/usr/bin/ls"), "usr bin ls path should be detected as safe");
+    TEST_ASSERT_EQ(1, is_safe_command("pwd"), "pwd should be detected as safe");
+    TEST_ASSERT_EQ(1, is_safe_command("whoami"), "whoami should be detected as safe");
+    TEST_ASSERT_EQ(1, is_safe_command("id"), "id should be detected as safe");
+    TEST_ASSERT_EQ(1, is_safe_command("date"), "date should be detected as safe");
+    TEST_ASSERT_EQ(1, is_safe_command("uptime"), "uptime should be detected as safe");
+    TEST_ASSERT_EQ(1, is_safe_command("w"), "w should be detected as safe");
+    TEST_ASSERT_EQ(1, is_safe_command("who"), "who should be detected as safe");
+
+    /* Test non-safe commands */
+    TEST_ASSERT_EQ(0, is_safe_command("rm"), "rm should not be detected as safe");
+    TEST_ASSERT_EQ(0, is_safe_command("sudo"), "sudo should not be detected as safe");
+    TEST_ASSERT_EQ(0, is_safe_command("systemctl"), "systemctl should not be detected as safe");
+    TEST_ASSERT_EQ(0, is_safe_command("chmod"), "chmod should not be detected as safe");
+    TEST_ASSERT_EQ(0, is_safe_command("chown"), "chown should not be detected as safe");
+    TEST_ASSERT_EQ(0, is_safe_command("ssh"), "ssh should not be detected as safe");
+    TEST_ASSERT_EQ(0, is_safe_command(NULL), "NULL should not be detected as safe");
+
+    return 1;
+}
+
 /* Test signal handling behavior */
 int test_signal_handling() {
     /* Test that SIGINT doesn't set interrupted flag */
@@ -285,6 +312,7 @@ TEST_SUITE_BEGIN("Unit Tests - Security")
     RUN_TEST(test_validate_command_security);
     RUN_TEST(test_dangerous_command_detection);
     RUN_TEST(test_ssh_command_detection);
+    RUN_TEST(test_safe_command_detection);
     RUN_TEST(test_signal_handling);
     RUN_TEST(test_secure_terminal);
     RUN_TEST(test_init_security);
