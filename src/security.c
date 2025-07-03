@@ -11,6 +11,7 @@
 
 /* Global variables for signal handling */
 static volatile sig_atomic_t interrupted = 0;
+static volatile sig_atomic_t received_sigint = 0;
 static char *current_username = NULL;
 
 /**
@@ -19,11 +20,18 @@ static char *current_username = NULL;
 void signal_handler(int sig) {
     switch (sig) {
         case SIGINT:
+            /* Track SIGINT separately - don't set interrupted flag */
+            /* This allows Ctrl-C to be passed to running commands */
+            received_sigint = 1;
+            break;
         case SIGTERM:
         case SIGQUIT:
             /* Set interrupted flag for graceful exit */
             interrupted = 1;
             /* Don't exit immediately - let main loop handle cleanup */
+            break;
+        case SIGTSTP:
+            /* Ignore Ctrl-Z completely - don't suspend sudosh */
             break;
         case SIGCHLD:
             /* Don't reap children here - let execute_command handle it */
@@ -47,6 +55,7 @@ void setup_signal_handlers(void) {
     sigaction(SIGINT, &sa, NULL);
     sigaction(SIGTERM, &sa, NULL);
     sigaction(SIGQUIT, &sa, NULL);
+    sigaction(SIGTSTP, &sa, NULL);  /* Handle Ctrl-Z to ignore it */
 
     /* Handle child process signals - but don't reap them */
     sigaction(SIGCHLD, &sa, NULL);
@@ -449,10 +458,24 @@ void init_security(void) {
 }
 
 /**
- * Check if interrupted by signal
+ * Check if interrupted by signal (SIGTERM/SIGQUIT only)
  */
 int is_interrupted(void) {
     return interrupted;
+}
+
+/**
+ * Check if SIGINT was received (Ctrl-C)
+ */
+int received_sigint_signal(void) {
+    return received_sigint;
+}
+
+/**
+ * Reset SIGINT flag
+ */
+void reset_sigint_flag(void) {
+    received_sigint = 0;
 }
 
 /**

@@ -200,6 +200,8 @@ void secure_terminal(void);
 int validate_command(const char *command);
 void init_security(void);
 int is_interrupted(void);
+int received_sigint_signal(void);
+void reset_sigint_flag(void);
 void cleanup_security(void);
 
 /* Enhanced command security functions */

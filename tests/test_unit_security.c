@@ -1,5 +1,7 @@
 #include "test_framework.h"
 #include "sudosh.h"
+#include <signal.h>
+#include <unistd.h>
 #include <sys/resource.h>
 
 /* Global test counters */
@@ -143,6 +145,27 @@ int test_dangerous_command_detection() {
     return 1;
 }
 
+/* Test signal handling behavior */
+int test_signal_handling() {
+    /* Test that SIGINT doesn't set interrupted flag */
+    TEST_ASSERT_EQ(0, is_interrupted(), "should not be interrupted initially");
+    TEST_ASSERT_EQ(0, received_sigint_signal(), "should not have received SIGINT initially");
+
+    /* Simulate SIGINT */
+    kill(getpid(), SIGINT);
+    usleep(10000); /* Give signal time to be processed */
+
+    /* SIGINT should not set interrupted flag but should set SIGINT flag */
+    TEST_ASSERT_EQ(0, is_interrupted(), "SIGINT should not set interrupted flag");
+    TEST_ASSERT_EQ(1, received_sigint_signal(), "should have received SIGINT");
+
+    /* Reset SIGINT flag */
+    reset_sigint_flag();
+    TEST_ASSERT_EQ(0, received_sigint_signal(), "SIGINT flag should be reset");
+
+    return 1;
+}
+
 /* Test terminal security */
 int test_secure_terminal() {
     /* Call secure_terminal function */
@@ -234,6 +257,7 @@ TEST_SUITE_BEGIN("Unit Tests - Security")
     RUN_TEST(test_set_current_username);
     RUN_TEST(test_validate_command_security);
     RUN_TEST(test_dangerous_command_detection);
+    RUN_TEST(test_signal_handling);
     RUN_TEST(test_secure_terminal);
     RUN_TEST(test_init_security);
     RUN_TEST(test_is_interrupted);

@@ -478,10 +478,16 @@ char *read_command(void) {
     memset(buffer, 0, sizeof(buffer));
 
     while (1) {
-        /* Check if interrupted by signal */
+        /* Check if interrupted by SIGTERM/SIGQUIT (but not SIGINT) */
         if (is_interrupted()) {
             tcsetattr(STDIN_FILENO, TCSANOW, &old_termios);
             return NULL;
+        }
+
+        /* Reset SIGINT flag if it was received - we continue on Ctrl-C */
+        if (received_sigint_signal()) {
+            reset_sigint_flag();
+            /* Continue processing - don't exit on Ctrl-C */
         }
 
         /* Use select() to implement timeout */
