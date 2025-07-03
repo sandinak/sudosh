@@ -437,6 +437,9 @@ int load_history_buffer(void) {
     char line[1024];
     struct passwd *pwd;
 
+    /* Free existing buffer if any */
+    free_history_buffer();
+
     /* Get current user's home directory */
     pwd = getpwuid(getuid());
     if (!pwd || !pwd->pw_dir) {
@@ -446,19 +449,19 @@ int load_history_buffer(void) {
     /* Build history file path */
     snprintf(history_path, sizeof(history_path), "%s/.sudosh_history", pwd->pw_dir);
 
-    /* Open history file */
-    file = fopen(history_path, "r");
-    if (!file) {
-        /* No history file exists yet, that's okay */
-        return 0;
-    }
-
-    /* Initialize history buffer */
+    /* Initialize history buffer even if no file exists */
     history_capacity = 100;
     history_buffer = malloc(history_capacity * sizeof(char *));
     if (!history_buffer) {
-        fclose(file);
         return -1;
+    }
+    history_count = 0;
+
+    /* Open history file */
+    file = fopen(history_path, "r");
+    if (!file) {
+        /* No history file exists yet, that's okay - buffer is initialized */
+        return 0;
     }
 
     /* Read history entries */
@@ -528,6 +531,9 @@ char *get_history_entry(int index) {
  * Get total number of history entries
  */
 int get_history_count(void) {
+    if (!history_buffer) {
+        return 0;
+    }
     return history_count;
 }
 
@@ -572,13 +578,16 @@ void add_to_history_buffer(const char *command) {
  */
 char *expand_history(const char *command) {
     char *result = NULL;
-    const char *src = command;
+    const char *src;
     size_t result_len = 0;
-    size_t result_capacity = strlen(command) * 2 + 1;  /* Start with double the input size */
+    size_t result_capacity;
 
     if (!command) {
         return NULL;
     }
+
+    src = command;
+    result_capacity = strlen(command) * 2 + 1;  /* Start with double the input size */
 
     /* Allocate initial result buffer */
     result = malloc(result_capacity);
