@@ -1,3 +1,12 @@
+/**
+ * auth.c - Authentication and Authorization
+ *
+ * Author: Branson Matheson <branson@sandsite.org>
+ *
+ * Handles user authentication, privilege checking, sudoers parsing,
+ * and target user validation for sudosh.
+ */
+
 #include "sudosh.h"
 
 #ifdef MOCK_AUTH
@@ -275,6 +284,166 @@ int check_sudo_privileges_enhanced(const char *username) {
     }
 
     return has_privileges;
+}
+
+/**
+ * Validate that the target user exists and is valid
+ */
+int validate_target_user(const char *target_user) {
+    struct passwd *pwd;
+
+    if (!target_user || *target_user == '\0') {
+        return 0;
+    }
+
+    /* Check if target user exists */
+    pwd = getpwnam(target_user);
+    if (!pwd) {
+        return 0;
+    }
+
+    /* Additional validation - ensure it's not a system account we shouldn't use */
+    /* Allow root and regular users, but be cautious about system accounts */
+    if (pwd->pw_uid == 0) {
+        /* Root is always valid */
+        return 1;
+    }
+
+    /* Check for reasonable UID range (typically > 100 or > 1000 depending on system) */
+    if (pwd->pw_uid < 100) {
+        /* System account - be more restrictive */
+        /* Allow common service accounts that might be legitimate targets */
+        const char *allowed_system_users[] = {
+            "www-data", "apache", "nginx", "mysql", "postgres", "redis",
+            "mongodb", "elasticsearch", "jenkins", "docker", "nobody",
+            NULL
+        };
+
+        for (int i = 0; allowed_system_users[i]; i++) {
+            if (strcmp(target_user, allowed_system_users[i]) == 0) {
+                return 1;
+            }
+        }
+
+        /* Other system accounts require explicit approval */
+        printf("Warning: '%s' appears to be a system account (UID %d)\n", target_user, pwd->pw_uid);
+        return prompt_user_confirmation("", "Running as system account");
+    }
+
+    return 1; /* Regular user account */
+}
+
+/**
+ * Get user info for target user
+ */
+struct user_info *get_target_user_info(const char *target_user) {
+    if (!target_user) {
+        return NULL;
+    }
+
+    return get_user_info(target_user);
+}
+
+/**
+ * Check if user has permission to run commands as target user
+ * This checks sudoers rules for runas permissions
+ */
+int check_runas_permissions(const char *username, const char *target_user) {
+    char command[512];
+    FILE *fp;
+    char buffer[1024];
+    int has_permission = 0;
+
+    if (!username || !target_user) {
+        return 0;
+    }
+
+    /* First validate that target user exists */
+    if (!validate_target_user(target_user)) {
+        return 0;
+    }
+
+    /* Special case: if target user is the same as current user, allow it */
+    if (strcmp(username, target_user) == 0) {
+        return 1;
+    }
+
+    /* Check using sudo -l -U username to see what the user can run */
+    snprintf(command, sizeof(command), "sudo -l -U %s 2>/dev/null", username);
+
+    fp = popen(command, "r");
+    if (!fp) {
+        return 0;
+    }
+
+    /* Parse sudo -l output to check for runas permissions */
+    while (fgets(buffer, sizeof(buffer), fp)) {
+        /* Look for runas specifications */
+        if (strstr(buffer, "(ALL)") || strstr(buffer, "(ALL : ALL)")) {
+            /* User can run as any user */
+            has_permission = 1;
+            break;
+        }
+
+        /* Look for specific user in runas specification */
+        char pattern[256];
+        snprintf(pattern, sizeof(pattern), "(%s)", target_user);
+        if (strstr(buffer, pattern)) {
+            has_permission = 1;
+            break;
+        }
+
+        /* Look for user in runas list like (user1, user2, user3) */
+        if (strchr(buffer, '(') && strchr(buffer, ')')) {
+            char *start = strchr(buffer, '(');
+            char *end = strchr(start, ')');
+            if (start && end) {
+                *end = '\0';
+                start++; /* Skip opening parenthesis */
+
+                /* Split by commas and check each user */
+                char *token = strtok(start, ", ");
+                while (token) {
+                    /* Trim whitespace */
+                    while (*token == ' ' || *token == '\t') token++;
+                    char *token_end = token + strlen(token) - 1;
+                    while (token_end > token && (*token_end == ' ' || *token_end == '\t')) {
+                        *token_end = '\0';
+                        token_end--;
+                    }
+
+                    if (strcmp(token, target_user) == 0) {
+                        has_permission = 1;
+                        break;
+                    }
+                    token = strtok(NULL, ", ");
+                }
+                if (has_permission) break;
+            }
+        }
+
+        /* Look for root permission which typically allows running as any user */
+        if (strstr(buffer, "(root)") && strcmp(target_user, "root") == 0) {
+            has_permission = 1;
+            break;
+        }
+    }
+
+    pclose(fp);
+
+    /* If no explicit permission found, try a more direct approach */
+    if (!has_permission) {
+        /* Try to check if user can run a simple command as target user */
+        snprintf(command, sizeof(command),
+                "sudo -l -U %s | grep -E '\\(%s\\)|\\(ALL\\)' >/dev/null 2>&1",
+                username, target_user);
+
+        if (system(command) == 0) {
+            has_permission = 1;
+        }
+    }
+
+    return has_permission;
 }
 
 /**

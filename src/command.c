@@ -1,3 +1,12 @@
+/**
+ * command.c - Command Parsing and Execution
+ *
+ * Author: Branson Matheson <branson@sandsite.org>
+ *
+ * Handles command parsing, validation, and execution with proper
+ * privilege escalation and target user support.
+ */
+
 #include "sudosh.h"
 
 /**
@@ -79,9 +88,19 @@ int execute_command(struct command_info *cmd, struct user_info *user) {
     pid_t pid;
     int status;
     char *command_path;
+    struct passwd *target_pwd = NULL;
 
     if (!cmd || !cmd->argv || !cmd->argv[0]) {
         return -1;
+    }
+
+    /* Get target user info if target user is specified */
+    if (target_user) {
+        target_pwd = getpwnam(target_user);
+        if (!target_pwd) {
+            fprintf(stderr, "sudosh: target user '%s' not found\n", target_user);
+            return -1;
+        }
     }
 
     /* Find the command in PATH if it's not an absolute path */
@@ -133,15 +152,52 @@ int execute_command(struct command_info *cmd, struct user_info *user) {
             environ = cmd->envp;
         }
 
-        /* Change to root privileges */
-        if (setgid(0) != 0) {
-            perror("setgid");
-            exit(EXIT_FAILURE);
-        }
+        /* Change to target user privileges */
+        if (target_pwd) {
+            /* Running as specific target user */
+            if (setgid(target_pwd->pw_gid) != 0) {
+                perror("setgid");
+                exit(EXIT_FAILURE);
+            }
 
-        if (setuid(0) != 0) {
-            perror("setuid");
-            exit(EXIT_FAILURE);
+            /* Set supplementary groups for target user */
+            if (initgroups(target_pwd->pw_name, target_pwd->pw_gid) != 0) {
+                perror("initgroups");
+                exit(EXIT_FAILURE);
+            }
+
+            if (setuid(target_pwd->pw_uid) != 0) {
+                perror("setuid");
+                exit(EXIT_FAILURE);
+            }
+
+            /* Set HOME environment variable for target user */
+            if (setenv("HOME", target_pwd->pw_dir, 1) != 0) {
+                perror("setenv HOME");
+                /* Non-fatal, continue */
+            }
+
+            /* Set USER and LOGNAME environment variables */
+            if (setenv("USER", target_pwd->pw_name, 1) != 0) {
+                perror("setenv USER");
+                /* Non-fatal, continue */
+            }
+
+            if (setenv("LOGNAME", target_pwd->pw_name, 1) != 0) {
+                perror("setenv LOGNAME");
+                /* Non-fatal, continue */
+            }
+        } else {
+            /* Default behavior - change to root privileges */
+            if (setgid(0) != 0) {
+                perror("setgid");
+                exit(EXIT_FAILURE);
+            }
+
+            if (setuid(0) != 0) {
+                perror("setuid");
+                exit(EXIT_FAILURE);
+            }
         }
 
         /* Execute the command */

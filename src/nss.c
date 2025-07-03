@@ -1,3 +1,12 @@
+/**
+ * nss.c - Name Service Switch (NSS) Integration
+ *
+ * Author: Branson Matheson <branson@sandsite.org>
+ *
+ * Handles NSS configuration parsing and integration with system
+ * name resolution services for user and group lookups.
+ */
+
 #include "sudosh.h"
 #include <fcntl.h>
 

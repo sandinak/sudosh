@@ -1,3 +1,12 @@
+/**
+ * main.c - Sudosh Main Program
+ *
+ * Author: Branson Matheson <branson@sandsite.org>
+ *
+ * Main entry point for sudosh - secure interactive sudo shell with
+ * comprehensive logging, security protections, and audit capabilities.
+ */
+
 #include "sudosh.h"
 
 /* Global verbose flag */
@@ -30,6 +39,26 @@ int main_loop(void) {
         log_security_violation(username, "user not in sudoers");
         free(username);
         return EXIT_AUTH_FAILURE;
+    }
+
+    /* If target user specified, validate and check permissions */
+    if (target_user) {
+        if (!validate_target_user(target_user)) {
+            fprintf(stderr, "sudosh: invalid target user '%s'\n", target_user);
+            free(username);
+            return EXIT_FAILURE;
+        }
+
+        if (!check_runas_permissions(username, target_user)) {
+            fprintf(stderr, "sudosh: %s is not allowed to run commands as %s\n", username, target_user);
+            log_security_violation(username, "unauthorized target user access attempt");
+            free(username);
+            return EXIT_AUTH_FAILURE;
+        }
+
+        if (verbose_mode) {
+            printf("sudosh: validated permission to run commands as user '%s'\n", target_user);
+        }
     }
 
     /* Check if user has NOPASSWD privileges */
@@ -119,6 +148,9 @@ int main_loop(void) {
         /* Log command to history */
         log_command_history(command_line);
 
+        /* Add command to in-memory history buffer for immediate arrow key access */
+        add_to_history_buffer(command_line);
+
         /* Check for built-in commands */
         builtin_result = handle_builtin_command(command_line);
         if (builtin_result == -1) {
@@ -147,13 +179,26 @@ int main_loop(void) {
 
         /* Execute command */
         result = execute_command(&cmd, user);
-        
-        /* Log command execution */
-        log_command(username, command_line, (result == 0));
+
+        /* Log command execution with target user info */
+        if (target_user) {
+            char log_message[1024];
+            snprintf(log_message, sizeof(log_message), "%s (as %s)", command_line, target_user);
+            log_command(username, log_message, (result == 0));
+        } else {
+            log_command(username, command_line, (result == 0));
+        }
 
         /* Clean up command structure */
         free_command_info(&cmd);
         free(command_line);
+    }
+
+    /* Check if we exited due to interruption */
+    if (is_interrupted()) {
+        printf("\nInterrupted - exiting gracefully\n");
+    } else {
+        printf("\nExiting sudosh\n");
     }
 
     /* Log session end */
@@ -162,8 +207,14 @@ int main_loop(void) {
     /* Close command history logging */
     close_command_history();
 
+    /* Close session logging */
+    close_logging();
+
     /* Free history buffer */
     free_history_buffer();
+
+    /* Clean up security */
+    cleanup_security();
 
     /* Clean up */
     free_user_info(user);
@@ -189,11 +240,13 @@ int main(int argc, char *argv[]) {
             printf("  -h, --help              Show this help message\n");
             printf("      --version           Show version information\n");
             printf("  -v, --verbose           Enable verbose output\n");
-            printf("  -l, --log-session FILE  Log entire session to FILE\n\n");
+            printf("  -l, --log-session FILE  Log entire session to FILE\n");
+            printf("  -u, --user USER         Run commands as target USER\n\n");
             printf("sudosh provides an interactive shell with sudo privileges.\n");
             printf("All commands are authenticated and logged to syslog.\n");
             printf("Use -l to also log the complete session to a file.\n");
             printf("Use -v for verbose output including privilege detection details.\n");
+            printf("Use -u to run commands as a specific target user (requires sudoers permission).\n");
             return EXIT_SUCCESS;
         } else if (strcmp(argv[i], "--version") == 0) {
             printf("sudosh %s\n", SUDOSH_VERSION);
@@ -207,6 +260,13 @@ int main(int argc, char *argv[]) {
                 return EXIT_FAILURE;
             }
             session_logfile = argv[++i];
+        } else if (strcmp(argv[i], "--user") == 0 || strcmp(argv[i], "-u") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "sudosh: option '%s' requires an argument\n", argv[i]);
+                fprintf(stderr, "Try '%s --help' for more information.\n", argv[0]);
+                return EXIT_FAILURE;
+            }
+            target_user = argv[++i];
         } else {
             fprintf(stderr, "sudosh: unknown option '%s'\n", argv[i]);
             fprintf(stderr, "Try '%s --help' for more information.\n", argv[0]);

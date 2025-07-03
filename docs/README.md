@@ -1,5 +1,7 @@
 # sudosh - Interactive Sudo Shell
 
+**Author**: Branson Matheson <branson@sandsite.org>
+
 A secure, interactive sudo shell written in C that provides sudo-like functionality with comprehensive command logging to syslog.
 
 ## Features

@@ -1,4 +1,9 @@
 # Makefile for sudosh - Interactive sudo shell
+#
+# Author: Branson Matheson <branson@sandsite.org>
+#
+# Build system for sudosh - secure interactive shell with comprehensive
+# logging, security protections, and audit capabilities.
 
 # Compiler and flags
 CC = gcc

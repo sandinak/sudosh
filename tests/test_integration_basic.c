@@ -167,10 +167,10 @@ int test_command_integration() {
     /* Test parsing and validation of various commands */
     const char *test_commands[] = {
         "ls -la",
-        "systemctl status nginx",
-        "apt update",
-        "/usr/bin/whoami",
+        "ps aux",
         "echo 'hello world'",
+        "date",
+        "uptime",
         NULL
     };
     

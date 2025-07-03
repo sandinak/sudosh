@@ -53,3 +53,90 @@ dkms.conf
 
 # debug information files
 *.dwo
+
+# Sudosh-specific build artifacts
+obj/
+bin/
+sudosh
+test_*
+demo_*
+
+# Test files and outputs
+tests/test_results.txt
+tests/*.log
+tests/*.out
+tests/temp_*
+/tmp/sudosh_*
+/tmp/test_*
+
+# Log files
+*.log
+session_*.log
+sudosh_*.log
+
+# History files
+.sudosh_history
+*_history
+
+# Temporary files
+*.tmp
+*.temp
+*~
+.#*
+\#*#
+
+# Core dumps
+core
+core.*
+vgcore.*
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*.vim
+.DS_Store
+Thumbs.db
+
+# Backup files
+*.bak
+*.backup
+*.orig
+
+# Man pages (generated)
+*.1
+*.8
+
+# Security test outputs
+/tmp/sudosh_security_logs/
+/tmp/sudosh_vulnerabilities.log
+/tmp/sudosh_security_report.md
+
+# Coverage and profiling files
+*.gcov
+*.gcda
+*.gcno
+coverage/
+gmon.out
+*.prof
+
+# Documentation build artifacts
+docs/*.html
+docs/*.pdf
+docs/build/
+
+# Runtime files
+*.pid
+*.sock
+*.lock
+
+# Local development
+local/
+dev/
+scratch/
+
+# Environment files
+.env
+.env.local
+.env.*.local

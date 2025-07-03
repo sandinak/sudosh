@@ -1,3 +1,12 @@
+/**
+ * sssd.c - System Security Services Daemon (SSSD) Integration
+ *
+ * Author: Branson Matheson <branson@sandsite.org>
+ *
+ * Handles SSSD integration for enterprise authentication and
+ * authorization in Active Directory and LDAP environments.
+ */
+
 #include "sudosh.h"
 #include <sys/socket.h>
 #include <sys/un.h>

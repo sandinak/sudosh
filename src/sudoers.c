@@ -1,3 +1,12 @@
+/**
+ * sudoers.c - Sudoers File Parsing and Validation
+ *
+ * Author: Branson Matheson <branson@sandsite.org>
+ *
+ * Handles parsing and validation of sudoers files including
+ * #includedir directives and permission checking.
+ */
+
 #include "sudosh.h"
 #include <fcntl.h>
 #include <dirent.h>

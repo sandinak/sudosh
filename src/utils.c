@@ -1,6 +1,18 @@
+/**
+ * utils.c - Utility Functions and Interactive Interface
+ *
+ * Author: Branson Matheson <branson@sandsite.org>
+ *
+ * Provides utility functions, interactive command reading, history
+ * navigation, tab completion, and user interface components.
+ */
+
 #include "sudosh.h"
 #define _GNU_SOURCE  /* For getresuid on Linux */
 #include <ctype.h>
+
+/* Global target user for -u option */
+char *target_user = NULL;
 #include <dirent.h>
 #include <sys/stat.h>
 #include <limits.h>
@@ -316,13 +328,55 @@ void print_history(void) {
 }
 
 /**
- * Get current working directory for prompt
+ * Get current working directory for prompt with ~user expansion
  */
 static char *get_prompt_cwd(void) {
     char *cwd = getcwd(NULL, 0);
+    char *result;
+    struct passwd *pwd;
+    const char *effective_user;
+
     if (!cwd) {
         return strdup("unknown");
     }
+
+    /* Determine which user's home directory to check */
+    if (target_user) {
+        effective_user = target_user;
+        pwd = getpwnam(target_user);
+    } else {
+        /* For root operations, check root's home directory */
+        effective_user = "root";
+        pwd = getpwnam("root");
+    }
+
+    /* If we can get the user's home directory, check if cwd is within it */
+    if (pwd && pwd->pw_dir) {
+        size_t home_len = strlen(pwd->pw_dir);
+
+        /* Check if current directory is exactly the home directory */
+        if (strcmp(cwd, pwd->pw_dir) == 0) {
+            result = malloc(strlen(effective_user) + 3); /* ~user + null */
+            if (result) {
+                sprintf(result, "~%s", effective_user);
+                free(cwd);
+                return result;
+            }
+        }
+        /* Check if current directory is a subdirectory of home */
+        else if (strncmp(cwd, pwd->pw_dir, home_len) == 0 && cwd[home_len] == '/') {
+            /* Replace home directory path with ~user */
+            const char *subpath = cwd + home_len; /* Points to the '/' after home dir */
+            result = malloc(strlen(effective_user) + strlen(subpath) + 2); /* ~user + subpath + null */
+            if (result) {
+                sprintf(result, "~%s%s", effective_user, subpath);
+                free(cwd);
+                return result;
+            }
+        }
+    }
+
+    /* If not in home directory or couldn't process, return full path */
     return cwd;
 }
 
@@ -331,7 +385,26 @@ static char *get_prompt_cwd(void) {
  */
 static void print_prompt(void) {
     char *cwd = get_prompt_cwd();
-    printf("sudosh:%s# ", cwd);
+    char hostname[256];
+    char *short_hostname;
+
+    /* Get hostname */
+    if (gethostname(hostname, sizeof(hostname)) != 0) {
+        strcpy(hostname, "localhost");
+    }
+
+    /* Get short hostname (before first dot) */
+    short_hostname = strtok(hostname, ".");
+    if (!short_hostname) {
+        short_hostname = hostname;
+    }
+
+    if (target_user) {
+        printf("%s@%s:%s## ", target_user, short_hostname, cwd);
+    } else {
+        printf("root@%s:%s## ", short_hostname, cwd);
+    }
+
     free(cwd);
     fflush(stdout);
 }
@@ -406,6 +479,12 @@ char *read_command(void) {
     memset(buffer, 0, sizeof(buffer));
 
     while (1) {
+        /* Check if interrupted by signal */
+        if (is_interrupted()) {
+            tcsetattr(STDIN_FILENO, TCSANOW, &old_termios);
+            return NULL;
+        }
+
         c = getchar();
 
         if (c == EOF) {

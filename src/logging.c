@@ -1,3 +1,12 @@
+/**
+ * logging.c - Comprehensive Logging and History Management
+ *
+ * Author: Branson Matheson <branson@sandsite.org>
+ *
+ * Handles syslog integration, session logging, command history,
+ * and audit trail management for sudosh.
+ */
+
 #include "sudosh.h"
 
 /* Global variables for logging */
@@ -395,12 +404,8 @@ void log_command_history(const char *command) {
         return;
     }
 
-    /* Skip empty commands and built-in commands that don't need history */
-    if (strlen(command) == 0 ||
-        strncmp(command, "help", 4) == 0 ||
-        strncmp(command, "commands", 8) == 0 ||
-        strncmp(command, "exit", 4) == 0 ||
-        strncmp(command, "quit", 4) == 0) {
+    /* Skip only empty commands - log ALL user commands to history */
+    if (strlen(command) == 0) {
         return;
     }
 
@@ -524,6 +529,41 @@ char *get_history_entry(int index) {
  */
 int get_history_count(void) {
     return history_count;
+}
+
+/**
+ * Add command to in-memory history buffer
+ */
+void add_to_history_buffer(const char *command) {
+    if (!command || strlen(command) == 0) {
+        return;
+    }
+
+    /* Initialize buffer if not already done */
+    if (!history_buffer) {
+        history_capacity = 100;
+        history_buffer = malloc(history_capacity * sizeof(char *));
+        if (!history_buffer) {
+            return;
+        }
+        history_count = 0;
+    }
+
+    /* Expand buffer if needed */
+    if (history_count >= history_capacity) {
+        history_capacity *= 2;
+        char **new_buffer = realloc(history_buffer, history_capacity * sizeof(char *));
+        if (!new_buffer) {
+            return;
+        }
+        history_buffer = new_buffer;
+    }
+
+    /* Add command to buffer */
+    history_buffer[history_count] = strdup(command);
+    if (history_buffer[history_count]) {
+        history_count++;
+    }
 }
 
 /**

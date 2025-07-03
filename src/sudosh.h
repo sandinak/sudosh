@@ -1,3 +1,13 @@
+/**
+ * sudosh.h - Secure Interactive Sudo Shell
+ *
+ * Author: Branson Matheson <branson@sandsite.org>
+ *
+ * This file is part of sudosh, a secure interactive shell that provides
+ * elevated privileges with extensive logging, security protections, and
+ * audit capabilities.
+ */
+
 #ifndef SUDOSH_H
 #define SUDOSH_H
 
@@ -176,6 +186,7 @@ void free_history_buffer(void);
 char *get_history_entry(int index);
 int get_history_count(void);
 char *expand_history(const char *command);
+void add_to_history_buffer(const char *command);
 
 /* Security functions */
 void sanitize_environment(void);
@@ -188,6 +199,19 @@ int validate_command(const char *command);
 void init_security(void);
 int is_interrupted(void);
 void cleanup_security(void);
+
+/* Enhanced command security functions */
+int is_shell_command(const char *command);
+int is_dangerous_command(const char *command);
+int check_dangerous_flags(const char *command);
+int check_system_directory_access(const char *command);
+int prompt_user_confirmation(const char *command, const char *warning);
+
+/* Target user functionality */
+extern char *target_user;  /* Global target user variable */
+int check_runas_permissions(const char *username, const char *target_user);
+int validate_target_user(const char *target_user);
+struct user_info *get_target_user_info(const char *target_user);
 
 /* Utility functions */
 void print_banner(void);
