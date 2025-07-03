@@ -111,7 +111,6 @@ char *trim_whitespace(char *str) {
  * Print banner
  */
 void print_banner(void) {
-    printf("sudosh %s - Interactive sudo shell\n", SUDOSH_VERSION);
     printf("Type 'help' for available commands, 'exit' to quit.\n\n");
 }
 
@@ -485,6 +484,33 @@ char *read_command(void) {
             return NULL;
         }
 
+        /* Use select() to implement timeout */
+        fd_set readfds;
+        struct timeval timeout;
+        int select_result;
+
+        FD_ZERO(&readfds);
+        FD_SET(STDIN_FILENO, &readfds);
+        timeout.tv_sec = INACTIVITY_TIMEOUT;
+        timeout.tv_usec = 0;
+
+        select_result = select(STDIN_FILENO + 1, &readfds, NULL, NULL, &timeout);
+
+        if (select_result == 0) {
+            /* Timeout occurred */
+            tcsetattr(STDIN_FILENO, TCSANOW, &old_termios);
+            printf("\nSession timeout after %d seconds of inactivity. Exiting.\n", INACTIVITY_TIMEOUT);
+            return NULL;
+        } else if (select_result < 0) {
+            /* Error in select */
+            if (errno == EINTR) {
+                continue;  /* Interrupted by signal, try again */
+            }
+            tcsetattr(STDIN_FILENO, TCSANOW, &old_termios);
+            return NULL;
+        }
+
+        /* Input is available, read it */
         c = getchar();
 
         if (c == EOF) {

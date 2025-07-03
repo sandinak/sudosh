@@ -28,6 +28,7 @@
 #include <sys/stat.h>
 #include <limits.h>
 #include <time.h>
+#include <sys/select.h>
 
 #ifndef MOCK_AUTH
 #include <security/pam_appl.h>
@@ -44,6 +45,7 @@ extern int verbose_mode;
 #define MAX_USERNAME_LENGTH 256
 #define MAX_PASSWORD_LENGTH 256
 #define SUDOSH_VERSION "1.1.1"
+#define INACTIVITY_TIMEOUT 300  /* 300 seconds (5 minutes) */
 
 /* Sudoers file paths */
 #define SUDOERS_PATH "/etc/sudoers"

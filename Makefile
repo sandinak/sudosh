@@ -166,8 +166,8 @@ integration-test: tests
 	@echo "Integration tests passed!"
 
 # Generate manpage
-sudosh.1: docs/sudosh.1.in
-	sed 's/@VERSION@/$(shell grep SUDOSH_VERSION $(SRCDIR)/sudosh.h | cut -d'"' -f2)/g' docs/sudosh.1.in > sudosh.1
+sudosh.1: $(SRCDIR)/sudosh.1.in
+	sed 's/@VERSION@/$(shell grep SUDOSH_VERSION $(SRCDIR)/sudosh.h | cut -d'"' -f2)/g' $(SRCDIR)/sudosh.1.in > sudosh.1
 
 # Install target (requires root privileges)
 install: $(TARGET) sudosh.1
