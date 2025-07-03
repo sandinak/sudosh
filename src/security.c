@@ -171,6 +171,58 @@ void secure_terminal(void) {
 }
 
 /**
+ * Check if command is an interactive editor that could allow shell escape
+ */
+int is_interactive_editor(const char *command) {
+    if (!command) return 0;
+
+    /* Create a copy for parsing */
+    char *cmd_copy = strdup(command);
+    if (!cmd_copy) return 0;
+
+    /* Get the first token (command name) */
+    char *cmd_name = strtok(cmd_copy, " \t");
+    if (!cmd_name) {
+        free(cmd_copy);
+        return 0;
+    }
+
+    /* List of interactive editors that can execute shell commands */
+    const char *editors[] = {
+        "vi", "/bin/vi", "/usr/bin/vi", "/usr/local/bin/vi",
+        "vim", "/bin/vim", "/usr/bin/vim", "/usr/local/bin/vim",
+        "nvim", "/bin/nvim", "/usr/bin/nvim", "/usr/local/bin/nvim",
+        "emacs", "/bin/emacs", "/usr/bin/emacs", "/usr/local/bin/emacs",
+        "nano", "/bin/nano", "/usr/bin/nano", "/usr/local/bin/nano",
+        "pico", "/bin/pico", "/usr/bin/pico", "/usr/local/bin/pico",
+        "joe", "/bin/joe", "/usr/bin/joe", "/usr/local/bin/joe",
+        "mcedit", "/bin/mcedit", "/usr/bin/mcedit", "/usr/local/bin/mcedit",
+        "ed", "/bin/ed", "/usr/bin/ed",
+        "ex", "/bin/ex", "/usr/bin/ex",
+        "view", "/bin/view", "/usr/bin/view",
+        NULL
+    };
+
+    /* Check if it's an interactive editor */
+    for (int i = 0; editors[i]; i++) {
+        if (strcmp(cmd_name, editors[i]) == 0) {
+            free(cmd_copy);
+            return 1;
+        }
+
+        /* Also check basename for absolute paths */
+        char *basename_editor = strrchr(editors[i], '/');
+        if (basename_editor && strcmp(cmd_name, basename_editor + 1) == 0) {
+            free(cmd_copy);
+            return 1;
+        }
+    }
+
+    free(cmd_copy);
+    return 0;
+}
+
+/**
  * Check if command is a safe command that should always be allowed
  */
 int is_safe_command(const char *command) {
@@ -484,6 +536,14 @@ int validate_command(const char *command) {
     if (is_ssh_command(command)) {
         log_security_violation(current_username, "SSH command blocked");
         fprintf(stderr, "sudosh: you should only ssh as your user, not root\n");
+        return 0;
+    }
+
+    /* Block interactive editors that can execute shell commands */
+    if (is_interactive_editor(command)) {
+        log_security_violation(current_username, "interactive editor blocked");
+        fprintf(stderr, "sudosh: interactive editors are not permitted (use sudoedit instead)\n");
+        fprintf(stderr, "sudosh: editors like vi/vim/emacs can execute shell commands and bypass security\n");
         return 0;
     }
 

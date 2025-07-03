@@ -121,6 +121,12 @@ int test_validate_command_security() {
     TEST_ASSERT_EQ(0, validate_command("/usr/bin/ssh user@host"), "absolute ssh path should be blocked");
     TEST_ASSERT_EQ(0, validate_command("ssh"), "bare ssh command should be blocked");
 
+    /* Test interactive editor detection (these should be blocked) */
+    TEST_ASSERT_EQ(0, validate_command("vi /etc/passwd"), "vi command should be blocked");
+    TEST_ASSERT_EQ(0, validate_command("vim file.txt"), "vim command should be blocked");
+    TEST_ASSERT_EQ(0, validate_command("/usr/bin/emacs file.txt"), "absolute emacs path should be blocked");
+    TEST_ASSERT_EQ(0, validate_command("nano"), "bare nano command should be blocked");
+
     return 1;
 }
 
@@ -168,6 +174,42 @@ int test_ssh_command_detection() {
     TEST_ASSERT_EQ(0, is_ssh_command("ssh-keygen"), "ssh-keygen should not be detected as ssh");
     TEST_ASSERT_EQ(0, is_ssh_command("rsync"), "rsync should not be detected as ssh");
     TEST_ASSERT_EQ(0, is_ssh_command(NULL), "NULL should not be detected as ssh");
+
+    return 1;
+}
+
+/* Test interactive editor detection functions directly */
+int test_interactive_editor_detection() {
+    /* Test interactive editor detection */
+    TEST_ASSERT_EQ(1, is_interactive_editor("vi"), "vi should be detected as interactive editor");
+    TEST_ASSERT_EQ(1, is_interactive_editor("vi /etc/passwd"), "vi with file should be detected");
+    TEST_ASSERT_EQ(1, is_interactive_editor("/usr/bin/vi"), "absolute vi path should be detected");
+    TEST_ASSERT_EQ(1, is_interactive_editor("/bin/vi"), "bin vi path should be detected");
+    TEST_ASSERT_EQ(1, is_interactive_editor("vim"), "vim should be detected as interactive editor");
+    TEST_ASSERT_EQ(1, is_interactive_editor("vim file.txt"), "vim with file should be detected");
+    TEST_ASSERT_EQ(1, is_interactive_editor("/usr/bin/vim"), "absolute vim path should be detected");
+    TEST_ASSERT_EQ(1, is_interactive_editor("nvim"), "nvim should be detected as interactive editor");
+    TEST_ASSERT_EQ(1, is_interactive_editor("emacs"), "emacs should be detected as interactive editor");
+    TEST_ASSERT_EQ(1, is_interactive_editor("emacs -nw file.txt"), "emacs with args should be detected");
+    TEST_ASSERT_EQ(1, is_interactive_editor("/usr/bin/emacs"), "absolute emacs path should be detected");
+    TEST_ASSERT_EQ(1, is_interactive_editor("nano"), "nano should be detected as interactive editor");
+    TEST_ASSERT_EQ(1, is_interactive_editor("nano file.txt"), "nano with file should be detected");
+    TEST_ASSERT_EQ(1, is_interactive_editor("pico"), "pico should be detected as interactive editor");
+    TEST_ASSERT_EQ(1, is_interactive_editor("joe"), "joe should be detected as interactive editor");
+    TEST_ASSERT_EQ(1, is_interactive_editor("mcedit"), "mcedit should be detected as interactive editor");
+    TEST_ASSERT_EQ(1, is_interactive_editor("ed"), "ed should be detected as interactive editor");
+    TEST_ASSERT_EQ(1, is_interactive_editor("ex"), "ex should be detected as interactive editor");
+    TEST_ASSERT_EQ(1, is_interactive_editor("view"), "view should be detected as interactive editor");
+
+    /* Test non-editor commands */
+    TEST_ASSERT_EQ(0, is_interactive_editor("ls"), "ls should not be detected as editor");
+    TEST_ASSERT_EQ(0, is_interactive_editor("cat"), "cat should not be detected as editor");
+    TEST_ASSERT_EQ(0, is_interactive_editor("grep"), "grep should not be detected as editor");
+    TEST_ASSERT_EQ(0, is_interactive_editor("sed"), "sed should not be detected as editor");
+    TEST_ASSERT_EQ(0, is_interactive_editor("awk"), "awk should not be detected as editor");
+    TEST_ASSERT_EQ(0, is_interactive_editor("less"), "less should not be detected as editor");
+    TEST_ASSERT_EQ(0, is_interactive_editor("more"), "more should not be detected as editor");
+    TEST_ASSERT_EQ(0, is_interactive_editor(NULL), "NULL should not be detected as editor");
 
     return 1;
 }
@@ -312,6 +354,7 @@ TEST_SUITE_BEGIN("Unit Tests - Security")
     RUN_TEST(test_validate_command_security);
     RUN_TEST(test_dangerous_command_detection);
     RUN_TEST(test_ssh_command_detection);
+    RUN_TEST(test_interactive_editor_detection);
     RUN_TEST(test_safe_command_detection);
     RUN_TEST(test_signal_handling);
     RUN_TEST(test_secure_terminal);
