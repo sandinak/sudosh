@@ -33,7 +33,7 @@ extern int verbose_mode;
 #define MAX_COMMAND_LENGTH 4096
 #define MAX_USERNAME_LENGTH 256
 #define MAX_PASSWORD_LENGTH 256
-#define SUDOSH_VERSION "1.0.0"
+#define SUDOSH_VERSION "1.1.0"
 
 /* Sudoers file paths */
 #define SUDOERS_PATH "/etc/sudoers"
