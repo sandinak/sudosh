@@ -235,6 +235,39 @@ void log_security_violation(const char *username, const char *violation) {
 }
 
 /**
+ * Log security events (non-violations, informational)
+ */
+void log_security_event(const char *username, const char *event, const char *details) {
+    char hostname[256];
+    char *tty;
+
+    if (!logging_initialized) {
+        init_logging();
+    }
+
+    /* Get hostname */
+    if (gethostname(hostname, sizeof(hostname)) != 0) {
+        strncpy(hostname, "unknown", sizeof(hostname) - 1);
+        hostname[sizeof(hostname) - 1] = '\0';
+    }
+
+    /* Get TTY */
+    tty = ttyname(STDIN_FILENO);
+    if (!tty) {
+        tty = "unknown";
+    } else {
+        /* Remove /dev/ prefix if present */
+        if (strncmp(tty, "/dev/", 5) == 0) {
+            tty += 5;
+        }
+    }
+
+    syslog(LOG_INFO,
+           "%s : TTY=%s ; SECURITY EVENT: %s ; DETAILS: %s",
+           username, tty, event, details);
+}
+
+/**
  * Close logging
  */
 void close_logging(void) {

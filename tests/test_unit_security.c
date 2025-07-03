@@ -121,11 +121,11 @@ int test_validate_command_security() {
     TEST_ASSERT_EQ(0, validate_command("/usr/bin/ssh user@host"), "absolute ssh path should be blocked");
     TEST_ASSERT_EQ(0, validate_command("ssh"), "bare ssh command should be blocked");
 
-    /* Test interactive editor detection (these should be blocked) */
-    TEST_ASSERT_EQ(0, validate_command("vi /etc/passwd"), "vi command should be blocked");
-    TEST_ASSERT_EQ(0, validate_command("vim file.txt"), "vim command should be blocked");
-    TEST_ASSERT_EQ(0, validate_command("/usr/bin/emacs file.txt"), "absolute emacs path should be blocked");
-    TEST_ASSERT_EQ(0, validate_command("nano"), "bare nano command should be blocked");
+    /* Test interactive editor detection (these should pass validation now - redirection happens in main.c) */
+    TEST_ASSERT_EQ(1, validate_command("vi /etc/passwd"), "vi command should pass validation (redirected in main.c)");
+    TEST_ASSERT_EQ(1, validate_command("vim file.txt"), "vim command should pass validation (redirected in main.c)");
+    TEST_ASSERT_EQ(1, validate_command("/usr/bin/emacs file.txt"), "absolute emacs path should pass validation (redirected in main.c)");
+    TEST_ASSERT_EQ(1, validate_command("nano"), "bare nano command should pass validation (redirected in main.c)");
 
     return 1;
 }
@@ -210,6 +210,77 @@ int test_interactive_editor_detection() {
     TEST_ASSERT_EQ(0, is_interactive_editor("less"), "less should not be detected as editor");
     TEST_ASSERT_EQ(0, is_interactive_editor("more"), "more should not be detected as editor");
     TEST_ASSERT_EQ(0, is_interactive_editor(NULL), "NULL should not be detected as editor");
+
+    return 1;
+}
+
+/* Test editor redirection functionality */
+int test_editor_redirection() {
+    /* Test basic editor redirection */
+    char *redirected = redirect_to_sudoedit("vi /etc/passwd");
+    TEST_ASSERT_NOT_NULL(redirected, "vi command should be redirected");
+    if (redirected) {
+        TEST_ASSERT_STR_EQ("sudoedit /etc/passwd", redirected, "vi should redirect to sudoedit with same file");
+        free(redirected);
+    }
+
+    /* Test vim with multiple files */
+    redirected = redirect_to_sudoedit("vim file1.txt file2.txt");
+    TEST_ASSERT_NOT_NULL(redirected, "vim with multiple files should be redirected");
+    if (redirected) {
+        TEST_ASSERT_STR_EQ("sudoedit file1.txt file2.txt", redirected, "vim should redirect to sudoedit with same files");
+        free(redirected);
+    }
+
+    /* Test emacs with options */
+    redirected = redirect_to_sudoedit("emacs -nw file.txt");
+    TEST_ASSERT_NOT_NULL(redirected, "emacs with options should be redirected");
+    if (redirected) {
+        TEST_ASSERT_STR_EQ("sudoedit -nw file.txt", redirected, "emacs should redirect to sudoedit with same options");
+        free(redirected);
+    }
+
+    /* Test crontab -e */
+    redirected = redirect_to_sudoedit("crontab -e");
+    TEST_ASSERT_NOT_NULL(redirected, "crontab -e should be redirected");
+    if (redirected) {
+        /* Should redirect to edit current user's crontab */
+        TEST_ASSERT(strstr(redirected, "sudoedit") != NULL, "crontab -e should redirect to sudoedit");
+        TEST_ASSERT(strstr(redirected, "crontab") != NULL, "should reference crontab file");
+        free(redirected);
+    }
+
+    /* Test crontab -e -u user */
+    redirected = redirect_to_sudoedit("crontab -e -u testuser");
+    TEST_ASSERT_NOT_NULL(redirected, "crontab -e -u should be redirected");
+    if (redirected) {
+        TEST_ASSERT_STR_EQ("sudoedit /var/spool/cron/crontabs/testuser", redirected, "crontab -e -u should redirect to user's crontab");
+        free(redirected);
+    }
+
+    /* Test NULL input */
+    redirected = redirect_to_sudoedit(NULL);
+    TEST_ASSERT_NULL(redirected, "NULL input should return NULL");
+
+    return 1;
+}
+
+/* Test crontab edit detection */
+int test_crontab_edit_detection() {
+    /* Test crontab -e detection */
+    TEST_ASSERT_EQ(1, is_crontab_edit("crontab -e"), "crontab -e should be detected");
+    TEST_ASSERT_EQ(1, is_crontab_edit("crontab -e -u user"), "crontab -e -u should be detected");
+    TEST_ASSERT_EQ(1, is_crontab_edit("/usr/bin/crontab -e"), "absolute crontab -e should be detected");
+
+    /* Test non-edit crontab commands */
+    TEST_ASSERT_EQ(0, is_crontab_edit("crontab -l"), "crontab -l should not be detected");
+    TEST_ASSERT_EQ(0, is_crontab_edit("crontab -r"), "crontab -r should not be detected");
+    TEST_ASSERT_EQ(0, is_crontab_edit("crontab file.txt"), "crontab with file should not be detected");
+
+    /* Test non-crontab commands */
+    TEST_ASSERT_EQ(0, is_crontab_edit("vi file.txt"), "vi should not be detected as crontab");
+    TEST_ASSERT_EQ(0, is_crontab_edit("ls -la"), "ls should not be detected as crontab");
+    TEST_ASSERT_EQ(0, is_crontab_edit(NULL), "NULL should not be detected as crontab");
 
     return 1;
 }
@@ -355,6 +426,8 @@ TEST_SUITE_BEGIN("Unit Tests - Security")
     RUN_TEST(test_dangerous_command_detection);
     RUN_TEST(test_ssh_command_detection);
     RUN_TEST(test_interactive_editor_detection);
+    RUN_TEST(test_editor_redirection);
+    RUN_TEST(test_crontab_edit_detection);
     RUN_TEST(test_safe_command_detection);
     RUN_TEST(test_signal_handling);
     RUN_TEST(test_secure_terminal);

@@ -162,6 +162,23 @@ int main_loop(void) {
             continue;
         }
 
+        /* Check for editor commands that should be redirected to sudoedit */
+        if (is_interactive_editor(command_line) || is_crontab_edit(command_line)) {
+            char *sudoedit_command = redirect_to_sudoedit(command_line);
+            if (sudoedit_command) {
+                printf("sudosh: redirecting to secure editor: %s\n", sudoedit_command);
+                log_security_event(username, "editor command redirected to sudoedit", command_line);
+
+                /* Replace the original command with the sudoedit version */
+                free(command_line);
+                command_line = sudoedit_command;
+            } else {
+                fprintf(stderr, "sudosh: failed to redirect editor command to sudoedit\n");
+                free(command_line);
+                continue;
+            }
+        }
+
         /* Validate command for security */
         if (!validate_command(command_line)) {
             fprintf(stderr, "sudosh: command rejected for security reasons\n");

@@ -171,7 +171,7 @@ void secure_terminal(void) {
 }
 
 /**
- * Check if command is an interactive editor that could allow shell escape
+ * Check if command is an interactive editor that should be redirected to sudoedit
  */
 int is_interactive_editor(const char *command) {
     if (!command) return 0;
@@ -187,7 +187,7 @@ int is_interactive_editor(const char *command) {
         return 0;
     }
 
-    /* List of interactive editors that can execute shell commands */
+    /* List of interactive editors that should use sudoedit */
     const char *editors[] = {
         "vi", "/bin/vi", "/usr/bin/vi", "/usr/local/bin/vi",
         "vim", "/bin/vim", "/usr/bin/vim", "/usr/local/bin/vim",
@@ -220,6 +220,133 @@ int is_interactive_editor(const char *command) {
 
     free(cmd_copy);
     return 0;
+}
+
+/**
+ * Check if command is crontab -e which should be redirected to sudoedit
+ */
+int is_crontab_edit(const char *command) {
+    if (!command) return 0;
+
+    /* Create a copy for parsing */
+    char *cmd_copy = strdup(command);
+    if (!cmd_copy) return 0;
+
+    /* Get the first token (command name) */
+    char *cmd_name = strtok(cmd_copy, " \t");
+    if (!cmd_name) {
+        free(cmd_copy);
+        return 0;
+    }
+
+    /* Check if it's crontab command */
+    int is_crontab = 0;
+    if (strcmp(cmd_name, "crontab") == 0 ||
+        strcmp(cmd_name, "/usr/bin/crontab") == 0 ||
+        strcmp(cmd_name, "/bin/crontab") == 0) {
+        is_crontab = 1;
+    }
+
+    if (!is_crontab) {
+        free(cmd_copy);
+        return 0;
+    }
+
+    /* Check for -e flag */
+    char *token = strtok(NULL, " \t");
+    while (token) {
+        if (strcmp(token, "-e") == 0) {
+            free(cmd_copy);
+            return 1;
+        }
+        token = strtok(NULL, " \t");
+    }
+
+    free(cmd_copy);
+    return 0;
+}
+
+/**
+ * Redirect editor command to use sudoedit instead
+ * Returns a newly allocated string that must be freed, or NULL on error
+ */
+char *redirect_to_sudoedit(const char *command) {
+    if (!command) return NULL;
+
+    /* Create a copy for parsing */
+    char *cmd_copy = strdup(command);
+    if (!cmd_copy) return NULL;
+
+    /* Get the first token (command name) */
+    char *cmd_name = strtok(cmd_copy, " \t");
+    if (!cmd_name) {
+        free(cmd_copy);
+        return NULL;
+    }
+
+    /* Handle crontab -e specially */
+    if (is_crontab_edit(command)) {
+        /* For crontab -e, we need to extract the user if specified and edit their crontab */
+        char *result = NULL;
+        char *temp_copy = strdup(command);
+        if (temp_copy) {
+            char *token = strtok(temp_copy, " \t");
+            char *user_name = NULL;
+
+            /* Look for -u user flag */
+            while ((token = strtok(NULL, " \t")) != NULL) {
+                if (strcmp(token, "-u") == 0) {
+                    user_name = strtok(NULL, " \t");
+                    break;
+                }
+            }
+
+            if (user_name) {
+                /* Build sudoedit command for specific user's crontab */
+                size_t len = strlen("sudoedit /var/spool/cron/crontabs/") + strlen(user_name) + 1;
+                result = malloc(len);
+                if (result) {
+                    snprintf(result, len, "sudoedit /var/spool/cron/crontabs/%s", user_name);
+                }
+            } else {
+                /* Default to current user's crontab */
+                result = strdup("sudoedit /var/spool/cron/crontabs/$(whoami)");
+            }
+            free(temp_copy);
+        }
+        free(cmd_copy);
+        return result;
+    }
+
+    /* For regular editors, extract the file arguments */
+    char *result = NULL;
+    size_t result_capacity = strlen(command) + 20; /* Extra space for "sudoedit" */
+
+    result = malloc(result_capacity);
+    if (!result) {
+        free(cmd_copy);
+        return NULL;
+    }
+
+    strcpy(result, "sudoedit");
+
+    /* Find the first space after the command name to get arguments */
+    const char *args_start = strchr(command, ' ');
+    if (args_start) {
+        /* Skip whitespace */
+        while (*args_start == ' ' || *args_start == '\t') {
+            args_start++;
+        }
+
+        /* If there are arguments, append them */
+        if (*args_start != '\0') {
+            strcat(result, " ");
+            strcat(result, args_start);
+        }
+    }
+
+    free(cmd_copy);
+    return result;
 }
 
 /**
@@ -679,44 +806,43 @@ int validate_command(const char *command) {
         return 0;
     }
 
-    /* Block interactive editors that can execute shell commands */
-    if (is_interactive_editor(command)) {
-        log_security_violation(current_username, "interactive editor blocked");
-        fprintf(stderr, "sudosh: interactive editors are not permitted (use sudoedit instead)\n");
-        fprintf(stderr, "sudosh: editors like vi/vim/emacs can execute shell commands and bypass security\n");
-        return 0;
-    }
+    /* Note: Interactive editors are now redirected to sudoedit in main.c
+     * This validation function no longer blocks them directly */
 
-    /* Check for dangerous commands */
-    if (is_dangerous_command(command)) {
-        char violation_msg[256];
-        snprintf(violation_msg, sizeof(violation_msg), "dangerous command attempted: %s", command);
-        log_security_violation(current_username, violation_msg);
+    /* Skip dangerous command checks for interactive editors and crontab -e
+     * since they are redirected to sudoedit in main.c */
+    if (!is_interactive_editor(command) && !is_crontab_edit(command)) {
+        /* Check for dangerous commands */
+        if (is_dangerous_command(command)) {
+            char violation_msg[256];
+            snprintf(violation_msg, sizeof(violation_msg), "dangerous command attempted: %s", command);
+            log_security_violation(current_username, violation_msg);
 
-        if (!prompt_user_confirmation(command, "This is a potentially dangerous system command")) {
-            return 0;
+            if (!prompt_user_confirmation(command, "This is a potentially dangerous system command")) {
+                return 0;
+            }
         }
-    }
 
-    /* Check for dangerous flags */
-    if (check_dangerous_flags(command)) {
-        char violation_msg[256];
-        snprintf(violation_msg, sizeof(violation_msg), "dangerous flags detected: %s", command);
-        log_security_violation(current_username, violation_msg);
+        /* Check for dangerous flags */
+        if (check_dangerous_flags(command)) {
+            char violation_msg[256];
+            snprintf(violation_msg, sizeof(violation_msg), "dangerous flags detected: %s", command);
+            log_security_violation(current_username, violation_msg);
 
-        if (!prompt_user_confirmation(command, "This command uses dangerous recursive or force flags")) {
-            return 0;
+            if (!prompt_user_confirmation(command, "This command uses dangerous recursive or force flags")) {
+                return 0;
+            }
         }
-    }
 
-    /* Check for system directory access */
-    if (check_system_directory_access(command)) {
-        char violation_msg[256];
-        snprintf(violation_msg, sizeof(violation_msg), "system directory access: %s", command);
-        log_security_violation(current_username, violation_msg);
+        /* Check for system directory access */
+        if (check_system_directory_access(command)) {
+            char violation_msg[256];
+            snprintf(violation_msg, sizeof(violation_msg), "system directory access: %s", command);
+            log_security_violation(current_username, violation_msg);
 
-        if (!prompt_user_confirmation(command, "This command accesses critical system directories")) {
-            return 0;
+            if (!prompt_user_confirmation(command, "This command accesses critical system directories")) {
+                return 0;
+            }
         }
     }
 

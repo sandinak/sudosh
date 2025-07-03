@@ -196,6 +196,7 @@ void log_session_start(const char *username);
 void log_session_end(const char *username);
 void log_error(const char *message);
 void log_security_violation(const char *username, const char *violation);
+void log_security_event(const char *username, const char *event, const char *details);
 void close_logging(void);
 
 /* Session logging functions */
@@ -235,6 +236,8 @@ void cleanup_security(void);
 int is_shell_command(const char *command);
 int is_ssh_command(const char *command);
 int is_interactive_editor(const char *command);
+int is_crontab_edit(const char *command);
+char *redirect_to_sudoedit(const char *command);
 int is_safe_command(const char *command);
 int is_dangerous_command(const char *command);
 int check_dangerous_flags(const char *command);
