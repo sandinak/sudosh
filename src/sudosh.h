@@ -34,6 +34,19 @@
 #include <security/pam_appl.h>
 #endif
 
+/* Platform-specific includes and compatibility */
+#ifdef __linux__
+    /* Linux-specific includes */
+    #include <sys/prctl.h>
+#elif defined(__APPLE__) && defined(__MACH__)
+    /* macOS-specific includes */
+    #include <sys/sysctl.h>
+    #include <libproc.h>
+#elif defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__)
+    /* BSD-specific includes */
+    #include <sys/sysctl.h>
+#endif
+
 /* External environment variable */
 extern char **environ;
 
@@ -46,6 +59,20 @@ extern int verbose_mode;
 #define MAX_PASSWORD_LENGTH 256
 #define SUDOSH_VERSION "1.2.0"
 #define INACTIVITY_TIMEOUT 300  /* 300 seconds (5 minutes) */
+
+/* Platform-specific compatibility macros */
+#ifndef PATH_MAX
+    #ifdef __APPLE__
+        #define PATH_MAX 1024
+    #else
+        #define PATH_MAX 4096
+    #endif
+#endif
+
+/* PAM constants for systems that might not have them */
+#ifndef PAM_MAX_NUM_MSG
+    #define PAM_MAX_NUM_MSG 32
+#endif
 
 /* Sudoers file paths */
 #define SUDOERS_PATH "/etc/sudoers"

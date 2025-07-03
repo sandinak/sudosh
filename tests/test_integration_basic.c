@@ -28,7 +28,7 @@ int test_command_line_options() {
     TEST_ASSERT_NOT_NULL(result, "version command should execute");
     TEST_ASSERT_EQ(0, WEXITSTATUS(result->exit_code), "version should exit with code 0");
     TEST_ASSERT(strstr(result->stdout_content, "sudosh") != NULL, "version should mention sudosh");
-    TEST_ASSERT(strstr(result->stdout_content, "1.1.1") != NULL, "version should show version number");
+    TEST_ASSERT(strstr(result->stdout_content, "1.2.0") != NULL, "version should show version number");
     free_capture_result(result);
     
     /* Test invalid option */
@@ -214,8 +214,9 @@ int test_user_integration() {
     
     /* Verify user info is consistent */
     TEST_ASSERT_STR_EQ(username, user->username, "usernames should match");
-    TEST_ASSERT(user->uid >= 0, "UID should be valid");
-    TEST_ASSERT(user->gid >= 0, "GID should be valid");
+    /* Note: uid_t and gid_t are unsigned, so they're always >= 0 */
+    TEST_ASSERT(user->uid != (uid_t)-1, "UID should be valid");
+    TEST_ASSERT(user->gid != (gid_t)-1, "GID should be valid");
     TEST_ASSERT_NOT_NULL(user->home_dir, "home directory should be set");
     TEST_ASSERT_NOT_NULL(user->shell, "shell should be set");
     

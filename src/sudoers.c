@@ -320,7 +320,7 @@ static void parse_sudoers_directory(const char *dirname, struct sudoers_config *
     char *line = NULL;
     size_t len = 0;
     ssize_t read;
-    uid_t saved_euid;
+    uid_t saved_euid = geteuid();  /* Initialize to current euid */
     int escalated;
 
     if (!dirname || !config) {

@@ -51,11 +51,11 @@ int test_shell_metacharacter_injection() {
 /* Test null byte injection */
 int test_null_byte_injection() {
     char malicious_command[256];
-    
+
     /* Create command with embedded null byte */
     strcpy(malicious_command, "ls");
     malicious_command[2] = '\0';
-    strcat(malicious_command + 3, "; whoami");
+    strcpy(malicious_command + 3, "; whoami");
     
     /* Test if null byte injection is blocked */
     if (!validate_command(malicious_command)) {

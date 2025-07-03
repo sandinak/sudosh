@@ -35,8 +35,15 @@ else ifeq ($(UNAME_S),Darwin)
         LDFLAGS =
     endif
 else
-    # Other Unix systems
-    CFLAGS += -D_GNU_SOURCE
+    # Other Unix systems (including AlmaLinux, Ubuntu, etc.)
+    # Only add _GNU_SOURCE for Linux-like systems
+    ifneq ($(findstring BSD,$(UNAME_S)),)
+        # BSD systems - don't use _GNU_SOURCE
+        CFLAGS += -D_BSD_SOURCE
+    else
+        # Assume Linux-like system
+        CFLAGS += -D_GNU_SOURCE
+    endif
     ifeq ($(PAM_AVAILABLE),yes)
         LDFLAGS = -lpam
     else

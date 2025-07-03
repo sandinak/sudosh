@@ -8,7 +8,6 @@
  */
 
 #include "sudosh.h"
-#define _GNU_SOURCE  /* For getresuid on Linux */
 #include <ctype.h>
 
 /* Global target user for -u option */
@@ -869,7 +868,7 @@ int handle_builtin_command(const char *command) {
 uid_t get_real_uid(void) {
     uid_t ruid, euid;
 
-#ifdef __linux__
+#if defined(__linux__) || defined(__GLIBC__)
     uid_t suid;
     /* Get all three UIDs: real, effective, saved */
     if (getresuid(&ruid, &euid, &suid) == 0) {
@@ -879,7 +878,7 @@ uid_t get_real_uid(void) {
         }
     }
 #else
-    /* On macOS and other systems, use getuid() and geteuid() */
+    /* On macOS, BSD, and other systems, use getuid() and geteuid() */
     ruid = getuid();
     euid = geteuid();
 
