@@ -206,6 +206,7 @@ void cleanup_security(void);
 
 /* Enhanced command security functions */
 int is_shell_command(const char *command);
+int is_ssh_command(const char *command);
 int is_dangerous_command(const char *command);
 int check_dangerous_flags(const char *command);
 int check_system_directory_access(const char *command);

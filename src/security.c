@@ -171,6 +171,42 @@ void secure_terminal(void) {
 }
 
 /**
+ * Check if command is an SSH command
+ */
+int is_ssh_command(const char *command) {
+    if (!command) return 0;
+
+    /* Create a copy for parsing */
+    char *cmd_copy = strdup(command);
+    if (!cmd_copy) return 0;
+
+    /* Get the first token (command name) */
+    char *cmd_name = strtok(cmd_copy, " \t");
+    if (!cmd_name) {
+        free(cmd_copy);
+        return 0;
+    }
+
+    /* Check if it's ssh or ssh-like command */
+    if (strcmp(cmd_name, "ssh") == 0 ||
+        strcmp(cmd_name, "/usr/bin/ssh") == 0 ||
+        strcmp(cmd_name, "/bin/ssh") == 0 ||
+        strcmp(cmd_name, "/usr/local/bin/ssh") == 0) {
+        free(cmd_copy);
+        return 1;
+    }
+
+    /* Check if command starts with ssh followed by space or end */
+    if (strncmp(command, "ssh ", 4) == 0 || strcmp(command, "ssh") == 0) {
+        free(cmd_copy);
+        return 1;
+    }
+
+    free(cmd_copy);
+    return 0;
+}
+
+/**
  * Check if command is a shell or shell-like command
  */
 int is_shell_command(const char *command) {
@@ -399,6 +435,13 @@ int validate_command(const char *command) {
     if (is_shell_command(command)) {
         log_security_violation(current_username, "shell command blocked");
         fprintf(stderr, "sudosh: shell commands are not permitted\n");
+        return 0;
+    }
+
+    /* Block SSH commands */
+    if (is_ssh_command(command)) {
+        log_security_violation(current_username, "SSH command blocked");
+        fprintf(stderr, "sudosh: you should only ssh as your user, not root\n");
         return 0;
     }
 

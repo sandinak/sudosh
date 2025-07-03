@@ -115,6 +115,12 @@ int test_validate_command_security() {
     TEST_ASSERT_EQ(0, validate_command("sh -c 'ls'"), "sh with command should be blocked");
     TEST_ASSERT_EQ(0, validate_command("/bin/zsh"), "absolute shell path should be blocked");
 
+    /* Test SSH command detection (these should be blocked) */
+    TEST_ASSERT_EQ(0, validate_command("ssh user@host"), "ssh command should be blocked");
+    TEST_ASSERT_EQ(0, validate_command("ssh -p 22 user@host"), "ssh with options should be blocked");
+    TEST_ASSERT_EQ(0, validate_command("/usr/bin/ssh user@host"), "absolute ssh path should be blocked");
+    TEST_ASSERT_EQ(0, validate_command("ssh"), "bare ssh command should be blocked");
+
     return 1;
 }
 
@@ -141,6 +147,27 @@ int test_dangerous_command_detection() {
     TEST_ASSERT_EQ(1, check_system_directory_access("ls /sys"), "/sys access should be detected");
     TEST_ASSERT_EQ(0, check_system_directory_access("ls /home"), "/home access should be allowed");
     TEST_ASSERT_EQ(0, check_system_directory_access("ls /tmp"), "/tmp access should be allowed");
+
+    return 1;
+}
+
+/* Test SSH command detection functions directly */
+int test_ssh_command_detection() {
+    /* Test SSH command detection */
+    TEST_ASSERT_EQ(1, is_ssh_command("ssh"), "bare ssh should be detected");
+    TEST_ASSERT_EQ(1, is_ssh_command("ssh user@host"), "ssh with user@host should be detected");
+    TEST_ASSERT_EQ(1, is_ssh_command("ssh -p 22 user@host"), "ssh with options should be detected");
+    TEST_ASSERT_EQ(1, is_ssh_command("/usr/bin/ssh user@host"), "absolute ssh path should be detected");
+    TEST_ASSERT_EQ(1, is_ssh_command("/bin/ssh user@host"), "bin ssh path should be detected");
+    TEST_ASSERT_EQ(1, is_ssh_command("/usr/local/bin/ssh user@host"), "local bin ssh path should be detected");
+
+    /* Test non-SSH commands */
+    TEST_ASSERT_EQ(0, is_ssh_command("ls"), "ls should not be detected as ssh");
+    TEST_ASSERT_EQ(0, is_ssh_command("ps aux"), "ps aux should not be detected as ssh");
+    TEST_ASSERT_EQ(0, is_ssh_command("sshd"), "sshd should not be detected as ssh");
+    TEST_ASSERT_EQ(0, is_ssh_command("ssh-keygen"), "ssh-keygen should not be detected as ssh");
+    TEST_ASSERT_EQ(0, is_ssh_command("rsync"), "rsync should not be detected as ssh");
+    TEST_ASSERT_EQ(0, is_ssh_command(NULL), "NULL should not be detected as ssh");
 
     return 1;
 }
@@ -257,6 +284,7 @@ TEST_SUITE_BEGIN("Unit Tests - Security")
     RUN_TEST(test_set_current_username);
     RUN_TEST(test_validate_command_security);
     RUN_TEST(test_dangerous_command_detection);
+    RUN_TEST(test_ssh_command_detection);
     RUN_TEST(test_signal_handling);
     RUN_TEST(test_secure_terminal);
     RUN_TEST(test_init_security);
