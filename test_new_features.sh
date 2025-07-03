@@ -57,9 +57,40 @@ echo "1. Prompt now shows current directory: sudosh:/current/path#"
 echo "2. Session logging: sudosh -l /path/to/logfile.log"
 echo "3. Command history automatically saved to ~/.sudosh_history with timestamps"
 echo "4. Fixed process management issues"
+echo "5. Reorganized documentation under docs/ directory"
+echo "6. Added verbose mode (-v/--verbose) for detailed output"
+echo "7. Simplified version output (--version shows only version)"
+echo "8. Made command output unbuffered for immediate display"
+echo "9. Added Ctrl-D support for graceful exit"
+echo "10. Added 'history' command to view command history"
+echo "11. Added arrow key navigation through command history"
+echo "12. Added csh-style history expansion (!1, !42, etc.)"
+echo
+
+echo "=== New Command Line Options ==="
+echo "--version         Show version only"
+echo "-v, --verbose     Enable verbose output (shows NOPASSWD detection, etc.)"
+echo "-l, --log-session Log complete session to file"
+echo "-h, --help        Show help"
+echo
+
+echo "=== New Built-in Commands ==="
+echo "history           Show numbered command history"
+echo "commands          List all available commands"
+echo "cd <dir>          Change directory"
+echo "pwd               Show current directory"
+echo
+
+echo "=== New Interactive Features ==="
+echo "Ctrl-D            Exit sudosh gracefully"
+echo "Up/Down arrows    Navigate through command history"
+echo "!<number>         Execute command from history (e.g., !1, !42)"
+echo "Ctrl-A/E/B/F      Line editing (beginning/end/back/forward)"
+echo "Ctrl-K/U/D        Kill to end/kill line/delete char"
 echo
 
 echo "To test interactively, run: sudo ./bin/sudosh"
 echo "Or with session logging: sudo ./bin/sudosh -l /tmp/session.log"
-echo "Then try: help, commands, cd /tmp, pwd, and test the line editing features"
+echo "Or with verbose mode: sudo ./bin/sudosh -v"
+echo "Then try: help, history, commands, cd /tmp, pwd, !1, and arrow keys"
 echo "Check ~/.sudosh_history for command history after the session"

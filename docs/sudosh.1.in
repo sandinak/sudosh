@@ -45,6 +45,9 @@ Show available commands and usage examples.
 .B commands
 List all available commands, including built-in commands and system commands found in PATH.
 .TP
+.B history
+Show numbered command history from ~/.sudosh_history. Use with !<number> to execute previous commands.
+.TP
 .B cd \fI[directory]\fR
 Change the current working directory. If no directory is specified, changes to the user's home directory.
 .TP
@@ -52,7 +55,7 @@ Change the current working directory. If no directory is specified, changes to t
 Print the current working directory.
 .TP
 .BR exit ", " quit
-Exit the sudosh shell.
+Exit the sudosh shell. Ctrl-D also exits gracefully.
 .TP
 .I command
 Execute any other command with root privileges.
@@ -77,8 +80,10 @@ sudosh:/var/log# exit
 Start sudosh with session logging:
 .B sudosh -l /tmp/my_session.log
 
-.SH LINE EDITING
-sudosh provides basic line editing capabilities similar to readline:
+.SH LINE EDITING AND HISTORY
+sudosh provides comprehensive line editing and history capabilities:
+
+.SS Line Editing
 .TP
 .B Ctrl-A
 Move cursor to the beginning of the line.
@@ -93,7 +98,7 @@ Move cursor one character backward.
 Move cursor one character forward.
 .TP
 .B Ctrl-D
-Delete the character at the cursor position.
+Delete the character at the cursor position, or exit if line is empty.
 .TP
 .B Ctrl-K
 Delete from cursor to end of line.
@@ -103,6 +108,20 @@ Delete the entire line.
 .TP
 .B Backspace
 Delete the character before the cursor.
+
+.SS History Navigation
+.TP
+.B Up Arrow
+Navigate to previous command in history.
+.TP
+.B Down Arrow
+Navigate to next command in history.
+.TP
+.B !<number>
+Execute command number <number> from history (e.g., !1, !42).
+.TP
+.B history
+Show numbered list of all commands in history.
 
 .SH LOGGING FEATURES
 sudosh provides comprehensive logging capabilities:

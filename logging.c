@@ -11,6 +11,11 @@ static int session_logging_enabled = 0;
 static FILE *history_file = NULL;
 static int history_logging_enabled = 0;
 
+/* Global variables for history navigation */
+static char **history_buffer = NULL;
+static int history_count = 0;
+static int history_capacity = 0;
+
 /**
  * Initialize syslog for sudosh
  */
@@ -416,4 +421,204 @@ void close_command_history(void) {
         history_file = NULL;
         history_logging_enabled = 0;
     }
+}
+
+/**
+ * Load command history into memory buffer for navigation
+ */
+int load_history_buffer(void) {
+    char history_path[PATH_MAX];
+    FILE *file;
+    char line[1024];
+    struct passwd *pwd;
+
+    /* Get current user's home directory */
+    pwd = getpwuid(getuid());
+    if (!pwd || !pwd->pw_dir) {
+        return -1;
+    }
+
+    /* Build history file path */
+    snprintf(history_path, sizeof(history_path), "%s/.sudosh_history", pwd->pw_dir);
+
+    /* Open history file */
+    file = fopen(history_path, "r");
+    if (!file) {
+        /* No history file exists yet, that's okay */
+        return 0;
+    }
+
+    /* Initialize history buffer */
+    history_capacity = 100;
+    history_buffer = malloc(history_capacity * sizeof(char *));
+    if (!history_buffer) {
+        fclose(file);
+        return -1;
+    }
+
+    /* Read history entries */
+    while (fgets(line, sizeof(line), file)) {
+        /* Remove trailing newline */
+        size_t len = strlen(line);
+        if (len > 0 && line[len - 1] == '\n') {
+            line[len - 1] = '\0';
+        }
+
+        /* Skip empty lines */
+        if (strlen(line) == 0) {
+            continue;
+        }
+
+        /* Expand buffer if needed */
+        if (history_count >= history_capacity) {
+            history_capacity *= 2;
+            char **new_buffer = realloc(history_buffer, history_capacity * sizeof(char *));
+            if (!new_buffer) {
+                break;
+            }
+            history_buffer = new_buffer;
+        }
+
+        /* Extract just the command part (after timestamp) */
+        char *command_start = strchr(line, ']');
+        if (command_start && command_start[1] == ' ') {
+            command_start += 2;  /* Skip "] " */
+            history_buffer[history_count] = strdup(command_start);
+            if (history_buffer[history_count]) {
+                history_count++;
+            }
+        }
+    }
+
+    fclose(file);
+    return 0;
+}
+
+/**
+ * Free history buffer
+ */
+void free_history_buffer(void) {
+    if (history_buffer) {
+        for (int i = 0; i < history_count; i++) {
+            free(history_buffer[i]);
+        }
+        free(history_buffer);
+        history_buffer = NULL;
+        history_count = 0;
+        history_capacity = 0;
+    }
+}
+
+/**
+ * Get history entry by index (0 = oldest, history_count-1 = newest)
+ */
+char *get_history_entry(int index) {
+    if (index < 0 || index >= history_count || !history_buffer) {
+        return NULL;
+    }
+    return history_buffer[index];
+}
+
+/**
+ * Get total number of history entries
+ */
+int get_history_count(void) {
+    return history_count;
+}
+
+/**
+ * Expand history references in command (e.g., !1, !42)
+ * Returns a newly allocated string that must be freed, or NULL on error
+ */
+char *expand_history(const char *command) {
+    char *result = NULL;
+    const char *src = command;
+    size_t result_len = 0;
+    size_t result_capacity = strlen(command) * 2 + 1;  /* Start with double the input size */
+
+    if (!command) {
+        return NULL;
+    }
+
+    /* Allocate initial result buffer */
+    result = malloc(result_capacity);
+    if (!result) {
+        return NULL;
+    }
+    result[0] = '\0';
+
+    while (*src) {
+        if (*src == '!' && isdigit(*(src + 1))) {
+            /* Found history expansion */
+            src++;  /* Skip the '!' */
+
+            /* Parse the number */
+            char *endptr;
+            long hist_num = strtol(src, &endptr, 10);
+
+            if (hist_num > 0 && hist_num <= history_count) {
+                /* Valid history number (1-based) */
+                char *hist_cmd = get_history_entry(hist_num - 1);  /* Convert to 0-based */
+                if (hist_cmd) {
+                    size_t hist_len = strlen(hist_cmd);
+
+                    /* Ensure we have enough space */
+                    while (result_len + hist_len + 1 > result_capacity) {
+                        result_capacity *= 2;
+                        char *new_result = realloc(result, result_capacity);
+                        if (!new_result) {
+                            free(result);
+                            return NULL;
+                        }
+                        result = new_result;
+                    }
+
+                    /* Append the history command */
+                    strcat(result, hist_cmd);
+                    result_len += hist_len;
+                }
+            } else {
+                /* Invalid history number - append as-is */
+                char temp[32];
+                snprintf(temp, sizeof(temp), "!%ld", hist_num);
+                size_t temp_len = strlen(temp);
+
+                /* Ensure we have enough space */
+                while (result_len + temp_len + 1 > result_capacity) {
+                    result_capacity *= 2;
+                    char *new_result = realloc(result, result_capacity);
+                    if (!new_result) {
+                        free(result);
+                        return NULL;
+                    }
+                    result = new_result;
+                }
+
+                strcat(result, temp);
+                result_len += temp_len;
+            }
+
+            /* Move source pointer past the number */
+            src = endptr;
+        } else {
+            /* Regular character - copy it */
+            /* Ensure we have enough space */
+            if (result_len + 2 > result_capacity) {
+                result_capacity *= 2;
+                char *new_result = realloc(result, result_capacity);
+                if (!new_result) {
+                    free(result);
+                    return NULL;
+                }
+                result = new_result;
+            }
+
+            result[result_len] = *src;
+            result[result_len + 1] = '\0';
+            result_len++;
+            src++;
+        }
+    }
+
+    return result;
 }

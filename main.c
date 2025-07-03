@@ -1,5 +1,8 @@
 #include "sudosh.h"
 
+/* Global verbose flag */
+int verbose_mode = 0;
+
 /**
  * Main program loop - interactive shell
  */
@@ -47,7 +50,9 @@ int main_loop(void) {
         }
     } else {
         /* User has NOPASSWD privileges, skip authentication */
-        printf("sudosh: NOPASSWD privileges detected, skipping authentication\n");
+        if (verbose_mode) {
+            printf("sudosh: NOPASSWD privileges detected, skipping authentication\n");
+        }
         log_authentication(username, 1);  /* Log successful authentication */
     }
 
@@ -63,6 +68,14 @@ int main_loop(void) {
     if (init_command_history(username) != 0) {
         /* Not a fatal error, just warn */
         fprintf(stderr, "Warning: Could not initialize command history logging\n");
+    }
+
+    /* Load command history for navigation */
+    if (load_history_buffer() != 0) {
+        /* Not a fatal error, just warn */
+        if (verbose_mode) {
+            fprintf(stderr, "Warning: Could not load command history for navigation\n");
+        }
     }
 
     /* Log session start */
@@ -91,6 +104,17 @@ int main_loop(void) {
 
         /* Log the input command */
         log_session_input(command_line);
+
+        /* Expand history references (e.g., !1, !42) */
+        char *expanded_command = expand_history(command_line);
+        if (expanded_command) {
+            /* Show the expanded command if it's different */
+            if (strcmp(command_line, expanded_command) != 0) {
+                printf("Expanded: %s\n", expanded_command);
+            }
+            free(command_line);
+            command_line = expanded_command;
+        }
 
         /* Log command to history */
         log_command_history(command_line);
@@ -138,6 +162,9 @@ int main_loop(void) {
     /* Close command history logging */
     close_command_history();
 
+    /* Free history buffer */
+    free_history_buffer();
+
     /* Clean up */
     free_user_info(user);
     free(username);
@@ -160,16 +187,19 @@ int main(int argc, char *argv[]) {
             printf("sudosh - Interactive sudo shell\n\n");
             printf("Options:\n");
             printf("  -h, --help              Show this help message\n");
-            printf("  -v, --version           Show version information\n");
+            printf("      --version           Show version information\n");
+            printf("  -v, --verbose           Enable verbose output\n");
             printf("  -l, --log-session FILE  Log entire session to FILE\n\n");
             printf("sudosh provides an interactive shell with sudo privileges.\n");
             printf("All commands are authenticated and logged to syslog.\n");
             printf("Use -l to also log the complete session to a file.\n");
+            printf("Use -v for verbose output including privilege detection details.\n");
             return EXIT_SUCCESS;
-        } else if (strcmp(argv[i], "--version") == 0 || strcmp(argv[i], "-v") == 0) {
+        } else if (strcmp(argv[i], "--version") == 0) {
             printf("sudosh %s\n", SUDOSH_VERSION);
-            printf("Interactive sudo shell with command logging\n");
             return EXIT_SUCCESS;
+        } else if (strcmp(argv[i], "--verbose") == 0 || strcmp(argv[i], "-v") == 0) {
+            verbose_mode = 1;
         } else if (strcmp(argv[i], "--log-session") == 0 || strcmp(argv[i], "-l") == 0) {
             if (i + 1 >= argc) {
                 fprintf(stderr, "sudosh: option '%s' requires an argument\n", argv[i]);

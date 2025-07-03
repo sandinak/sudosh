@@ -111,6 +111,7 @@ void print_help(void) {
     printf("Available built-in commands:\n");
     printf("  help          - Show this help message\n");
     printf("  commands      - List all available commands\n");
+    printf("  history       - Show command history\n");
     printf("  cd <dir>      - Change current directory\n");
     printf("  pwd           - Print current working directory\n");
     printf("  exit, quit    - Exit sudosh\n");
@@ -264,6 +265,57 @@ void print_commands(void) {
 }
 
 /**
+ * Print command history from ~/.sudosh_history
+ */
+void print_history(void) {
+    char history_path[PATH_MAX];
+    FILE *history_file;
+    char line[1024];
+    int line_number = 1;
+    struct passwd *pwd;
+
+    /* Get current user's home directory */
+    pwd = getpwuid(getuid());
+    if (!pwd || !pwd->pw_dir) {
+        printf("Error: Unable to determine home directory\n");
+        return;
+    }
+
+    /* Build history file path */
+    snprintf(history_path, sizeof(history_path), "%s/.sudosh_history", pwd->pw_dir);
+
+    /* Open history file */
+    history_file = fopen(history_path, "r");
+    if (!history_file) {
+        printf("No command history found (file: %s)\n", history_path);
+        return;
+    }
+
+    printf("Command History:\n");
+    printf("================\n");
+
+    /* Read and display each line with line numbers */
+    while (fgets(line, sizeof(line), history_file)) {
+        /* Remove trailing newline */
+        size_t len = strlen(line);
+        if (len > 0 && line[len - 1] == '\n') {
+            line[len - 1] = '\0';
+        }
+
+        printf("%4d  %s\n", line_number++, line);
+    }
+
+    fclose(history_file);
+
+    if (line_number == 1) {
+        printf("(No commands in history)\n");
+    } else {
+        printf("\nTotal: %d commands\n", line_number - 1);
+        printf("Use !<number> to execute a command from history\n");
+    }
+}
+
+/**
  * Get current working directory for prompt
  */
 static char *get_prompt_cwd(void) {
@@ -294,6 +346,7 @@ char *read_command(void) {
     int len = 0;
     int c;
     struct termios old_termios, new_termios;
+    static int history_index = -1;  /* -1 means not navigating history */
 
     /* Get current terminal settings */
     if (tcgetattr(STDIN_FILENO, &old_termios) != 0) {
@@ -357,6 +410,7 @@ char *read_command(void) {
 
         if (c == EOF) {
             tcsetattr(STDIN_FILENO, TCSANOW, &old_termios);
+            printf("\n");  /* Move to next line for clean exit */
             return NULL;
         }
 
@@ -442,8 +496,76 @@ char *read_command(void) {
             /* Clear line and redraw prompt */
             printf("\r\033[K");
             print_prompt();
+        } else if (c == 27) {
+            /* Escape sequence - might be arrow keys */
+            int c2 = getchar();
+            if (c2 == '[') {
+                int c3 = getchar();
+                if (c3 == 'A') {
+                    /* Up arrow - previous command in history */
+                    int total_history = get_history_count();
+                    if (total_history > 0) {
+                        if (history_index == -1) {
+                            history_index = total_history - 1;
+                        } else if (history_index > 0) {
+                            history_index--;
+                        }
+
+                        char *hist_cmd = get_history_entry(history_index);
+                        if (hist_cmd) {
+                            /* Clear current line */
+                            printf("\r\033[K");
+                            print_prompt();
+
+                            /* Copy history command to buffer */
+                            strncpy(buffer, hist_cmd, sizeof(buffer) - 1);
+                            buffer[sizeof(buffer) - 1] = '\0';
+                            len = strlen(buffer);
+                            pos = len;
+
+                            /* Display the command */
+                            printf("%s", buffer);
+                            fflush(stdout);
+                        }
+                    }
+                } else if (c3 == 'B') {
+                    /* Down arrow - next command in history */
+                    int total_history = get_history_count();
+                    if (total_history > 0 && history_index != -1) {
+                        if (history_index < total_history - 1) {
+                            history_index++;
+                            char *hist_cmd = get_history_entry(history_index);
+                            if (hist_cmd) {
+                                /* Clear current line */
+                                printf("\r\033[K");
+                                print_prompt();
+
+                                /* Copy history command to buffer */
+                                strncpy(buffer, hist_cmd, sizeof(buffer) - 1);
+                                buffer[sizeof(buffer) - 1] = '\0';
+                                len = strlen(buffer);
+                                pos = len;
+
+                                /* Display the command */
+                                printf("%s", buffer);
+                                fflush(stdout);
+                            }
+                        } else {
+                            /* Past the end - clear line */
+                            history_index = -1;
+                            printf("\r\033[K");
+                            print_prompt();
+                            buffer[0] = '\0';
+                            len = 0;
+                            pos = 0;
+                        }
+                    }
+                }
+                /* Ignore other escape sequences */
+            }
         } else if (c >= 32 && c < 127) {
             /* Printable character */
+            history_index = -1;  /* Reset history navigation */
             if (len < (int)sizeof(buffer) - 1) {
                 /* Insert character at current position */
                 memmove(&buffer[pos + 1], &buffer[pos], len - pos);
@@ -506,6 +628,9 @@ int handle_builtin_command(const char *command) {
         handled = 1;
     } else if (strcmp(token, "commands") == 0) {
         print_commands();
+        handled = 1;
+    } else if (strcmp(token, "history") == 0) {
+        print_history();
         handled = 1;
     } else if (strcmp(token, "pwd") == 0) {
         char *cwd = getcwd(NULL, 0);

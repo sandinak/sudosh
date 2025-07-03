@@ -26,6 +26,9 @@
 /* External environment variable */
 extern char **environ;
 
+/* Global verbose flag */
+extern int verbose_mode;
+
 /* Configuration constants */
 #define MAX_COMMAND_LENGTH 4096
 #define MAX_USERNAME_LENGTH 256
@@ -167,6 +170,13 @@ int init_command_history(const char *username);
 void log_command_history(const char *command);
 void close_command_history(void);
 
+/* History navigation functions */
+int load_history_buffer(void);
+void free_history_buffer(void);
+char *get_history_entry(int index);
+int get_history_count(void);
+char *expand_history(const char *command);
+
 /* Security functions */
 void sanitize_environment(void);
 void setup_signal_handlers(void);
@@ -183,6 +193,7 @@ void cleanup_security(void);
 void print_banner(void);
 void print_help(void);
 void print_commands(void);
+void print_history(void);
 char *trim_whitespace(char *str);
 int is_empty_command(const char *command);
 char *read_command(void);

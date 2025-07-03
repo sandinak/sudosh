@@ -115,7 +115,11 @@ int execute_command(struct command_info *cmd, struct user_info *user) {
 
     if (pid == 0) {
         /* Child process */
-        
+
+        /* Make stdout and stderr unbuffered for immediate output */
+        setvbuf(stdout, NULL, _IONBF, 0);
+        setvbuf(stderr, NULL, _IONBF, 0);
+
         /* Set up environment */
         if (cmd->envp) {
             environ = cmd->envp;
