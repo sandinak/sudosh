@@ -152,8 +152,27 @@ Shell command blocking (bash, sh, zsh, etc.)
 .IP \(bu 4
 Dangerous command detection with user confirmation prompts
 
-.SS Gut Check Commands
-sudosh implements "gut check" warnings for potentially dangerous commands that require user confirmation before execution:
+.SS Intelligent Gut Check Commands
+sudosh implements intelligent "gut check" warnings that distinguish between safe and dangerous operations. The system now intelligently analyzes commands to reduce false positives while maintaining security:
+
+.B Safe Read-Only Operations (No Warning):
+.IP \(bu 4
+.B cat, less, more, head, tail, view, vi, vim, nano
+- File viewing and editing commands on system files
+.IP \(bu 4
+.B ls, find, locate, grep
+- File listing and searching commands
+.IP \(bu 4
+.B ps, top, htop, id, whoami, date, uptime
+- System information commands
+
+.B Dangerous Operations (Warning Required):
+.IP \(bu 4
+.B Output redirection to system directories
+- Commands like "echo text > /etc/passwd" or "cat file >> /etc/hosts"
+.IP \(bu 4
+.B Pipes to dangerous commands
+- Commands like "cat /etc/passwd | rm /etc/hosts"
 
 .B Dangerous System Commands:
 .IP \(bu 4

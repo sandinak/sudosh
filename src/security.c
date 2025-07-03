@@ -312,13 +312,123 @@ int check_dangerous_flags(const char *command) {
 }
 
 /**
- * Check if command accesses critical system directories
+ * Check if command is a safe read-only operation
+ */
+int is_safe_readonly_command(const char *command) {
+    if (!command) return 0;
+
+    /* Safe read-only commands that don't modify system state */
+    const char *safe_readonly[] = {
+        "cat", "less", "more", "head", "tail", "grep", "egrep", "fgrep",
+        "view", "vi", "vim", "nano", "emacs", "pico",
+        "ls", "ll", "dir", "find", "locate", "which", "whereis",
+        "file", "stat", "du", "df", "lsof", "ps", "top", "htop",
+        "id", "whoami", "who", "w", "last", "lastlog",
+        "date", "uptime", "uname", "hostname", "dmesg",
+        "mount", "lsblk", "lscpu", "lsmem", "lsusb", "lspci",
+        "netstat", "ss", "ip", "ifconfig", "route",
+        "awk", "sed", "sort", "uniq", "cut", "tr", "wc",
+        "diff", "cmp", "md5sum", "sha1sum", "sha256sum",
+        "strings", "hexdump", "od", "xxd",
+        "/bin/cat", "/usr/bin/cat", "/bin/less", "/usr/bin/less",
+        "/usr/bin/vi", "/usr/bin/vim", "/bin/ls", "/usr/bin/ls",
+        NULL
+    };
+
+    /* Extract the command name (first word) */
+    char *cmd_copy = strdup(command);
+    if (!cmd_copy) return 0;
+
+    char *cmd_name = strtok(cmd_copy, " \t");
+    if (!cmd_name) {
+        free(cmd_copy);
+        return 0;
+    }
+
+    /* Check against safe read-only command list */
+    for (int i = 0; safe_readonly[i]; i++) {
+        if (strcmp(cmd_name, safe_readonly[i]) == 0) {
+            free(cmd_copy);
+            return 1;
+        }
+
+        /* Also check basename for absolute paths */
+        char *basename_cmd = strrchr(safe_readonly[i], '/');
+        if (basename_cmd && strcmp(cmd_name, basename_cmd + 1) == 0) {
+            free(cmd_copy);
+            return 1;
+        }
+    }
+
+    free(cmd_copy);
+    return 0;
+}
+
+/**
+ * Check if command is potentially dangerous to system directories
+ */
+int is_dangerous_system_operation(const char *command) {
+    if (!command) return 0;
+
+    /* Commands that can modify, delete, or damage system state */
+    const char *dangerous_ops[] = {
+        "rm", "rmdir", "unlink", "shred", "wipe",
+        "mv", "cp", "dd", "rsync",
+        "chmod", "chown", "chgrp", "chattr", "setfacl",
+        "ln", "link", "symlink",
+        "mkdir", "touch", "truncate",
+        "tar", "gzip", "gunzip", "zip", "unzip",
+        "make", "gcc", "g++", "cc", "ld",
+        "dpkg", "apt", "apt-get", "yum", "dnf", "rpm", "zypper",
+        "systemctl", "service", "chkconfig", "update-rc.d",
+        "crontab", "at", "batch",
+        "useradd", "userdel", "usermod", "groupadd", "groupdel",
+        "passwd", "chpasswd", "pwconv", "pwunconv",
+        "mount", "umount", "swapon", "swapoff",
+        "fdisk", "parted", "mkfs", "fsck", "tune2fs",
+        "iptables", "ip6tables", "ufw", "firewall-cmd",
+        "/bin/rm", "/usr/bin/rm", "/bin/mv", "/usr/bin/mv",
+        "/bin/cp", "/usr/bin/cp", "/bin/chmod", "/usr/bin/chmod",
+        NULL
+    };
+
+    /* Extract the command name (first word) */
+    char *cmd_copy = strdup(command);
+    if (!cmd_copy) return 0;
+
+    char *cmd_name = strtok(cmd_copy, " \t");
+    if (!cmd_name) {
+        free(cmd_copy);
+        return 0;
+    }
+
+    /* Check against dangerous operation list */
+    for (int i = 0; dangerous_ops[i]; i++) {
+        if (strcmp(cmd_name, dangerous_ops[i]) == 0) {
+            free(cmd_copy);
+            return 1;
+        }
+
+        /* Also check basename for absolute paths */
+        char *basename_cmd = strrchr(dangerous_ops[i], '/');
+        if (basename_cmd && strcmp(cmd_name, basename_cmd + 1) == 0) {
+            free(cmd_copy);
+            return 1;
+        }
+    }
+
+    free(cmd_copy);
+    return 0;
+}
+
+/**
+ * Check if command accesses critical system directories with intelligent analysis
  */
 int check_system_directory_access(const char *command) {
     if (!command) return 0;
 
-    /* Critical system directories */
-    const char *system_dirs[] = {
+    /* Critical system directories that require extra caution */
+    const char *critical_dirs[] = {
         "/dev", "/proc", "/sys", "/boot", "/etc",
         "/bin", "/sbin", "/usr/bin", "/usr/sbin",
         "/lib", "/lib64", "/usr/lib", "/usr/lib64",
@@ -327,14 +437,44 @@ int check_system_directory_access(const char *command) {
         NULL
     };
 
-    /* Check if command references any system directories */
-    for (int i = 0; system_dirs[i]; i++) {
-        if (strstr(command, system_dirs[i])) {
-            return 1;
+    /* First check if command references any critical directories */
+    int accesses_critical_dir = 0;
+    for (int i = 0; critical_dirs[i]; i++) {
+        if (strstr(command, critical_dirs[i])) {
+            accesses_critical_dir = 1;
+            break;
         }
     }
 
-    return 0;
+    /* If no critical directory access, no warning needed */
+    if (!accesses_critical_dir) {
+        return 0;
+    }
+
+    /* Check for output redirection which is always dangerous to system directories */
+    if (strstr(command, " > ") || strstr(command, " >> ") ||
+        strstr(command, " 2> ") || strstr(command, " &> ")) {
+        return 1;
+    }
+
+    /* Check for pipe to dangerous commands */
+    if (strstr(command, "| rm") || strstr(command, "| chmod") ||
+        strstr(command, "| chown") || strstr(command, "| dd")) {
+        return 1;
+    }
+
+    /* If it's a dangerous operation on system directories, definitely warn */
+    if (is_dangerous_system_operation(command)) {
+        return 1;
+    }
+
+    /* If it's a safe read-only command without redirection, allow without warning */
+    if (is_safe_readonly_command(command)) {
+        return 0;
+    }
+
+    /* Default to warning for other system directory access */
+    return 1;
 }
 
 /**
