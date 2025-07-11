@@ -31,7 +31,7 @@ Checks if the current user has sudo privileges (member of wheel or sudo group)
 .IP 2. 4
 Prompts for password authentication via PAM
 .IP 3. 4
-Provides an interactive shell prompt: \fBsudosh:/current/directory#\fR
+Provides an interactive shell prompt with color support: \fBuser@hostname:/current/directory##\fR
 .IP 4. 4
 Logs all commands and authentication attempts to syslog
 .IP 5. 4
@@ -243,6 +243,53 @@ Log format matches sudo for compatibility with existing log analysis tools:
 .nf
 username : TTY=tty ; PWD=directory ; USER=root ; COMMAND=command
 .fi
+
+.SH COLOR SUPPORT
+sudosh automatically inherits and applies colors from the calling shell's environment to provide a familiar user experience.
+
+.SS Automatic Color Detection
+sudosh detects terminal color capabilities by examining:
+.IP \(bu 4
+.B TERM
+environment variable (e.g., xterm-256color, screen, tmux)
+.IP \(bu 4
+.B COLORTERM
+environment variable (e.g., truecolor, 24bit)
+.IP \(bu 4
+TTY status to ensure colors are only applied to interactive terminals
+
+.SS PS1 Color Inheritance
+Colors are extracted from the calling shell's PS1 environment variable:
+.IP \(bu 4
+Supports standard bash color formats: \\[\\033[...m\\]
+.IP \(bu 4
+Supports alternative formats: \\[\\e[...m\\]
+.IP \(bu 4
+Applies colors to username, hostname, and path components
+.IP \(bu 4
+Maintains color consistency with the original shell prompt
+
+.SS Environment Preservation
+Color-related environment variables are preserved during security sanitization:
+.IP \(bu 4
+PS1 (shell prompt with color codes)
+.IP \(bu 4
+TERM (terminal type)
+.IP \(bu 4
+COLORTERM (color capability indicator)
+.IP \(bu 4
+LS_COLORS (directory listing colors)
+.IP \(bu 4
+GREP_COLORS (grep output colors)
+
+.SS Graceful Fallback
+When colors are not supported or detected:
+.IP \(bu 4
+Falls back to plain text prompt
+.IP \(bu 4
+Maintains full functionality without colors
+.IP \(bu 4
+No error messages or warnings displayed
 
 .SH CONFIGURATION
 sudosh uses the system's PAM configuration. It attempts to use the "sudo" PAM service, which typically inherits from the system authentication configuration.

@@ -57,8 +57,38 @@ extern int verbose_mode;
 #define MAX_COMMAND_LENGTH 4096
 #define MAX_USERNAME_LENGTH 256
 #define MAX_PASSWORD_LENGTH 256
-#define SUDOSH_VERSION "1.3.0"
+#define SUDOSH_VERSION "1.3.1"
 #define INACTIVITY_TIMEOUT 300  /* 300 seconds (5 minutes) */
+
+/* Color support constants */
+#define MAX_COLOR_CODE_LENGTH 32
+#define MAX_PS1_LENGTH 1024
+
+/* ANSI color codes */
+#define ANSI_RESET "\033[0m"
+#define ANSI_BOLD "\033[1m"
+#define ANSI_DIM "\033[2m"
+#define ANSI_UNDERLINE "\033[4m"
+
+/* Standard colors */
+#define ANSI_BLACK "\033[30m"
+#define ANSI_RED "\033[31m"
+#define ANSI_GREEN "\033[32m"
+#define ANSI_YELLOW "\033[33m"
+#define ANSI_BLUE "\033[34m"
+#define ANSI_MAGENTA "\033[35m"
+#define ANSI_CYAN "\033[36m"
+#define ANSI_WHITE "\033[37m"
+
+/* Bright colors */
+#define ANSI_BRIGHT_BLACK "\033[90m"
+#define ANSI_BRIGHT_RED "\033[91m"
+#define ANSI_BRIGHT_GREEN "\033[92m"
+#define ANSI_BRIGHT_YELLOW "\033[93m"
+#define ANSI_BRIGHT_BLUE "\033[94m"
+#define ANSI_BRIGHT_MAGENTA "\033[95m"
+#define ANSI_BRIGHT_CYAN "\033[96m"
+#define ANSI_BRIGHT_WHITE "\033[97m"
 
 /* Platform-specific compatibility macros */
 #ifndef PATH_MAX
@@ -105,6 +135,16 @@ struct command_info {
     char **argv;
     int argc;
     char **envp;
+};
+
+/* Structure to hold color configuration */
+struct color_config {
+    char username_color[MAX_COLOR_CODE_LENGTH];
+    char hostname_color[MAX_COLOR_CODE_LENGTH];
+    char path_color[MAX_COLOR_CODE_LENGTH];
+    char prompt_color[MAX_COLOR_CODE_LENGTH];
+    char reset_color[MAX_COLOR_CODE_LENGTH];
+    int colors_enabled;
 };
 
 /* NSS source types */
@@ -263,6 +303,14 @@ char *get_current_username(void);
 struct user_info *get_real_user_info(void);
 int is_whitespace_only(const char *str);
 char *safe_strdup(const char *str);
+
+/* Color support functions */
+struct color_config *init_color_config(void);
+void free_color_config(struct color_config *config);
+int parse_ps1_colors(const char *ps1, struct color_config *config);
+int detect_terminal_colors(void);
+void preserve_color_environment(void);
+void cleanup_color_config(void);
 
 /* Tab completion functions */
 char **complete_path(const char *text, int start, int end);

@@ -79,10 +79,13 @@ void set_current_username(const char *username) {
  * Sanitize environment variables for security
  */
 void sanitize_environment(void) {
+    /* Preserve color-related environment variables before sanitization */
+    preserve_color_environment();
+
     /* List of dangerous environment variables to remove */
     const char *dangerous_vars[] = {
         "IFS",
-        "CDPATH", 
+        "CDPATH",
         "ENV",
         "BASH_ENV",
         "LD_PRELOAD",

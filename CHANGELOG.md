@@ -5,6 +5,26 @@ All notable changes to sudosh will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.1] - 2024-12-15
+
+### Added
+- **Color Support**: Automatic color inheritance from calling shell's PS1 environment
+- **Terminal Detection**: Intelligent color capability detection via TERM and COLORTERM variables
+- **PS1 Parsing**: Extracts and applies color codes from shell prompt configuration
+- **Environment Preservation**: Maintains color-related environment variables during security sanitization
+
+### Enhanced
+- **User Experience**: Colored prompts that match the user's shell configuration
+- **Compatibility**: Supports multiple PS1 color formats (\033[, \e[, direct ANSI)
+- **Graceful Fallback**: Automatically disables colors when not supported
+- **Security Integration**: Color preservation works seamlessly with existing security measures
+
+### Technical
+- **Color Configuration Structure**: New color_config structure for managing color settings
+- **Color Detection Functions**: Comprehensive terminal and color capability detection
+- **PS1 Color Parsing**: Robust parsing of various PS1 color escape sequence formats
+- **Test Coverage**: New test suite specifically for color functionality validation
+
 ## [1.3.0] - 2024-12-15
 
 ### Added

@@ -26,10 +26,19 @@ Sudosh is a comprehensive, secure interactive shell that provides elevated privi
 
 ### **User Experience**
 - **Enhanced prompt** - Shows current directory and target user context
+- **Color support** - Inherits colors from calling shell's PS1 environment
 - **Tab completion** - Path completion for commands and arguments
 - **Command history** - Persistent history with timestamps
 - **Line editing** - Full readline-style editing capabilities
 - **Session logging** - Optional complete session recording
+
+### **Color Support**
+Sudosh automatically inherits and applies colors from your shell's environment:
+- **Automatic detection** - Detects terminal color capabilities via `TERM` and `COLORTERM`
+- **PS1 parsing** - Extracts color codes from your shell's `PS1` environment variable
+- **Environment preservation** - Maintains color settings during security sanitization
+- **Graceful fallback** - Falls back to plain text when colors aren't supported
+- **Multiple formats** - Supports `\033[`, `\e[`, and direct ANSI escape sequences
 
 ## 📦 **Installation**
 

@@ -378,13 +378,39 @@ static char *get_prompt_cwd(void) {
     return cwd;
 }
 
+/* Global color configuration */
+static struct color_config *global_color_config = NULL;
+
 /**
- * Print the sudosh prompt with current working directory
+ * Initialize global color configuration
+ */
+static void init_global_color_config(void) {
+    if (global_color_config) {
+        return; /* Already initialized */
+    }
+
+    global_color_config = init_color_config();
+    if (!global_color_config) {
+        return; /* Failed to initialize */
+    }
+
+    /* Try to parse colors from PS1 environment variable */
+    const char *ps1 = getenv("PS1");
+    if (ps1) {
+        parse_ps1_colors(ps1, global_color_config);
+    }
+}
+
+/**
+ * Print the sudosh prompt with current working directory and colors
  */
 static void print_prompt(void) {
     char *cwd = get_prompt_cwd();
     char hostname[256];
     char *short_hostname;
+
+    /* Initialize color configuration if needed */
+    init_global_color_config();
 
     /* Get hostname */
     if (gethostname(hostname, sizeof(hostname)) != 0) {
@@ -397,10 +423,28 @@ static void print_prompt(void) {
         short_hostname = hostname;
     }
 
-    if (target_user) {
-        printf("%s@%s:%s## ", target_user, short_hostname, cwd);
+    /* Print colored prompt */
+    if (global_color_config && global_color_config->colors_enabled) {
+        if (target_user) {
+            printf("%s%s%s@%s%s%s:%s%s%s%s## %s",
+                   global_color_config->username_color, target_user, global_color_config->reset_color,
+                   global_color_config->hostname_color, short_hostname, global_color_config->reset_color,
+                   global_color_config->path_color, cwd, global_color_config->reset_color,
+                   global_color_config->prompt_color, global_color_config->reset_color);
+        } else {
+            printf("%s%s%s@%s%s%s:%s%s%s%s## %s",
+                   global_color_config->username_color, "root", global_color_config->reset_color,
+                   global_color_config->hostname_color, short_hostname, global_color_config->reset_color,
+                   global_color_config->path_color, cwd, global_color_config->reset_color,
+                   global_color_config->prompt_color, global_color_config->reset_color);
+        }
     } else {
-        printf("root@%s:%s## ", short_hostname, cwd);
+        /* Fallback to non-colored prompt */
+        if (target_user) {
+            printf("%s@%s:%s## ", target_user, short_hostname, cwd);
+        } else {
+            printf("root@%s:%s## ", short_hostname, cwd);
+        }
     }
 
     free(cwd);
@@ -962,6 +1006,7 @@ char *safe_strdup(const char *str) {
  * Cleanup and exit
  */
 void cleanup_and_exit(int exit_code) {
+    cleanup_color_config();
     cleanup_security();
     close_logging();
     exit(exit_code);
@@ -1148,4 +1193,212 @@ void insert_completion(char *buffer, int *pos, int *len, const char *completion,
     *pos += insert_len;
     *len += insert_len;
     buffer[*len] = '\0';
+}
+
+/**
+ * Initialize color configuration with default values
+ */
+struct color_config *init_color_config(void) {
+    struct color_config *config = malloc(sizeof(struct color_config));
+    if (!config) {
+        return NULL;
+    }
+
+    /* Initialize with default colors */
+    strncpy(config->username_color, ANSI_GREEN, MAX_COLOR_CODE_LENGTH - 1);
+    strncpy(config->hostname_color, ANSI_BLUE, MAX_COLOR_CODE_LENGTH - 1);
+    strncpy(config->path_color, ANSI_CYAN, MAX_COLOR_CODE_LENGTH - 1);
+    strncpy(config->prompt_color, ANSI_WHITE, MAX_COLOR_CODE_LENGTH - 1);
+    strncpy(config->reset_color, ANSI_RESET, MAX_COLOR_CODE_LENGTH - 1);
+
+    config->username_color[MAX_COLOR_CODE_LENGTH - 1] = '\0';
+    config->hostname_color[MAX_COLOR_CODE_LENGTH - 1] = '\0';
+    config->path_color[MAX_COLOR_CODE_LENGTH - 1] = '\0';
+    config->prompt_color[MAX_COLOR_CODE_LENGTH - 1] = '\0';
+    config->reset_color[MAX_COLOR_CODE_LENGTH - 1] = '\0';
+
+    /* Check if terminal supports colors */
+    config->colors_enabled = detect_terminal_colors();
+
+    return config;
+}
+
+/**
+ * Free color configuration
+ */
+void free_color_config(struct color_config *config) {
+    if (config) {
+        free(config);
+    }
+}
+
+/**
+ * Detect if terminal supports colors
+ */
+int detect_terminal_colors(void) {
+    const char *term = getenv("TERM");
+    const char *colorterm = getenv("COLORTERM");
+
+    /* Check if we're in a TTY */
+    if (!isatty(STDOUT_FILENO)) {
+        return 0;
+    }
+
+    /* Check COLORTERM environment variable */
+    if (colorterm && (strcmp(colorterm, "truecolor") == 0 ||
+                      strcmp(colorterm, "24bit") == 0 ||
+                      strcmp(colorterm, "yes") == 0)) {
+        return 1;
+    }
+
+    /* Check TERM environment variable */
+    if (term) {
+        /* Common color-capable terminals */
+        if (strstr(term, "color") ||
+            strstr(term, "xterm") ||
+            strstr(term, "screen") ||
+            strstr(term, "tmux") ||
+            strstr(term, "rxvt") ||
+            strcmp(term, "linux") == 0) {
+            return 1;
+        }
+    }
+
+    /* Default to no colors if we can't determine */
+    return 0;
+}
+
+/**
+ * Extract ANSI color code from PS1-style escape sequence
+ */
+static int extract_ansi_color(const char *sequence, char *output, size_t output_size) {
+    const char *start = sequence;
+    const char *end;
+    int color_len;
+
+    /* Look for \033[ or \e[ pattern */
+    if (strncmp(start, "\\033[", 5) == 0) {
+        start += 5;
+    } else if (strncmp(start, "\\e[", 3) == 0) {
+        start += 3;
+    } else if (strncmp(start, "\033[", 2) == 0) {
+        start += 2;
+    } else {
+        return 0;
+    }
+
+    /* Find the end of the color code (usually 'm') */
+    end = strchr(start, 'm');
+    if (!end) {
+        return 0;
+    }
+
+    /* Calculate the length of just the color code part */
+    color_len = end - start;
+
+    /* Check if we have enough space for the full escape sequence */
+    if (color_len + 4 >= (int)output_size) { /* \033[ + color + m + \0 */
+        return 0;
+    }
+
+    /* Build the proper ANSI escape sequence */
+    output[0] = '\033';
+    output[1] = '[';
+    memcpy(output + 2, start, color_len);
+    output[2 + color_len] = 'm';
+    output[3 + color_len] = '\0';
+
+    return 1;
+}
+
+/**
+ * Parse PS1 environment variable to extract color codes
+ */
+int parse_ps1_colors(const char *ps1, struct color_config *config) {
+    if (!ps1 || !config) {
+        return 0;
+    }
+
+    const char *ptr = ps1;
+    char temp_color[MAX_COLOR_CODE_LENGTH];
+    int found_colors = 0;
+
+    /* Look for color sequences in PS1 */
+    while ((ptr = strstr(ptr, "\\[")) != NULL) {
+        ptr += 2; /* Skip \[ */
+
+        /* Find the closing \] */
+        const char *end = strstr(ptr, "\\]");
+        if (!end) {
+            break;
+        }
+
+        /* Extract the color code */
+        if (extract_ansi_color(ptr, temp_color, sizeof(temp_color))) {
+            /* Simple heuristic: assign colors in order found */
+            if (found_colors == 0) {
+                strncpy(config->username_color, temp_color, MAX_COLOR_CODE_LENGTH - 1);
+                config->username_color[MAX_COLOR_CODE_LENGTH - 1] = '\0';
+            } else if (found_colors == 1) {
+                strncpy(config->hostname_color, temp_color, MAX_COLOR_CODE_LENGTH - 1);
+                config->hostname_color[MAX_COLOR_CODE_LENGTH - 1] = '\0';
+            } else if (found_colors == 2) {
+                strncpy(config->path_color, temp_color, MAX_COLOR_CODE_LENGTH - 1);
+                config->path_color[MAX_COLOR_CODE_LENGTH - 1] = '\0';
+            }
+            found_colors++;
+        }
+
+        ptr = end + 2; /* Move past \] */
+    }
+
+    return found_colors > 0;
+}
+
+/**
+ * Preserve color-related environment variables from the calling shell
+ */
+void preserve_color_environment(void) {
+    /* List of color-related environment variables to preserve */
+    const char *color_vars[] = {
+        "PS1",
+        "TERM",
+        "COLORTERM",
+        "LS_COLORS",
+        "GREP_COLORS",
+        "CLICOLOR",
+        "CLICOLOR_FORCE",
+        NULL
+    };
+
+    static char *preserved_vars[8] = {NULL}; /* Static storage for preserved values */
+    int i;
+
+    /* Preserve the values before environment sanitization */
+    for (i = 0; color_vars[i] && i < 7; i++) {
+        const char *value = getenv(color_vars[i]);
+        if (value && !preserved_vars[i]) {
+            /* Store the variable=value format */
+            size_t len = strlen(color_vars[i]) + strlen(value) + 2;
+            preserved_vars[i] = malloc(len);
+            if (preserved_vars[i]) {
+                snprintf(preserved_vars[i], len, "%s=%s", color_vars[i], value);
+            }
+        }
+    }
+
+    /* Restore the values after sanitization (if they were removed) */
+    for (i = 0; preserved_vars[i] && i < 7; i++) {
+        putenv(preserved_vars[i]); /* Note: putenv takes ownership of the string */
+    }
+}
+
+/**
+ * Cleanup global color configuration
+ */
+void cleanup_color_config(void) {
+    if (global_color_config) {
+        free_color_config(global_color_config);
+        global_color_config = NULL;
+    }
 }
