@@ -390,15 +390,6 @@ static void init_global_color_config(void) {
     }
 
     global_color_config = init_color_config();
-    if (!global_color_config) {
-        return; /* Failed to initialize */
-    }
-
-    /* Try to parse colors from PS1 environment variable */
-    const char *ps1 = getenv("PS1");
-    if (ps1) {
-        parse_ps1_colors(ps1, global_color_config);
-    }
 }
 
 /**
@@ -1220,6 +1211,50 @@ struct color_config *init_color_config(void) {
     /* Check if terminal supports colors */
     config->colors_enabled = detect_terminal_colors();
 
+    /* Apply environment variable overrides and shell-specific defaults */
+    int colors_found = 0;
+
+    /* Check for manual color override */
+    const char *sudosh_colors = getenv("SUDOSH_COLORS");
+    if (sudosh_colors && strcmp(sudosh_colors, "yellow") == 0) {
+        /* Use yellow for all components to match user's shell */
+        strncpy(config->username_color, ANSI_YELLOW, MAX_COLOR_CODE_LENGTH - 1);
+        strncpy(config->hostname_color, ANSI_YELLOW, MAX_COLOR_CODE_LENGTH - 1);
+        strncpy(config->path_color, ANSI_YELLOW, MAX_COLOR_CODE_LENGTH - 1);
+        strncpy(config->prompt_color, ANSI_YELLOW, MAX_COLOR_CODE_LENGTH - 1);
+        colors_found = 1;
+    }
+
+    /* Try to parse colors from PS1 environment variable (bash) */
+    if (!colors_found) {
+        const char *ps1 = getenv("PS1");
+        if (ps1) {
+            colors_found = parse_ps1_colors(ps1, config);
+        }
+    }
+
+    /* Try to parse colors from PROMPT environment variable (zsh) */
+    if (!colors_found) {
+        const char *prompt = getenv("PROMPT");
+        if (prompt) {
+            colors_found = parse_zsh_prompt_colors(prompt, config);
+        }
+    }
+
+    /* Check for shell-specific color detection */
+    if (!colors_found) {
+        const char *shell = getenv("SHELL");
+        if (shell && strstr(shell, "zsh")) {
+            /* For zsh without PROMPT set, try some common zsh color schemes */
+            /* Many zsh themes use yellow for user@host */
+            strncpy(config->username_color, ANSI_YELLOW, MAX_COLOR_CODE_LENGTH - 1);
+            strncpy(config->hostname_color, ANSI_YELLOW, MAX_COLOR_CODE_LENGTH - 1);
+            strncpy(config->path_color, ANSI_CYAN, MAX_COLOR_CODE_LENGTH - 1);
+            strncpy(config->prompt_color, ANSI_YELLOW, MAX_COLOR_CODE_LENGTH - 1);
+            colors_found = 1;
+        }
+    }
+
     return config;
 }
 
@@ -1312,6 +1347,119 @@ static int extract_ansi_color(const char *sequence, char *output, size_t output_
 }
 
 /**
+ * Convert zsh color name to ANSI escape sequence
+ */
+static int zsh_color_to_ansi(const char *color_name, char *output, size_t output_size) {
+    if (!color_name || !output || output_size < 8) {
+        return 0;
+    }
+
+    /* Map common zsh color names to ANSI codes */
+    if (strcmp(color_name, "yellow") == 0) {
+        strcpy(output, ANSI_YELLOW);
+        return 1;
+    } else if (strcmp(color_name, "green") == 0) {
+        strcpy(output, ANSI_GREEN);
+        return 1;
+    } else if (strcmp(color_name, "blue") == 0) {
+        strcpy(output, ANSI_BLUE);
+        return 1;
+    } else if (strcmp(color_name, "cyan") == 0) {
+        strcpy(output, ANSI_CYAN);
+        return 1;
+    } else if (strcmp(color_name, "red") == 0) {
+        strcpy(output, ANSI_RED);
+        return 1;
+    } else if (strcmp(color_name, "magenta") == 0) {
+        strcpy(output, ANSI_MAGENTA);
+        return 1;
+    } else if (strcmp(color_name, "white") == 0) {
+        strcpy(output, ANSI_WHITE);
+        return 1;
+    } else if (strcmp(color_name, "black") == 0) {
+        strcpy(output, ANSI_BLACK);
+        return 1;
+    }
+
+    return 0;
+}
+
+/**
+ * Parse zsh-style prompt sequences with %{ %} delimiters
+ */
+int parse_zsh_prompt_colors(const char *prompt, struct color_config *config) {
+    if (!prompt || !config) {
+        return 0;
+    }
+
+    const char *ptr = prompt;
+    char temp_color[MAX_COLOR_CODE_LENGTH];
+    int found_colors = 0;
+
+    /* Look for zsh-style color sequences */
+    while ((ptr = strstr(ptr, "%{")) != NULL) {
+        ptr += 2; /* Skip %{ */
+
+        /* Find the closing %} */
+        const char *end = strstr(ptr, "%}");
+        if (!end) {
+            break;
+        }
+
+        /* Check for %F{color} format */
+        if (strncmp(ptr, "%F{", 3) == 0) {
+            const char *color_start = ptr + 3;
+            const char *color_end = strchr(color_start, '}');
+            if (color_end && color_end < end) {
+                /* Extract color name */
+                int color_len = color_end - color_start;
+                if (color_len > 0 && color_len < 20) {
+                    char color_name[21];
+                    strncpy(color_name, color_start, color_len);
+                    color_name[color_len] = '\0';
+
+                    /* Convert to ANSI */
+                    if (zsh_color_to_ansi(color_name, temp_color, sizeof(temp_color))) {
+                        /* Simple heuristic: assign colors in order found */
+                        if (found_colors == 0) {
+                            strncpy(config->username_color, temp_color, MAX_COLOR_CODE_LENGTH - 1);
+                            config->username_color[MAX_COLOR_CODE_LENGTH - 1] = '\0';
+                        } else if (found_colors == 1) {
+                            strncpy(config->hostname_color, temp_color, MAX_COLOR_CODE_LENGTH - 1);
+                            config->hostname_color[MAX_COLOR_CODE_LENGTH - 1] = '\0';
+                        } else if (found_colors == 2) {
+                            strncpy(config->path_color, temp_color, MAX_COLOR_CODE_LENGTH - 1);
+                            config->path_color[MAX_COLOR_CODE_LENGTH - 1] = '\0';
+                        }
+                        found_colors++;
+                    }
+                }
+            }
+        } else {
+            /* Try to extract ANSI color code directly */
+            if (extract_ansi_color(ptr, temp_color, sizeof(temp_color))) {
+                /* Simple heuristic: assign colors in order found */
+                if (found_colors == 0) {
+                    strncpy(config->username_color, temp_color, MAX_COLOR_CODE_LENGTH - 1);
+                    config->username_color[MAX_COLOR_CODE_LENGTH - 1] = '\0';
+                } else if (found_colors == 1) {
+                    strncpy(config->hostname_color, temp_color, MAX_COLOR_CODE_LENGTH - 1);
+                    config->hostname_color[MAX_COLOR_CODE_LENGTH - 1] = '\0';
+                } else if (found_colors == 2) {
+                    strncpy(config->path_color, temp_color, MAX_COLOR_CODE_LENGTH - 1);
+                    config->path_color[MAX_COLOR_CODE_LENGTH - 1] = '\0';
+                }
+                found_colors++;
+            }
+        }
+
+        ptr = end + 2; /* Move past %} */
+    }
+
+    return found_colors > 0;
+}
+
+/**
  * Parse PS1 environment variable to extract color codes
  */
 int parse_ps1_colors(const char *ps1, struct color_config *config) {
@@ -1323,7 +1471,7 @@ int parse_ps1_colors(const char *ps1, struct color_config *config) {
     char temp_color[MAX_COLOR_CODE_LENGTH];
     int found_colors = 0;
 
-    /* Look for color sequences in PS1 */
+    /* Look for bash-style color sequences in PS1 */
     while ((ptr = strstr(ptr, "\\[")) != NULL) {
         ptr += 2; /* Skip \[ */
 

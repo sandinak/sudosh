@@ -335,6 +335,7 @@ char *safe_strdup(const char *str);
 struct color_config *init_color_config(void);
 void free_color_config(struct color_config *config);
 int parse_ps1_colors(const char *ps1, struct color_config *config);
+int parse_zsh_prompt_colors(const char *prompt, struct color_config *config);
 int detect_terminal_colors(void);
 void preserve_color_environment(void);
 void cleanup_color_config(void);
