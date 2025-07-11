@@ -58,7 +58,7 @@ extern int verbose_mode;
 #define MAX_COMMAND_LENGTH 4096
 #define MAX_USERNAME_LENGTH 256
 #define MAX_PASSWORD_LENGTH 256
-#define SUDOSH_VERSION "1.3.2"
+#define SUDOSH_VERSION "1.3.3"
 #define INACTIVITY_TIMEOUT 300  /* 300 seconds (5 minutes) */
 
 /* Authentication cache constants */

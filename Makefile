@@ -279,6 +279,93 @@ clean-suid: $(TARGET)
 		echo "$(TARGET) does not have suid privileges set."; \
 	fi
 
+# Package variables
+PACKAGE_NAME = sudosh
+PACKAGE_VERSION = $(shell grep SUDOSH_VERSION $(SRCDIR)/sudosh.h | cut -d'"' -f2)
+PACKAGE_MAINTAINER = Branson Matheson <branson@sandsite.org>
+PACKAGE_DESCRIPTION = Secure interactive shell with comprehensive logging and audit capabilities
+PACKAGE_HOMEPAGE = https://github.com/sandinak/sudosh
+PACKAGE_LICENSE = MIT
+
+# Package directories
+PACKAGE_DIR = packaging
+RPM_BUILD_DIR = $(PACKAGE_DIR)/rpm
+DEB_BUILD_DIR = $(PACKAGE_DIR)/deb
+DIST_DIR = dist
+
+# Create packaging directories
+$(PACKAGE_DIR):
+	mkdir -p $(PACKAGE_DIR)
+
+$(RPM_BUILD_DIR): $(PACKAGE_DIR)
+	mkdir -p $(RPM_BUILD_DIR)/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
+
+$(DEB_BUILD_DIR): $(PACKAGE_DIR)
+	mkdir -p $(DEB_BUILD_DIR)/$(PACKAGE_NAME)-$(PACKAGE_VERSION)
+
+$(DIST_DIR):
+	mkdir -p $(DIST_DIR)
+
+# Create RPM spec file
+$(RPM_BUILD_DIR)/SPECS/$(PACKAGE_NAME).spec: $(RPM_BUILD_DIR)
+	@echo "Creating RPM spec file..."
+	@sed -e 's/@VERSION@/$(PACKAGE_VERSION)/g' \
+	     -e 's/@MAINTAINER@/$(PACKAGE_MAINTAINER)/g' \
+	     -e 's/@DATE@/$(shell date +"%%a %%b %%d %%Y")/g' \
+	     packaging/$(PACKAGE_NAME).spec.in > $@
+
+# Create Debian control files
+$(DEB_BUILD_DIR)/$(PACKAGE_NAME)-$(PACKAGE_VERSION)/debian: $(DEB_BUILD_DIR)
+	@echo "Creating Debian control files..."
+	@mkdir -p $@
+	@sed -e 's/@MAINTAINER@/$(PACKAGE_MAINTAINER)/g' \
+	     packaging/debian/control.in > $@/control
+	@cp packaging/debian/rules $@/rules
+	@chmod +x $@/rules
+	@sed -e 's/@VERSION@/$(PACKAGE_VERSION)/g' \
+	     -e 's/@MAINTAINER@/$(PACKAGE_MAINTAINER)/g' \
+	     -e 's/@DATE@/$(shell date -R)/g' \
+	     packaging/debian/changelog.in > $@/changelog
+	@cp packaging/debian/compat $@/compat
+	@cp packaging/debian/postinst $@/postinst
+	@chmod +x $@/postinst
+	@cp packaging/debian/postrm $@/postrm
+	@chmod +x $@/postrm
+
+# Create source tarball for packaging
+$(PACKAGE_DIR)/$(PACKAGE_NAME)-$(PACKAGE_VERSION).tar.gz: $(PACKAGE_DIR)
+	@echo "Creating source tarball..."
+	@git archive --format=tar.gz --prefix=$(PACKAGE_NAME)-$(PACKAGE_VERSION)/ HEAD > $@
+
+# Build RPM package
+rpm: $(TARGET) sudosh.1 $(RPM_BUILD_DIR)/SPECS/$(PACKAGE_NAME).spec $(PACKAGE_DIR)/$(PACKAGE_NAME)-$(PACKAGE_VERSION).tar.gz $(DIST_DIR)
+	@echo "Building RPM package..."
+	@cp $(PACKAGE_DIR)/$(PACKAGE_NAME)-$(PACKAGE_VERSION).tar.gz $(RPM_BUILD_DIR)/SOURCES/
+	@rpmbuild --define "_topdir $(PWD)/$(RPM_BUILD_DIR)" -ba $(RPM_BUILD_DIR)/SPECS/$(PACKAGE_NAME).spec
+	@cp $(RPM_BUILD_DIR)/RPMS/*/*.rpm $(DIST_DIR)/
+	@cp $(RPM_BUILD_DIR)/SRPMS/*.rpm $(DIST_DIR)/
+	@echo "RPM packages created in $(DIST_DIR)/"
+
+# Build DEB package
+deb: $(TARGET) sudosh.1 $(DEB_BUILD_DIR)/$(PACKAGE_NAME)-$(PACKAGE_VERSION)/debian $(PACKAGE_DIR)/$(PACKAGE_NAME)-$(PACKAGE_VERSION).tar.gz $(DIST_DIR)
+	@echo "Building DEB package..."
+	@cd $(DEB_BUILD_DIR) && tar -xzf ../../$(PACKAGE_NAME)-$(PACKAGE_VERSION).tar.gz
+	@cp -r $(DEB_BUILD_DIR)/$(PACKAGE_NAME)-$(PACKAGE_VERSION)/debian $(DEB_BUILD_DIR)/$(PACKAGE_NAME)-$(PACKAGE_VERSION)/
+	@cd $(DEB_BUILD_DIR)/$(PACKAGE_NAME)-$(PACKAGE_VERSION) && dpkg-buildpackage -us -uc
+	@cp $(DEB_BUILD_DIR)/*.deb $(DIST_DIR)/ 2>/dev/null || true
+	@echo "DEB package created in $(DIST_DIR)/"
+
+# Build both packages
+packages: rpm deb
+	@echo "All packages built successfully!"
+	@echo "Available packages in $(DIST_DIR)/:"
+	@ls -la $(DIST_DIR)/
+
+# Clean packaging files
+clean-packages:
+	rm -rf $(RPM_BUILD_DIR) $(DEB_BUILD_DIR) $(DIST_DIR)
+	rm -f $(PACKAGE_DIR)/$(PACKAGE_NAME)-$(PACKAGE_VERSION).tar.gz
+
 # Show help
 help:
 	@echo "Available targets:"
@@ -297,6 +384,10 @@ help:
 	@echo "  coverage         - Build with coverage support"
 	@echo "  coverage-report  - Generate coverage report"
 	@echo "  static-analysis  - Run static code analysis"
+	@echo "  rpm              - Build RPM package for DNF-based systems"
+	@echo "  deb              - Build DEB package for APT-based systems"
+	@echo "  packages         - Build both RPM and DEB packages"
+	@echo "  clean-packages   - Remove packaging files"
 	@echo "  help             - Show this help message"
 	@echo ""
 	@echo "Enhanced Features:"
@@ -316,4 +407,4 @@ $(OBJDIR)/nss.o: $(SRCDIR)/nss.c $(SRCDIR)/sudosh.h
 $(OBJDIR)/sudoers.o: $(SRCDIR)/sudoers.c $(SRCDIR)/sudosh.h
 $(OBJDIR)/sssd.o: $(SRCDIR)/sssd.c $(SRCDIR)/sudosh.h
 
-.PHONY: all tests test unit-test integration-test test-suid clean-suid install uninstall clean rebuild debug coverage coverage-report static-analysis help
+.PHONY: all tests test unit-test integration-test test-suid clean-suid install uninstall clean rebuild debug coverage coverage-report static-analysis rpm deb packages clean-packages help

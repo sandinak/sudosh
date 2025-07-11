@@ -5,6 +5,26 @@ All notable changes to sudosh will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.3] - 2024-12-15
+
+### Added
+- **Package Generation**: Comprehensive packaging support for Linux distributions
+- **RPM Packages**: Support for DNF-based systems (RHEL, CentOS, Fedora, openSUSE)
+- **DEB Packages**: Support for APT-based systems (Ubuntu, Debian, Mint)
+- **Automated Packaging**: Integrated Makefile targets for package building
+
+### Enhanced
+- **Distribution Support**: Easy installation on major Linux distributions
+- **Package Metadata**: Proper dependencies, descriptions, and maintainer information
+- **Post-Installation**: Automatic cache directory creation with secure permissions
+- **Package Cleanup**: Proper removal of cache directories on package uninstall
+
+### Technical
+- **Template System**: Flexible packaging templates for RPM and DEB formats
+- **Build Integration**: Seamless integration with existing build system
+- **Source Tarballs**: Automated source package generation from git repository
+- **Documentation**: Comprehensive packaging guide and troubleshooting information
+
 ## [1.3.2] - 2024-12-15
 
 ### Added

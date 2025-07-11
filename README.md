@@ -59,6 +59,34 @@ make
 sudo make install
 ```
 
+### **Package Installation**
+
+#### **RPM-based Systems (RHEL, CentOS, Fedora, openSUSE)**
+```bash
+# Build RPM package
+make rpm
+
+# Install the package
+sudo rpm -ivh dist/sudosh-*.rpm
+```
+
+#### **DEB-based Systems (Ubuntu, Debian, Mint)**
+```bash
+# Build DEB package
+make deb
+
+# Install the package
+sudo dpkg -i dist/sudosh_*.deb
+sudo apt-get install -f  # Fix any dependency issues
+```
+
+#### **Build Both Package Types**
+```bash
+make packages
+```
+
+For detailed packaging instructions, see [docs/PACKAGING.md](docs/PACKAGING.md).
+
 ### **Requirements**
 - **Linux/Unix system** with PAM support
 - **GCC compiler** with C99 support
