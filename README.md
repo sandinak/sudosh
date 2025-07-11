@@ -21,6 +21,7 @@ Sudosh is a comprehensive, secure interactive shell that provides elevated privi
 - 🔒 **Shell command blocking** - Prevents bash, sh, python -c, etc.
 - ⚠️ **Dangerous command detection** - Warns about init, shutdown, rm -rf, etc.
 - 🛡️ **System directory protection** - Monitors access to /etc, /dev, /proc, etc.
+- 🔑 **Authentication caching** - Secure credential caching similar to sudo (15-minute default)
 - 📝 **Comprehensive audit trail** - All actions logged with context
 - 🔐 **Sudoers integration** - Full compatibility with existing sudo rules
 
@@ -39,6 +40,14 @@ Sudosh automatically inherits and applies colors from your shell's environment:
 - **Environment preservation** - Maintains color settings during security sanitization
 - **Graceful fallback** - Falls back to plain text when colors aren't supported
 - **Multiple formats** - Supports `\033[`, `\e[`, and direct ANSI escape sequences
+
+### **Authentication Caching**
+Sudosh implements secure authentication caching similar to sudo:
+- **Automatic caching** - Successful authentications are cached for 15 minutes (configurable)
+- **Secure storage** - Cache files stored in `/var/run/sudosh` with strict permissions (0600, root-owned)
+- **Session isolation** - Separate cache files per user and TTY for security
+- **Automatic cleanup** - Expired cache files are automatically removed
+- **Cache invalidation** - Failed authentications clear existing cache entries
 
 ## 📦 **Installation**
 

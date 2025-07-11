@@ -5,6 +5,26 @@ All notable changes to sudosh will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.2] - 2024-12-15
+
+### Added
+- **Authentication Caching**: Secure credential caching similar to sudo's behavior
+- **Cache Management**: Automatic cache file creation, validation, and cleanup
+- **Session Isolation**: Separate cache files per user and TTY for enhanced security
+- **Cache Security**: Strict file permissions (0600) and root ownership for cache files
+
+### Enhanced
+- **User Experience**: Eliminates repeated password prompts within 15-minute window
+- **Security Integration**: Cache validation with timestamp and session verification
+- **Automatic Cleanup**: Expired cache files are automatically removed
+- **Cache Invalidation**: Failed authentications clear existing cache entries
+
+### Technical
+- **Cache Directory**: Secure cache storage in `/var/run/sudosh`
+- **Cache Structure**: Comprehensive cache metadata including user, timestamp, session ID
+- **Cache Functions**: Complete API for cache creation, validation, and cleanup
+- **Test Coverage**: Comprehensive test suite for authentication caching functionality
+
 ## [1.3.1] - 2024-12-15
 
 ### Added

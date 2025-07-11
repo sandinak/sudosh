@@ -64,14 +64,17 @@ int main_loop(void) {
     int has_nopasswd = check_nopasswd_privileges_enhanced(username);
 
     if (!has_nopasswd) {
-        /* Authenticate user with password */
-        printf("We trust you have received the usual lecture from the local System\n");
-        printf("Administrator. It usually boils down to these three things:\n\n");
-        printf("    #1) Respect the privacy of others.\n");
-        printf("    #2) Think before you type.\n");
-        printf("    #3) With great power comes great responsibility.\n\n");
+        /* Check authentication cache first, then authenticate if needed */
+        if (!check_auth_cache(username)) {
+            /* Cache miss or expired, show lecture and authenticate */
+            printf("We trust you have received the usual lecture from the local System\n");
+            printf("Administrator. It usually boils down to these three things:\n\n");
+            printf("    #1) Respect the privacy of others.\n");
+            printf("    #2) Think before you type.\n");
+            printf("    #3) With great power comes great responsibility.\n\n");
+        }
 
-        if (!authenticate_user(username)) {
+        if (!authenticate_user_cached(username)) {
             fprintf(stderr, "sudosh: authentication failed\n");
             free(username);
             return EXIT_AUTH_FAILURE;
@@ -221,6 +224,9 @@ int main_loop(void) {
 
     /* Free history buffer */
     free_history_buffer();
+
+    /* Clean up authentication cache */
+    cleanup_auth_cache();
 
     /* Clean up security */
     cleanup_security();

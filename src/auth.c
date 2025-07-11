@@ -9,6 +9,9 @@
 
 #include "sudosh.h"
 
+/* Weak symbol for verbose_mode - can be overridden by main.c or test files */
+__attribute__((weak)) int verbose_mode = 0;
+
 #ifdef MOCK_AUTH
 /* Mock authentication for systems without PAM */
 static int mock_authenticate(const char *username) {
@@ -156,6 +159,324 @@ char *get_password(const char *prompt) {
     }
 
     return password;
+}
+
+/**
+ * Create authentication cache directory if it doesn't exist
+ */
+int create_auth_cache_dir(void) {
+    struct stat st;
+
+    /* Check if directory exists */
+    if (stat(AUTH_CACHE_DIR, &st) == 0) {
+        if (S_ISDIR(st.st_mode)) {
+            /* Directory exists, check permissions */
+            if ((st.st_mode & 0777) != 0700) {
+                /* Fix permissions */
+                if (chmod(AUTH_CACHE_DIR, 0700) != 0) {
+                    return 0;
+                }
+            }
+            return 1;
+        } else {
+            /* Path exists but is not a directory */
+            return 0;
+        }
+    }
+
+    /* Create directory with secure permissions */
+    if (mkdir(AUTH_CACHE_DIR, 0700) != 0) {
+        return 0;
+    }
+
+    return 1;
+}
+
+/**
+ * Get authentication cache file path for a user
+ */
+char *get_auth_cache_path(const char *username) {
+    char *cache_path;
+    char *tty;
+    char tty_safe[64];
+    int i;
+
+    if (!username) {
+        return NULL;
+    }
+
+    cache_path = malloc(MAX_CACHE_PATH_LENGTH);
+    if (!cache_path) {
+        return NULL;
+    }
+
+    /* Get TTY and make it filesystem-safe */
+    tty = ttyname(STDIN_FILENO);
+    if (tty) {
+        /* Remove /dev/ prefix and replace / with _ */
+        if (strncmp(tty, "/dev/", 5) == 0) {
+            tty += 5;
+        }
+        strncpy(tty_safe, tty, sizeof(tty_safe) - 1);
+        tty_safe[sizeof(tty_safe) - 1] = '\0';
+
+        /* Replace / with _ for filesystem safety */
+        for (i = 0; tty_safe[i]; i++) {
+            if (tty_safe[i] == '/') {
+                tty_safe[i] = '_';
+            }
+        }
+    } else {
+        strcpy(tty_safe, "unknown");
+    }
+
+    /* Create cache file path: /var/run/sudosh/auth_cache_username_tty */
+    snprintf(cache_path, MAX_CACHE_PATH_LENGTH, "%s/%s%s_%s",
+             AUTH_CACHE_DIR, AUTH_CACHE_FILE_PREFIX, username, tty_safe);
+
+    return cache_path;
+}
+
+/**
+ * Check if authentication is cached and still valid
+ */
+int check_auth_cache(const char *username) {
+    char *cache_path;
+    FILE *cache_file;
+    struct auth_cache cache_data;
+    time_t current_time;
+    struct stat st;
+
+    if (!username) {
+        return 0;
+    }
+
+    cache_path = get_auth_cache_path(username);
+    if (!cache_path) {
+        return 0;
+    }
+
+    /* Check if cache file exists and get its stats */
+    if (stat(cache_path, &st) != 0) {
+        free(cache_path);
+        return 0;
+    }
+
+    /* Check file permissions for security */
+    if ((st.st_mode & 0777) != 0600) {
+        /* Invalid permissions, remove file */
+        unlink(cache_path);
+        free(cache_path);
+        return 0;
+    }
+
+    /* Check if file is owned by root */
+    if (st.st_uid != 0) {
+        /* Invalid ownership, remove file */
+        unlink(cache_path);
+        free(cache_path);
+        return 0;
+    }
+
+    cache_file = fopen(cache_path, "rb");
+    if (!cache_file) {
+        free(cache_path);
+        return 0;
+    }
+
+    /* Read cache data */
+    if (fread(&cache_data, sizeof(cache_data), 1, cache_file) != 1) {
+        fclose(cache_file);
+        free(cache_path);
+        return 0;
+    }
+
+    fclose(cache_file);
+    free(cache_path);
+
+    /* Verify username matches */
+    if (strcmp(cache_data.username, username) != 0) {
+        return 0;
+    }
+
+    /* Check if cache has expired */
+    current_time = time(NULL);
+    if (current_time - cache_data.timestamp > AUTH_CACHE_TIMEOUT) {
+        /* Cache expired, remove it */
+        cache_path = get_auth_cache_path(username);
+        if (cache_path) {
+            unlink(cache_path);
+            free(cache_path);
+        }
+        return 0;
+    }
+
+    /* Cache is valid */
+    return 1;
+}
+
+/**
+ * Update authentication cache with current session info
+ */
+int update_auth_cache(const char *username) {
+    char *cache_path;
+    FILE *cache_file;
+    struct auth_cache cache_data;
+    char *tty;
+
+    if (!username) {
+        return 0;
+    }
+
+    /* Create cache directory if needed */
+    if (!create_auth_cache_dir()) {
+        return 0;
+    }
+
+    cache_path = get_auth_cache_path(username);
+    if (!cache_path) {
+        return 0;
+    }
+
+    /* Prepare cache data */
+    memset(&cache_data, 0, sizeof(cache_data));
+    strncpy(cache_data.username, username, sizeof(cache_data.username) - 1);
+    cache_data.timestamp = time(NULL);
+    cache_data.session_id = getsid(0);
+    cache_data.uid = getuid();
+    cache_data.gid = getgid();
+
+    /* Get TTY */
+    tty = ttyname(STDIN_FILENO);
+    if (tty) {
+        if (strncmp(tty, "/dev/", 5) == 0) {
+            tty += 5;
+        }
+        strncpy(cache_data.tty, tty, sizeof(cache_data.tty) - 1);
+    } else {
+        strcpy(cache_data.tty, "unknown");
+    }
+
+    /* Get hostname */
+    if (gethostname(cache_data.hostname, sizeof(cache_data.hostname)) != 0) {
+        strcpy(cache_data.hostname, "localhost");
+    }
+
+    /* Write cache file with secure permissions */
+    cache_file = fopen(cache_path, "wb");
+    if (!cache_file) {
+        free(cache_path);
+        return 0;
+    }
+
+    /* Set secure permissions before writing */
+    if (chmod(cache_path, 0600) != 0) {
+        fclose(cache_file);
+        unlink(cache_path);
+        free(cache_path);
+        return 0;
+    }
+
+    /* Write cache data */
+    if (fwrite(&cache_data, sizeof(cache_data), 1, cache_file) != 1) {
+        fclose(cache_file);
+        unlink(cache_path);
+        free(cache_path);
+        return 0;
+    }
+
+    fclose(cache_file);
+    free(cache_path);
+
+    return 1;
+}
+
+/**
+ * Clear authentication cache for a user
+ */
+void clear_auth_cache(const char *username) {
+    char *cache_path;
+
+    if (!username) {
+        return;
+    }
+
+    cache_path = get_auth_cache_path(username);
+    if (cache_path) {
+        unlink(cache_path);
+        free(cache_path);
+    }
+}
+
+/**
+ * Cleanup old authentication cache files
+ */
+void cleanup_auth_cache(void) {
+    DIR *cache_dir;
+    struct dirent *entry;
+    char file_path[MAX_CACHE_PATH_LENGTH];
+    struct stat st;
+    time_t current_time;
+
+    cache_dir = opendir(AUTH_CACHE_DIR);
+    if (!cache_dir) {
+        return;
+    }
+
+    current_time = time(NULL);
+
+    while ((entry = readdir(cache_dir)) != NULL) {
+        /* Skip . and .. */
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
+            continue;
+        }
+
+        /* Only process our cache files */
+        if (strncmp(entry->d_name, AUTH_CACHE_FILE_PREFIX, strlen(AUTH_CACHE_FILE_PREFIX)) != 0) {
+            continue;
+        }
+
+        snprintf(file_path, sizeof(file_path), "%s/%s", AUTH_CACHE_DIR, entry->d_name);
+
+        if (stat(file_path, &st) == 0) {
+            /* Remove files older than cache timeout */
+            if (current_time - st.st_mtime > AUTH_CACHE_TIMEOUT) {
+                unlink(file_path);
+            }
+        }
+    }
+
+    closedir(cache_dir);
+}
+
+/**
+ * Authenticate user with caching support
+ */
+int authenticate_user_cached(const char *username) {
+    /* Check for NULL username */
+    if (!username) {
+        return 0;
+    }
+
+    /* First check if authentication is cached */
+    if (check_auth_cache(username)) {
+        if (verbose_mode) {
+            printf("sudosh: using cached authentication for %s\n", username);
+        }
+        log_authentication(username, 1);
+        return 1;
+    }
+
+    /* Cache miss or expired, perform full authentication */
+    if (authenticate_user(username)) {
+        /* Authentication successful, update cache */
+        update_auth_cache(username);
+        return 1;
+    }
+
+    /* Authentication failed, clear any existing cache */
+    clear_auth_cache(username);
+    return 0;
 }
 
 /**

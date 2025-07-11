@@ -1,5 +1,8 @@
 #include "test_framework.h"
 #include "sudosh.h"
+
+/* Global verbose flag for testing */
+int verbose_mode = 0;
 #include <syslog.h>
 #include <sys/wait.h>
 #include <fcntl.h>

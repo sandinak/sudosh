@@ -136,6 +136,19 @@ All commands executed in sudosh are automatically logged to \fB~/.sudosh_history
 When the \fB-l\fR option is used, sudosh logs the complete session including all input and output to the specified file. This creates a detailed transcript of the entire session with timestamps.
 
 .SH SECURITY FEATURES
+.SS Authentication Caching
+sudosh implements secure authentication caching similar to sudo:
+.IP \(bu 4
+Successful authentications are cached for 15 minutes by default
+.IP \(bu 4
+Cache files are stored in /var/run/sudosh with strict permissions (0600, root-owned)
+.IP \(bu 4
+Separate cache files per user and TTY for security isolation
+.IP \(bu 4
+Expired cache files are automatically cleaned up
+.IP \(bu 4
+Failed authentications invalidate existing cache entries
+
 .SS Environment Sanitization
 sudosh removes dangerous environment variables such as LD_PRELOAD, CDPATH, and others that could be used for privilege escalation attacks. It sets a secure PATH and appropriate umask.
 

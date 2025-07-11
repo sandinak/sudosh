@@ -29,6 +29,7 @@
 #include <limits.h>
 #include <time.h>
 #include <sys/select.h>
+#include <dirent.h>
 
 #ifndef MOCK_AUTH
 #include <security/pam_appl.h>
@@ -57,8 +58,14 @@ extern int verbose_mode;
 #define MAX_COMMAND_LENGTH 4096
 #define MAX_USERNAME_LENGTH 256
 #define MAX_PASSWORD_LENGTH 256
-#define SUDOSH_VERSION "1.3.1"
+#define SUDOSH_VERSION "1.3.2"
 #define INACTIVITY_TIMEOUT 300  /* 300 seconds (5 minutes) */
+
+/* Authentication cache constants */
+#define AUTH_CACHE_TIMEOUT 900  /* 15 minutes (900 seconds) - same as sudo default */
+#define AUTH_CACHE_DIR "/var/run/sudosh"
+#define AUTH_CACHE_FILE_PREFIX "auth_cache_"
+#define MAX_CACHE_PATH_LENGTH 512
 
 /* Color support constants */
 #define MAX_COLOR_CODE_LENGTH 32
@@ -147,6 +154,17 @@ struct color_config {
     int colors_enabled;
 };
 
+/* Structure to hold authentication cache information */
+struct auth_cache {
+    char username[MAX_USERNAME_LENGTH];
+    time_t timestamp;
+    pid_t session_id;
+    uid_t uid;
+    gid_t gid;
+    char tty[64];
+    char hostname[256];
+};
+
 /* NSS source types */
 enum nss_source_type {
     NSS_SOURCE_FILES,
@@ -188,11 +206,20 @@ struct sudoers_config {
 
 /* Authentication functions */
 int authenticate_user(const char *username);
+int authenticate_user_cached(const char *username);
 #ifndef MOCK_AUTH
 int pam_conversation(int num_msg, const struct pam_message **msg,
                     struct pam_response **resp, void *appdata_ptr);
 #endif
 char *get_password(const char *prompt);
+
+/* Authentication cache functions */
+int check_auth_cache(const char *username);
+int update_auth_cache(const char *username);
+void clear_auth_cache(const char *username);
+void cleanup_auth_cache(void);
+char *get_auth_cache_path(const char *username);
+int create_auth_cache_dir(void);
 
 /* User management functions */
 struct user_info *get_user_info(const char *username);

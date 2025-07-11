@@ -3,6 +3,9 @@
 #include <sys/types.h>
 #include <grp.h>
 
+/* Global verbose flag for testing */
+int verbose_mode = 0;
+
 /* Global test counters */
 int test_count = 0;
 int test_passes = 0;
