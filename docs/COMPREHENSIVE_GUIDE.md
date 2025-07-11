@@ -1,10 +1,19 @@
 # Sudosh - Comprehensive Guide
 
 **Author**: Branson Matheson <branson@sandsite.org>
+**Note**: This project was primarily developed using Augment Code AI assistance
 
 ## Overview
 
 Sudosh is a secure, interactive sudo shell that provides elevated privileges with extensive logging, security protections, and audit capabilities. This comprehensive guide covers all aspects of sudosh including features, security enhancements, implementation details, and troubleshooting.
+
+## Key Features (v1.4.0)
+
+- **Authentication Caching**: Secure credential caching similar to sudo (15-minute default)
+- **Color Support**: Automatic color inheritance from calling shell's PS1 environment
+- **Package Generation**: Comprehensive packaging for RPM and DEB based systems
+- **Enhanced Security**: Multi-layered command validation and blocking
+- **Comprehensive Logging**: Detailed audit trails and session management
 
 ## Table of Contents
 

@@ -1,8 +1,9 @@
 # Sudosh - Secure Interactive Sudo Shell
 
 **Author**: Branson Matheson <branson@sandsite.org>
+**Development**: This project was primarily developed using [Augment Code](https://www.augmentcode.com) AI assistance
 
-[![Version](https://img.shields.io/badge/version-1.3.0-blue.svg)](https://github.com/sandinak/sudosh)
+[![Version](https://img.shields.io/badge/version-1.4.0-blue.svg)](https://github.com/sandinak/sudosh)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Security](https://img.shields.io/badge/security-enhanced-red.svg)](docs/ENHANCED_SECURITY_FEATURES.md)
 
@@ -12,10 +13,13 @@ Sudosh is a comprehensive, secure interactive shell that provides elevated privi
 
 ### **Core Functionality**
 - **Interactive sudo shell** with comprehensive privilege management
+- **Authentication caching** - Secure credential caching similar to sudo (15-minute default)
+- **Color support** - Automatic color inheritance from calling shell's PS1 environment
 - **Target user support** - Run commands as specific users with `-u {user}`
 - **Enhanced security** - Shell blocking, dangerous command detection, system directory protection
 - **Comprehensive logging** - All commands logged to syslog and optional session files
 - **Command history** - Full history with arrow key navigation and `!{number}` recall
+- **Package generation** - Professional RPM and DEB packages for easy distribution
 
 ### **Security Features**
 - 🔒 **Shell command blocking** - Prevents bash, sh, python -c, etc.
@@ -544,6 +548,13 @@ Sudosh is designed with security as the primary concern. If you discover a secur
 3. Provide detailed information about the vulnerability
 4. Allow time for assessment and patching
 
+## 📚 **Documentation**
+
+- **[Comprehensive Guide](docs/COMPREHENSIVE_GUIDE.md)** - Complete feature documentation and usage examples
+- **[Packaging Guide](docs/PACKAGING.md)** - Building RPM and DEB packages for distribution
+- **[Contributing Guide](CONTRIBUTING.md)** - How to contribute to the project
+- **[Changelog](CHANGELOG.md)** - Version history and release notes
+
 ## 📞 **Support**
 
 - **Issues**: [GitHub Issues](https://github.com/sandinak/sudosh/issues)
@@ -552,6 +563,7 @@ Sudosh is designed with security as the primary concern. If you discover a secur
 
 ## 🏆 **Acknowledgments**
 
+- **[Augment Code](https://www.augmentcode.com)** - Primary development assistance using AI-powered coding
 - Inspired by the original sudosh project
 - Built with security best practices from the sudo project
 - Thanks to all contributors and security researchers
