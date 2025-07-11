@@ -5,65 +5,32 @@ All notable changes to sudosh will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.3.3] - 2024-12-15
+## [1.4.0] - 2024-12-15
+
+### Major Release - Authentication Caching & Packaging Support
+
+This release introduces significant new features that enhance both user experience and distribution capabilities.
 
 ### Added
-- **Package Generation**: Comprehensive packaging support for Linux distributions
-- **RPM Packages**: Support for DNF-based systems (RHEL, CentOS, Fedora, openSUSE)
-- **DEB Packages**: Support for APT-based systems (Ubuntu, Debian, Mint)
-- **Automated Packaging**: Integrated Makefile targets for package building
-
-### Enhanced
-- **Distribution Support**: Easy installation on major Linux distributions
-- **Package Metadata**: Proper dependencies, descriptions, and maintainer information
-- **Post-Installation**: Automatic cache directory creation with secure permissions
-- **Package Cleanup**: Proper removal of cache directories on package uninstall
-
-### Technical
-- **Template System**: Flexible packaging templates for RPM and DEB formats
-- **Build Integration**: Seamless integration with existing build system
-- **Source Tarballs**: Automated source package generation from git repository
-- **Documentation**: Comprehensive packaging guide and troubleshooting information
-
-## [1.3.2] - 2024-12-15
-
-### Added
-- **Authentication Caching**: Secure credential caching similar to sudo's behavior
+- **Authentication Caching**: Secure credential caching similar to sudo (15-minute default)
+- **Color Support**: Automatic color inheritance from calling shell's PS1 environment
+- **Package Generation**: Comprehensive packaging for RPM and DEB based systems
 - **Cache Management**: Automatic cache file creation, validation, and cleanup
 - **Session Isolation**: Separate cache files per user and TTY for enhanced security
-- **Cache Security**: Strict file permissions (0600) and root ownership for cache files
 
 ### Enhanced
-- **User Experience**: Eliminates repeated password prompts within 15-minute window
-- **Security Integration**: Cache validation with timestamp and session verification
-- **Automatic Cleanup**: Expired cache files are automatically removed
-- **Cache Invalidation**: Failed authentications clear existing cache entries
+- **User Experience**: Eliminates repeated password prompts and provides colored prompts
+- **Distribution Support**: Easy installation on major Linux distributions
+- **Security Integration**: All new features work seamlessly with existing security measures
+- **Documentation**: Comprehensive guides for packaging and new features
 
 ### Technical
 - **Cache Directory**: Secure cache storage in `/var/run/sudosh`
-- **Cache Structure**: Comprehensive cache metadata including user, timestamp, session ID
-- **Cache Functions**: Complete API for cache creation, validation, and cleanup
-- **Test Coverage**: Comprehensive test suite for authentication caching functionality
+- **Template System**: Flexible packaging templates for RPM and DEB formats
+- **Color Detection**: Intelligent terminal and color capability detection
+- **Test Coverage**: Comprehensive test suites for all new functionality
 
-## [1.3.1] - 2024-12-15
-
-### Added
-- **Color Support**: Automatic color inheritance from calling shell's PS1 environment
-- **Terminal Detection**: Intelligent color capability detection via TERM and COLORTERM variables
-- **PS1 Parsing**: Extracts and applies color codes from shell prompt configuration
-- **Environment Preservation**: Maintains color-related environment variables during security sanitization
-
-### Enhanced
-- **User Experience**: Colored prompts that match the user's shell configuration
-- **Compatibility**: Supports multiple PS1 color formats (\033[, \e[, direct ANSI)
-- **Graceful Fallback**: Automatically disables colors when not supported
-- **Security Integration**: Color preservation works seamlessly with existing security measures
-
-### Technical
-- **Color Configuration Structure**: New color_config structure for managing color settings
-- **Color Detection Functions**: Comprehensive terminal and color capability detection
-- **PS1 Color Parsing**: Robust parsing of various PS1 color escape sequence formats
-- **Test Coverage**: New test suite specifically for color functionality validation
+## [1.3.0] - 2024-12-15
 
 ## [1.3.0] - 2024-12-15
 
