@@ -1,4 +1,4 @@
-.TH SUDOSH 1 "July 2025" "sudosh @VERSION@" "User Commands"
+.TH SUDOSH 1 "December 2024" "sudosh @VERSION@" "User Commands"
 .SH NAME
 sudosh \- interactive sudo shell with comprehensive logging
 .SH SYNOPSIS
@@ -6,7 +6,7 @@ sudosh \- interactive sudo shell with comprehensive logging
 [\fIOPTION\fR]...
 .br
 .B sudosh
-[\fB\-l\fR \fIFILE\fR] [\fB\-h\fR] [\fB\-v\fR]
+[\fB\-L\fR \fIFILE\fR] [\fB\-h\fR] [\fB\-v\fR] [\fB\-l\fR]
 .SH DESCRIPTION
 .B sudosh
 is an interactive sudo shell that provides a command prompt for executing privileged commands with comprehensive logging to syslog. It uses PAM (Pluggable Authentication Modules) for secure user authentication and logs all commands in the same format as sudo.
@@ -18,13 +18,52 @@ Unlike traditional sudo which executes single commands, sudosh provides an inter
 .BR \-h ", " \-\-help
 Display help message and exit.
 .TP
-.BR \-v ", " \-\-version
+.BR \-\-version
 Display version information and exit.
 .TP
-.BR \-l " \fIFILE\fR, " \-\-log\-session " \fIFILE\fR"
+.BR \-v ", " \-\-verbose
+Enable verbose output including privilege detection details.
+.TP
+.BR \-l ", " \-\-list
+List available commands from sudoers configuration with comprehensive source attribution. This option provides detailed analysis of sudo permissions similar to \fBsudo -l\fR but with enhanced source tracking. The output includes:
+.RS
+.IP \(bu 2
+\fBDefaults Configuration\fR: Shows sudo defaults that apply to the user
+.IP \(bu 2
+\fBDirect Sudoers Rules\fR: Explicit rules for the specific user with source file paths
+.IP \(bu 2
+\fBGroup-Based Privileges\fR: Shows admin groups the user belongs to
+.IP \(bu 2
+\fBSystem-Wide Group Rules\fR: Sudoers rules that apply to groups the user is in
+.IP \(bu 2
+\fBSummary\fR: Clear indication of privilege types and authorization status
+.RE
+Each permission entry includes the specific file path where the rule is defined, making it easy to identify which sudoers file to modify for specific permissions.
+.TP
+.BR \-L " \fIFILE\fR, " \-\-log\-session " \fIFILE\fR"
 Log the entire session (input and output) to the specified file. This creates a detailed log of all commands entered and their output with timestamps.
+.TP
+.BR \-u " \fIUSER\fR, " \-\-user " \fIUSER\fR"
+Run commands as the specified target user (requires sudoers permission).
 
 .SH USAGE
+.SH ENHANCED FEATURES
+.B sudosh
+version 1.5.0 introduces several enhanced features for improved security and usability:
+
+.SS Permission Analysis
+The \fB\-l\fR option provides comprehensive sudo permission analysis with detailed source attribution. Unlike standard \fBsudo -l\fR, sudosh shows exactly which file grants each permission, making it easy to troubleshoot and audit sudo configurations.
+
+.SS Source File Tracking
+All sudoers rules are tracked to their source files, providing transparency about where permissions are defined. This is particularly useful in environments with multiple sudoers files in \fI/etc/sudoers.d/\fR.
+
+.SS Enhanced Security
+Comprehensive null pointer checking and memory management improvements ensure stable operation even with complex sudoers configurations.
+
+.SS Improved Compatibility
+Better handling of different sudoers file formats and locations, including support for macOS-specific paths like \fI/private/etc/sudoers.d\fR.
+
+.SH OPERATION
 When started, sudosh performs the following steps:
 .IP 1. 4
 Checks if the current user has sudo privileges (member of wheel or sudo group)
@@ -78,7 +117,33 @@ sudosh:/var/log# exit
 .fi
 .TP
 Start sudosh with session logging:
-.B sudosh -l /tmp/my_session.log
+.B sudosh -L /tmp/my_session.log
+.TP
+List available commands showing each permission source:
+.B sudosh -l
+.nf
+Output shows detailed breakdown by permission source:
+
+Sudo privileges for user on hostname:
+=====================================
+
+Defaults Configuration:
+    env_reset, env_keep+=BLOCKSIZE, ...
+
+Direct Sudoers Rules:
+    hostname = (root) NOPASSWD: ALL  [Source: sudoers file]
+
+Group-Based Privileges:
+    Group 'admin': (ALL) ALL  [Source: group membership]
+
+System-Wide Group Rules:
+    hostname = (ALL) ALL  [Source: %admin group rule]
+
+Summary:
+✓ User has direct sudoers rules
+✓ User has privileges through group membership
+User is authorized to run sudo commands on hostname
+.fi
 
 .SH LINE EDITING AND HISTORY
 sudosh provides comprehensive line editing and history capabilities:

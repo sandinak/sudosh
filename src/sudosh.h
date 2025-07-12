@@ -60,7 +60,7 @@ extern int verbose_mode;
 #define MAX_COMMAND_LENGTH 4096
 #define MAX_USERNAME_LENGTH 256
 #define MAX_PASSWORD_LENGTH 256
-#define SUDOSH_VERSION "1.4.0"
+#define SUDOSH_VERSION "1.5.0"
 #define INACTIVITY_TIMEOUT 300  /* 300 seconds (5 minutes) */
 
 /* Authentication cache constants */
@@ -195,6 +195,7 @@ struct sudoers_userspec {
     char **commands;        /* List of commands allowed */
     int nopasswd;           /* Whether password is required */
     char *runas_user;       /* User to run as (default: root) */
+    char *source_file;      /* Source file where this rule was found */
     struct sudoers_userspec *next;
 };
 
@@ -250,6 +251,9 @@ struct user_info *get_user_info_sssd(const char *username);
 
 /* Enhanced privilege checking */
 int check_sudo_privileges_enhanced(const char *username);
+
+/* List available commands */
+void list_available_commands(const char *username);
 
 /* Command execution functions */
 int parse_command(const char *input, struct command_info *cmd);

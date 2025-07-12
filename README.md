@@ -113,6 +113,9 @@ sudo sudosh -l /var/log/sudosh-session.log
 
 # Verbose mode
 sudo sudosh -v
+
+# List available commands (similar to sudo -l)
+sudo sudosh -l
 ```
 
 ### **Command Line Options**
@@ -123,9 +126,48 @@ Options:
   -h, --help              Show help message
       --version           Show version information
   -v, --verbose           Enable verbose output
-  -l, --log-session FILE  Log entire session to FILE
+  -l, --list              List available commands showing each permission source separately
+  -L, --log-session FILE  Log entire session to FILE
   -u, --user USER         Run commands as target USER
 ```
+
+### **Permission Listing (-l option)**
+The `-l` option provides comprehensive sudo permission analysis with detailed source attribution:
+
+```bash
+# List all sudo permissions with source files
+sudo sudosh -l
+```
+
+**Example Output:**
+```
+Sudo privileges for user on hostname:
+=====================================
+
+Defaults Configuration:
+    env_reset, env_keep+=BLOCKSIZE, env_keep+="COLORFGBG COLORTERM", ...
+
+Direct Sudoers Rules:
+    ALL = (ALL) NOPASSWD: ALL  [Source: /etc/sudoers.d/username]
+    ALL = (ALL) NOPASSWD: /usr/bin/ls, /usr/bin/cat  [Source: /etc/sudoers.d/specific_commands]
+
+Group-Based Privileges:
+    Group 'admin': (ALL) ALL  [Source: group membership]
+
+System-Wide Group Rules:
+    ALL = (ALL) ALL  [Source: %admin group rule in /etc/sudoers]
+
+Summary:
+✓ User has direct sudoers rules
+✓ User has privileges through group membership
+User is authorized to run sudo commands on hostname
+```
+
+**Features:**
+- **Source Attribution**: Shows exactly which file grants each permission
+- **Permission Types**: Distinguishes between direct rules, group membership, and system-wide group rules
+- **File-Level Detail**: Displays specific sudoers file paths for troubleshooting
+- **Comprehensive Analysis**: Covers all possible sudo permission sources
 
 ### **Interactive Commands**
 ```bash
@@ -559,6 +601,46 @@ make security-tests
 - **VULNERABLE**: Attack succeeded - security issue detected ❌
 - **PASSED**: Functionality works correctly ✅
 - **FAILED**: Functionality issue detected ❌
+
+## 📋 **Changelog**
+
+### **Version 1.5.0** (Latest)
+**Enhanced Permission Analysis and Source Attribution**
+
+**New Features:**
+- **Enhanced `-l` option**: Now shows detailed permission source attribution
+  - Displays specific sudoers file names for each rule
+  - Separates direct rules, group membership, and system-wide group rules
+  - Provides comprehensive permission analysis similar to `sudo -l`
+- **Improved option consistency**: Changed log option to `-L` to match sudo conventions
+- **Source file tracking**: All sudoers rules now include their source file path
+- **Better error handling**: Enhanced null pointer checking and memory management
+
+**Improvements:**
+- Fixed segmentation faults in permission checking
+- Enhanced sudoers parsing to handle all file sources correctly
+- Improved documentation with detailed examples
+- Better man page with comprehensive option descriptions
+
+**Bug Fixes:**
+- Fixed issue where sudoers.d files weren't being parsed correctly
+- Resolved memory leaks in sudoers configuration handling
+- Fixed null pointer dereferences in group membership checking
+
+### **Version 1.4.0**
+**Target User Support and Enhanced Security**
+
+**New Features:**
+- Target user functionality with `-u` option
+- Enhanced authentication caching
+- Comprehensive security testing framework
+- Professional package generation (RPM/DEB)
+
+**Security Enhancements:**
+- Shell command blocking
+- Dangerous command detection
+- System directory protection
+- Comprehensive audit logging
 
 ## 📚 **Documentation**
 

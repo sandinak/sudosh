@@ -23,14 +23,15 @@ static struct sudoers_userspec *create_userspec(void) {
     if (!spec) {
         return NULL;
     }
-    
+
     spec->users = NULL;
     spec->hosts = NULL;
     spec->commands = NULL;
     spec->nopasswd = 0;
     spec->runas_user = strdup("root");  /* Default runas user */
+    spec->source_file = NULL;
     spec->next = NULL;
-    
+
     return spec;
 }
 
@@ -65,6 +66,7 @@ static void free_userspec(struct sudoers_userspec *spec) {
     }
     
     free(spec->runas_user);
+    free(spec->source_file);
     free(spec);
 }
 
@@ -137,7 +139,7 @@ static char **parse_list(const char *list_str) {
  * Format: user host = (runas_user) command
  * Example: %wheel ALL = (ALL) ALL
  */
-static struct sudoers_userspec *parse_sudoers_line(const char *line) {
+static struct sudoers_userspec *parse_sudoers_line(const char *line, const char *source_file) {
     char *line_copy = strdup(line);
     if (!line_copy) {
         return NULL;
@@ -244,7 +246,12 @@ static struct sudoers_userspec *parse_sudoers_line(const char *line) {
 
     /* Parse commands */
     spec->commands = parse_list(right_side);
-    
+
+    /* Set source file */
+    if (source_file) {
+        spec->source_file = strdup(source_file);
+    }
+
     free(line_copy);
     return spec;
 }
@@ -364,7 +371,7 @@ static void parse_sudoers_directory(const char *dirname, struct sudoers_config *
                 line[read - 1] = '\0';
             }
 
-            struct sudoers_userspec *spec = parse_sudoers_line(line);
+            struct sudoers_userspec *spec = parse_sudoers_line(line, filepath);
             if (spec) {
                 if (!config->userspecs) {
                     config->userspecs = spec;
@@ -415,6 +422,9 @@ struct sudoers_config *parse_sudoers_file(const char *filename) {
     config->userspecs = NULL;
     config->includedir = strdup(SUDOERS_DIR);
 
+    /* Also parse the default sudoers.d directory if it exists */
+    parse_sudoers_directory(SUDOERS_DIR, config, &last_spec);
+
     /* Temporarily escalate privileges to read sudoers file */
     escalated = escalate_for_sudoers_read(&saved_euid);
 
@@ -454,7 +464,7 @@ struct sudoers_config *parse_sudoers_file(const char *filename) {
             continue;
         }
 
-        struct sudoers_userspec *spec = parse_sudoers_line(line);
+        struct sudoers_userspec *spec = parse_sudoers_line(line, filename);
         if (spec) {
             if (!config->userspecs) {
                 config->userspecs = spec;
@@ -601,4 +611,251 @@ int check_sudoers_nopasswd(const char *username, const char *hostname, struct su
     }
 
     return 0;  /* No matching rule with NOPASSWD found */
+}
+
+/**
+ * List available commands for a user from sudoers configuration
+ * Shows each permission source separately with detailed attribution
+ */
+void list_available_commands(const char *username) {
+    struct sudoers_config *sudoers_config = NULL;
+    char hostname[256];
+    int found_any_rules = 0;
+    int found_direct_sudoers = 0;
+    int found_group_privileges = 0;
+
+    if (!username) {
+        printf("Error: No username provided\n");
+        return;
+    }
+
+    /* Get hostname */
+    if (gethostname(hostname, sizeof(hostname)) != 0) {
+        strcpy(hostname, "localhost");
+    }
+
+    printf("Sudo privileges for %s on %s:\n", username, hostname);
+    printf("=====================================\n\n");
+
+    /* First show Defaults entries using sudo -l */
+    char command[256];
+    snprintf(command, sizeof(command), "sudo -l -U %s 2>/dev/null", username);
+
+    FILE *fp = popen(command, "r");
+    if (fp) {
+        char buffer[1024];
+        int in_defaults = 0;
+        int found_defaults = 0;
+
+        while (fgets(buffer, sizeof(buffer), fp)) {
+            /* Check if we're in the Defaults section */
+            if (strstr(buffer, "Matching Defaults entries")) {
+                in_defaults = 1;
+                found_defaults = 1;
+                printf("Defaults Configuration:\n");
+                continue;
+            }
+
+            /* Stop at commands section */
+            if (strstr(buffer, "may run the following commands")) {
+                break;
+            }
+
+            /* Print Defaults entries */
+            if (in_defaults) {
+                /* Skip empty lines */
+                if (buffer[0] != '\n' && buffer[0] != '\r') {
+                    printf("    %s", buffer);
+                }
+            }
+        }
+        pclose(fp);
+
+        if (found_defaults) {
+            printf("\n");
+        }
+    }
+
+    /* Show direct sudoers rules */
+    printf("Direct Sudoers Rules:\n");
+    sudoers_config = parse_sudoers_file(NULL);
+    if (sudoers_config) {
+        struct sudoers_userspec *spec = sudoers_config->userspecs;
+        int found_direct_rules = 0;
+
+        while (spec) {
+            /* Check if this rule applies to the user */
+            if (user_matches_spec(username, spec)) {
+                found_direct_rules = 1;
+                found_direct_sudoers = 1;
+                found_any_rules = 1;
+
+                /* Print the rule with source indication */
+                printf("    ");
+
+                /* Print hosts */
+                if (spec->hosts) {
+                    for (int i = 0; spec->hosts && spec->hosts[i]; i++) {
+                        if (i > 0) printf(", ");
+                        printf("%s", spec->hosts[i]);
+                    }
+                }
+
+                printf(" = ");
+
+                /* Print runas user */
+                if (spec->runas_user) {
+                    printf("(%s) ", spec->runas_user);
+                } else {
+                    printf("(root) ");
+                }
+
+                /* Print NOPASSWD if applicable */
+                if (spec->nopasswd) {
+                    printf("NOPASSWD: ");
+                }
+
+                /* Print commands */
+                if (spec->commands) {
+                    for (int i = 0; spec->commands && spec->commands[i]; i++) {
+                        if (i > 0) printf(", ");
+                        printf("%s", spec->commands[i]);
+                    }
+                }
+
+                printf("  [Source: %s]\n", spec->source_file ? spec->source_file : "sudoers file");
+            }
+            spec = spec->next;
+        }
+
+        if (!found_direct_rules) {
+            printf("    No direct sudoers rules found for user %s\n", username);
+        }
+    } else {
+        printf("    Error: Could not parse sudoers configuration\n");
+    }
+    printf("\n");
+
+    /* Show group-based privileges */
+    printf("Group-Based Privileges:\n");
+    const char *admin_groups[] = {"wheel", "sudo", "admin", NULL};
+
+    for (int i = 0; admin_groups[i]; i++) {
+        struct group *grp = getgrnam(admin_groups[i]);
+        if (grp && grp->gr_mem) {
+            int is_member = 0;
+            for (char **member = grp->gr_mem; member && *member; member++) {
+                if (*member && strcmp(*member, username) == 0) {
+                    is_member = 1;
+                    found_group_privileges = 1;
+                    found_any_rules = 1;
+                    break;
+                }
+            }
+
+            if (is_member) {
+                printf("    Group '%s': (ALL) ALL  [Source: group membership]\n", admin_groups[i]);
+            }
+        }
+    }
+
+    if (!found_group_privileges) {
+        printf("    User %s is not a member of any admin groups (wheel, sudo, admin)\n", username);
+    }
+    printf("\n");
+
+    /* Show system-wide sudoers rules that might apply through groups */
+    printf("System-Wide Group Rules:\n");
+    if (sudoers_config) {
+        struct sudoers_userspec *spec = sudoers_config->userspecs;
+        int found_group_rules = 0;
+
+        while (spec) {
+            /* Check if this rule applies to groups the user is in */
+            if (spec->users) {
+                for (int i = 0; spec->users && spec->users[i]; i++) {
+                    if (spec->users[i] && spec->users[i][0] == '%') {
+                        /* This is a group rule */
+                        char *group_name = spec->users[i] + 1;
+                        if (group_name && *group_name) {
+                            struct group *grp = getgrnam(group_name);
+                            if (grp && grp->gr_mem) {
+                                for (char **member = grp->gr_mem; member && *member; member++) {
+                                    if (*member && strcmp(*member, username) == 0) {
+                                        found_group_rules = 1;
+                                        found_any_rules = 1;
+
+                                        printf("    ");
+
+                                        /* Print hosts */
+                                        if (spec->hosts) {
+                                            for (int j = 0; spec->hosts[j]; j++) {
+                                                if (j > 0) printf(", ");
+                                                printf("%s", spec->hosts[j]);
+                                            }
+                                        }
+
+                                        printf(" = ");
+
+                                        /* Print runas user */
+                                        if (spec->runas_user) {
+                                            printf("(%s) ", spec->runas_user);
+                                        } else {
+                                            printf("(root) ");
+                                        }
+
+                                        /* Print NOPASSWD if applicable */
+                                        if (spec->nopasswd) {
+                                            printf("NOPASSWD: ");
+                                        }
+
+                                        /* Print commands */
+                                        if (spec->commands) {
+                                            for (int j = 0; spec->commands && spec->commands[j]; j++) {
+                                                if (j > 0) printf(", ");
+                                                printf("%s", spec->commands[j]);
+                                            }
+                                        }
+
+                                        printf("  [Source: %%%s group rule in %s]\n", group_name,
+                                               spec->source_file ? spec->source_file : "sudoers file");
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            spec = spec->next;
+        }
+
+        if (!found_group_rules) {
+            printf("    No system-wide group rules apply to user %s\n", username);
+        }
+    } else {
+        printf("    Error: Could not check system-wide group rules\n");
+    }
+    printf("\n");
+
+    /* Summary */
+    if (found_any_rules) {
+        printf("Summary:\n");
+        if (found_direct_sudoers) {
+            printf("✓ User has direct sudoers rules\n");
+        }
+        if (found_group_privileges) {
+            printf("✓ User has privileges through group membership\n");
+        }
+        printf("User %s is authorized to run sudo commands on %s\n", username, hostname);
+    } else {
+        printf("Summary:\n");
+        printf("✗ User %s has no sudo privileges on %s\n", username, hostname);
+        printf("User is not in any admin groups and has no explicit sudoers rules\n");
+    }
+
+    /* Clean up */
+    if (sudoers_config) {
+        free_sudoers_config(sudoers_config);
+    }
 }

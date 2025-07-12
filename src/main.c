@@ -255,11 +255,13 @@ int main(int argc, char *argv[]) {
             printf("  -h, --help              Show this help message\n");
             printf("      --version           Show version information\n");
             printf("  -v, --verbose           Enable verbose output\n");
-            printf("  -l, --log-session FILE  Log entire session to FILE\n");
+            printf("  -l, --list              List available commands showing each permission source\n");
+            printf("  -L, --log-session FILE  Log entire session to FILE\n");
             printf("  -u, --user USER         Run commands as target USER\n\n");
             printf("sudosh provides an interactive shell with sudo privileges.\n");
             printf("All commands are authenticated and logged to syslog.\n");
-            printf("Use -l to also log the complete session to a file.\n");
+            printf("Use -l to list available commands showing each permission source separately.\n");
+            printf("Use -L to also log the complete session to a file.\n");
             printf("Use -v for verbose output including privilege detection details.\n");
             printf("Use -u to run commands as a specific target user (requires sudoers permission).\n");
             return EXIT_SUCCESS;
@@ -268,7 +270,21 @@ int main(int argc, char *argv[]) {
             return EXIT_SUCCESS;
         } else if (strcmp(argv[i], "--verbose") == 0 || strcmp(argv[i], "-v") == 0) {
             verbose_mode = 1;
-        } else if (strcmp(argv[i], "--log-session") == 0 || strcmp(argv[i], "-l") == 0) {
+        } else if (strcmp(argv[i], "--list") == 0 || strcmp(argv[i], "-l") == 0) {
+            /* List available commands and exit */
+            char *username = get_current_username();
+            if (!username) {
+                fprintf(stderr, "sudosh: unable to determine current user\n");
+                return EXIT_FAILURE;
+            }
+
+            /* Initialize logging for any security violations */
+            init_logging();
+
+            list_available_commands(username);
+            free(username);
+            return EXIT_SUCCESS;
+        } else if (strcmp(argv[i], "--log-session") == 0 || strcmp(argv[i], "-L") == 0) {
             if (i + 1 >= argc) {
                 fprintf(stderr, "sudosh: option '%s' requires an argument\n", argv[i]);
                 fprintf(stderr, "Try '%s --help' for more information.\n", argv[0]);
