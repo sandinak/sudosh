@@ -492,26 +492,73 @@ appuser@hostname:/opt/app## git pull origin main
 
 ## 🧪 **Testing**
 
-### **Run Tests**
+Sudosh includes a comprehensive test suite with extensive security testing to ensure reliability and protection against vulnerabilities.
+
+### **Run All Tests**
 ```bash
-# Run all tests
+# Run complete test suite
 make test
 
-# Run specific test categories
+# Run all security tests
 make security-tests
-./bin/test_target_user
-./bin/test_security_enhanced
 ```
 
-### **Security Testing**
+### **Security Test Categories**
 ```bash
-# Run comprehensive security assessment
-./run_security_assessment.sh
-
-# Run individual security tests
+# Command injection protection tests
 ./bin/test_security_command_injection
+
+# Privilege escalation protection tests
 ./bin/test_security_privilege_escalation
+
+# Authentication bypass protection tests
+./bin/test_security_auth_bypass
+
+# Logging evasion protection tests
+./bin/test_security_logging_evasion
+
+# Race condition protection tests
+./bin/test_security_race_conditions
+
+# Enhanced security features tests
+./bin/test_security_enhanced_fixes
+
+# Comprehensive security assessment
+./bin/test_security_comprehensive
 ```
+
+### **Unit and Integration Tests**
+```bash
+# Authentication unit tests
+./bin/test_unit_auth
+
+# Security unit tests
+./bin/test_unit_security
+
+# Utility function tests
+./bin/test_unit_utils
+
+# Integration tests
+./bin/test_integration_basic
+
+# Color functionality tests
+./bin/test_color_functionality
+
+# Shell enhancement tests
+./bin/test_shell_enhancements
+
+# Logging comprehensive tests
+./bin/test_logging_comprehensive
+
+# Authentication cache tests
+./bin/test_auth_cache
+```
+
+### **Test Results Interpretation**
+- **SECURE**: Attack was blocked - system is protected ✅
+- **VULNERABLE**: Attack succeeded - security issue detected ❌
+- **PASSED**: Functionality works correctly ✅
+- **FAILED**: Functionality issue detected ❌
 
 ## 📚 **Documentation**
 
@@ -519,7 +566,10 @@ Comprehensive documentation is available in the `docs/` directory:
 
 - **[Enhanced Security Features](docs/ENHANCED_SECURITY_FEATURES.md)** - Detailed security protections
 - **[Target User Functionality](docs/TARGET_USER_FUNCTIONALITY.md)** - Multi-user capabilities
-- **[Security Testing](docs/SECURITY_TESTING_SUMMARY.md)** - Security validation framework
+- **[Security Testing Summary](docs/SECURITY_TESTING_SUMMARY.md)** - Security validation framework
+- **[Testing Guide](docs/TESTING_GUIDE.md)** - Comprehensive testing documentation
+- **[Comprehensive Guide](docs/COMPREHENSIVE_GUIDE.md)** - Complete feature documentation
+- **[Packaging Guide](docs/PACKAGING.md)** - Package creation and distribution
 
 ## 🤝 **Contributing**
 
@@ -548,12 +598,7 @@ Sudosh is designed with security as the primary concern. If you discover a secur
 3. Provide detailed information about the vulnerability
 4. Allow time for assessment and patching
 
-## 📚 **Documentation**
 
-- **[Comprehensive Guide](docs/COMPREHENSIVE_GUIDE.md)** - Complete feature documentation and usage examples
-- **[Packaging Guide](docs/PACKAGING.md)** - Building RPM and DEB packages for distribution
-- **[Contributing Guide](CONTRIBUTING.md)** - How to contribute to the project
-- **[Changelog](CHANGELOG.md)** - Version history and release notes
 
 ## 📞 **Support**
 
