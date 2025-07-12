@@ -147,6 +147,16 @@ int execute_command(struct command_info *cmd, struct user_info *user) {
         setvbuf(stdout, NULL, _IONBF, 0);
         setvbuf(stderr, NULL, _IONBF, 0);
 
+        /* Close all file descriptors except stdin, stdout, stderr for security */
+        int max_fd = sysconf(_SC_OPEN_MAX);
+        if (max_fd == -1) {
+            max_fd = 1024; /* fallback value */
+        }
+
+        for (int fd = 3; fd < max_fd; fd++) {
+            close(fd);
+        }
+
         /* Set up environment */
         if (cmd->envp) {
             environ = cmd->envp;
@@ -269,11 +279,8 @@ char *find_command_in_path(const char *command) {
         return NULL;
     }
 
-    /* Get PATH environment variable */
-    path_env = getenv("PATH");
-    if (!path_env) {
-        path_env = "/usr/local/bin:/usr/bin:/bin";
-    }
+    /* Use secure hardcoded PATH to prevent hijacking attacks */
+    path_env = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin";
 
     path_copy = strdup(path_env);
     if (!path_copy) {

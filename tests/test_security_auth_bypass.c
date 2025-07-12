@@ -86,28 +86,43 @@ int test_session_hijacking() {
 
 /* Test credential stuffing */
 int test_credential_stuffing() {
-    /* Test common credential combinations */
-    const char *common_creds[][2] = {
-        {"admin", "admin"},
-        {"root", "root"},
-        {"admin", "password"},
-        {"admin", "123456"},
-        {"root", "toor"},
-        {"user", "user"},
-        {NULL, NULL}
+    /* Test if sudosh properly rejects authentication attempts with malicious usernames */
+    const char *malicious_users[] = {
+        "",                   /* Empty username */
+        "user;rm -rf /",     /* Semicolon injection */
+        "user`whoami`",      /* Backtick injection */
+        "user$(id)",         /* Command substitution */
+        "user/../root",      /* Path traversal */
+        "user|cat",          /* Pipe injection */
+        "user&whoami",       /* Background command */
+        "user>file",         /* Redirection */
+        "user<file",         /* Input redirection */
+        "user*",             /* Wildcard */
+        "user?",             /* Wildcard */
+        "user~",             /* Tilde expansion */
+        "user{a,b}",         /* Brace expansion */
+        "user[abc]",         /* Character class */
+        "user\\escape",      /* Backslash escape */
+        "user'quote'",       /* Single quote */
+        "user\"quote\"",     /* Double quote */
+        "user\x00null",      /* Null byte */
+        "user\nnewline",     /* Newline */
+        "user\ttab",         /* Tab */
+        "root",              /* Suspicious username */
+        "admin",             /* Suspicious username */
+        "administrator",     /* Suspicious username */
+        "test",              /* Suspicious username */
+        NULL
     };
-    
-    for (int i = 0; common_creds[i][0]; i++) {
-        /* In a real test, we'd attempt authentication */
-        /* For now, just check if these users exist in the system */
-        struct passwd *pwd = getpwnam(common_creds[i][0]);
-        if (pwd && pwd->pw_uid == 0) {
-            /* Found a root user with common name */
-            return 1; /* Potentially vulnerable */
+
+    for (int i = 0; malicious_users[i]; i++) {
+        if (authenticate_user(malicious_users[i])) {
+            /* Authentication succeeded for malicious username - vulnerable */
+            return 1;
         }
     }
-    
-    return 0; /* Secure */
+
+    return 0; /* Secure - all malicious authentications were rejected */
 }
 
 /* Test privilege escalation via authentication */

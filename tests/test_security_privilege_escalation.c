@@ -175,29 +175,40 @@ int test_privilege_dropping() {
 
 /* Test file descriptor manipulation */
 int test_file_descriptor_manipulation() {
-    /* Test if sudosh properly handles file descriptors */
-    
-    /* Open a file descriptor to a sensitive file */
-    int fd = open("/etc/passwd", O_RDONLY);
-    if (fd == -1) return 0; /* Can't open file, test inconclusive */
-    
-    /* Test if file descriptor is properly closed/secured */
-    struct command_info cmd;
-    if (parse_command("ls", &cmd) == 0) {
-        /* Check if the file descriptor is still accessible */
-        char buffer[1024];
-        ssize_t bytes_read = read(fd, buffer, sizeof(buffer) - 1);
-        
-        close(fd);
-        free_command_info(&cmd);
-        
-        if (bytes_read > 0) {
-            return 1; /* Vulnerable - file descriptor accessible */
-        }
+    /* Test if sudosh properly secures file descriptors */
+
+    /* Open some file descriptors */
+    int fd1 = open("/dev/null", O_RDONLY);
+    int fd2 = open("/dev/null", O_WRONLY);
+
+    if (fd1 < 0 || fd2 < 0) {
+        if (fd1 >= 0) close(fd1);
+        if (fd2 >= 0) close(fd2);
+        return 0; /* Can't test */
     }
-    
-    close(fd);
-    return 0; /* Secure */
+
+    /* Call secure_terminal to test file descriptor cleanup */
+    secure_terminal();
+
+    /* Check if file descriptors were closed */
+    int fd1_closed = (fcntl(fd1, F_GETFD) == -1 && errno == EBADF);
+    int fd2_closed = (fcntl(fd2, F_GETFD) == -1 && errno == EBADF);
+
+    /* Ensure stdin, stdout, stderr are still open */
+    int stdin_open = (fcntl(STDIN_FILENO, F_GETFD) != -1);
+    int stdout_open = (fcntl(STDOUT_FILENO, F_GETFD) != -1);
+    int stderr_open = (fcntl(STDERR_FILENO, F_GETFD) != -1);
+
+    /* Clean up any remaining descriptors */
+    if (!fd1_closed) close(fd1);
+    if (!fd2_closed) close(fd2);
+
+    /* Return 0 if secure (FDs closed), 1 if vulnerable (FDs still open) */
+    if (fd1_closed && fd2_closed && stdin_open && stdout_open && stderr_open) {
+        return 0; /* Secure */
+    } else {
+        return 1; /* Vulnerable */
+    }
 }
 
 /* Test umask manipulation */

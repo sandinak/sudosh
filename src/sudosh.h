@@ -30,6 +30,8 @@
 #include <time.h>
 #include <sys/select.h>
 #include <dirent.h>
+#include <sys/file.h>
+#include <fcntl.h>
 
 #ifndef MOCK_AUTH
 #include <security/pam_appl.h>
@@ -292,6 +294,7 @@ void drop_privileges(void);
 int check_privileges(void);
 void secure_terminal(void);
 int validate_command(const char *command);
+int validate_command_with_length(const char *command, size_t buffer_len);
 void init_security(void);
 int is_interrupted(void);
 int received_sigint_signal(void);

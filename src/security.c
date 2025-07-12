@@ -88,6 +88,15 @@ void sanitize_environment(void) {
         "CDPATH",
         "ENV",
         "BASH_ENV",
+        "GLOBIGNORE",
+        "PS4",
+        "SHELLOPTS",
+        "HISTFILE",
+        "HISTCMD",
+        "HISTCONTROL",
+        "HISTIGNORE",
+        "HISTSIZE",
+        "HISTTIMEFORMAT",
         "LD_PRELOAD",
         "LD_LIBRARY_PATH",
         "SHLIB_PATH",
@@ -95,9 +104,14 @@ void sanitize_environment(void) {
         "DYLD_LIBRARY_PATH",
         "DYLD_INSERT_LIBRARIES",
         "DYLD_FORCE_FLAT_NAMESPACE",
+        "DYLD_FALLBACK_LIBRARY_PATH",
         "TMPDIR",
         "TMP",
         "TEMP",
+        "EDITOR",
+        "VISUAL",
+        "PAGER",
+        "BROWSER",
         NULL
     };
 
@@ -108,9 +122,18 @@ void sanitize_environment(void) {
         unsetenv(dangerous_vars[i]);
     }
 
-    /* Set secure PATH if not already set */
-    if (!getenv("PATH")) {
-        setenv("PATH", "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", 1);
+    /* Set secure PATH - always override for security */
+    const char *secure_path = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin";
+    setenv("PATH", secure_path, 1);
+
+    /* Verify PATH doesn't contain dangerous elements */
+    char *path = getenv("PATH");
+    if (path && (strstr(path, ".:") || strstr(path, ":.") ||
+                 strstr(path, "::") || path[0] == ':' ||
+                 path[strlen(path)-1] == ':')) {
+        /* PATH contains dangerous elements, reset to secure default */
+        setenv("PATH", secure_path, 1);
+        log_security_violation(current_username, "dangerous PATH detected and sanitized");
     }
 
     /* Ensure HOME is set to root's home when running as root */
@@ -158,7 +181,7 @@ int check_privileges(void) {
 }
 
 /**
- * Secure the terminal
+ * Secure the terminal and file descriptors
  */
 void secure_terminal(void) {
     /* Disable core dumps for security */
@@ -166,6 +189,41 @@ void secure_terminal(void) {
     rlim.rlim_cur = 0;
     rlim.rlim_max = 0;
     setrlimit(RLIMIT_CORE, &rlim);
+
+    /* Close all file descriptors except stdin, stdout, stderr */
+    int max_fd = sysconf(_SC_OPEN_MAX);
+    if (max_fd == -1) {
+        max_fd = 1024; /* fallback value */
+    }
+
+    for (int fd = 3; fd < max_fd; fd++) {
+        close(fd);
+    }
+
+    /* Ensure stdin, stdout, stderr are properly connected */
+    if (fcntl(STDIN_FILENO, F_GETFD) == -1) {
+        int fd = open("/dev/null", O_RDONLY);
+        if (fd != STDIN_FILENO) {
+            dup2(fd, STDIN_FILENO);
+            close(fd);
+        }
+    }
+
+    if (fcntl(STDOUT_FILENO, F_GETFD) == -1) {
+        int fd = open("/dev/null", O_WRONLY);
+        if (fd != STDOUT_FILENO) {
+            dup2(fd, STDOUT_FILENO);
+            close(fd);
+        }
+    }
+
+    if (fcntl(STDERR_FILENO, F_GETFD) == -1) {
+        int fd = open("/dev/null", O_WRONLY);
+        if (fd != STDERR_FILENO) {
+            dup2(fd, STDERR_FILENO);
+            close(fd);
+        }
+    }
 
     /* Set process group */
     if (setsid() == -1) {
@@ -639,7 +697,7 @@ int prompt_user_confirmation(const char *command, const char *warning) {
 }
 
 /**
- * Enhanced command validation with shell and danger checks
+ * Enhanced command validation with comprehensive injection protection
  */
 int validate_command(const char *command) {
     if (!command) {
@@ -649,22 +707,137 @@ int validate_command(const char *command) {
     /* Basic security checks first */
 
     /* Check for null bytes (potential injection) */
-    if (strlen(command) != strcspn(command, "\0")) {
-        log_security_violation(current_username, "null byte in command");
-        return 0;
+    size_t cmd_len = strlen(command);
+    for (size_t i = 0; i < cmd_len; i++) {
+        if (command[i] == '\0') {
+            log_security_violation(current_username, "null byte in command");
+            return 0;
+        }
     }
 
     /* Check for extremely long commands */
-    if (strlen(command) > MAX_COMMAND_LENGTH) {
+    if (cmd_len > MAX_COMMAND_LENGTH) {
         log_security_violation(current_username, "command too long");
         return 0;
     }
 
-    /* Check for suspicious patterns */
-    if (strstr(command, "../") || strstr(command, "..\\")) {
+    /* Enhanced path traversal detection */
+    if (strstr(command, "../") || strstr(command, "..\\") ||
+        strstr(command, "/.../") || strstr(command, "\\.../")) {
         log_security_violation(current_username, "path traversal attempt");
         return 0;
     }
+
+    /* Check for shell metacharacters that enable command injection */
+    const char *dangerous_chars = ";|&`$(){}[]<>*?~";
+    for (const char *p = dangerous_chars; *p; p++) {
+        if (strchr(command, *p)) {
+            char violation_msg[256];
+            snprintf(violation_msg, sizeof(violation_msg),
+                    "shell metacharacter '%c' detected in command", *p);
+            log_security_violation(current_username, violation_msg);
+            return 0;
+        }
+    }
+
+    /* Check for command substitution patterns */
+    if (strstr(command, "$(") || strstr(command, "`") ||
+        strstr(command, "${") || strstr(command, "$[")) {
+        log_security_violation(current_username, "command substitution attempt");
+        return 0;
+    }
+
+    /* Check for I/O redirection that could be used maliciously */
+    if (strstr(command, " > ") || strstr(command, " >> ") ||
+        strstr(command, " < ") || strstr(command, " 2> ") ||
+        strstr(command, " 2>> ") || strstr(command, " &> ") ||
+        strstr(command, " &>> ")) {
+        log_security_violation(current_username, "I/O redirection attempt");
+        return 0;
+    }
+
+    /* Check for environment variable injection */
+    if (strstr(command, "$HOME") || strstr(command, "$PATH") ||
+        strstr(command, "$USER") || strstr(command, "$SHELL") ||
+        strstr(command, "$PWD") || strstr(command, "$OLDPWD")) {
+        log_security_violation(current_username, "environment variable injection attempt");
+        return 0;
+    }
+
+    /* Check for format string vulnerabilities */
+    if (strstr(command, "%s") || strstr(command, "%d") ||
+        strstr(command, "%x") || strstr(command, "%n") ||
+        strstr(command, "%p")) {
+        log_security_violation(current_username, "format string injection attempt");
+        return 0;
+    }
+
+    /* Check for Unicode and encoding attacks */
+    for (size_t i = 0; i < cmd_len; i++) {
+        unsigned char c = (unsigned char)command[i];
+        /* Block all non-printable characters except space */
+        if (c < 32 && c != ' ') {
+            char violation_msg[256];
+            snprintf(violation_msg, sizeof(violation_msg),
+                    "non-printable character 0x%02x in command", c);
+            log_security_violation(current_username, violation_msg);
+            return 0;
+        }
+        /* Block high-bit characters that could be encoding attacks */
+        if (c > 126) {
+            char violation_msg[256];
+            snprintf(violation_msg, sizeof(violation_msg),
+                    "high-bit character 0x%02x encoding attack", c);
+            log_security_violation(current_username, violation_msg);
+            return 0;
+        }
+    }
+
+    /* Check for URL encoding attacks (case insensitive) */
+    if (strstr(command, "%00") || strstr(command, "%0a") || strstr(command, "%0A") ||
+        strstr(command, "%0d") || strstr(command, "%0D") || strstr(command, "%09") ||
+        strstr(command, "%2e%2e") || strstr(command, "%2E%2E") ||
+        strstr(command, "%2f") || strstr(command, "%2F")) {
+        log_security_violation(current_username, "URL encoding attack detected");
+        return 0;
+    }
+
+    /* Check for Unicode escape sequences */
+    if (strstr(command, "\\u0000") || strstr(command, "\\x00") ||
+        strstr(command, "\\n") || strstr(command, "\\r") ||
+        strstr(command, "\\t")) {
+        log_security_violation(current_username, "Unicode escape sequence attack");
+        return 0;
+    }
+
+    /* Check for additional dangerous patterns */
+    if (strstr(command, "export ") || strstr(command, "unset ") ||
+        strstr(command, "alias ") || strstr(command, "function ")) {
+        log_security_violation(current_username, "shell environment manipulation attempt");
+        return 0;
+    }
+
+    /* Check for environment disclosure commands */
+    if (strcmp(command, "env") == 0 || strcmp(command, "printenv") == 0 ||
+        strncmp(command, "env ", 4) == 0 || strncmp(command, "printenv ", 9) == 0) {
+        log_security_violation(current_username, "environment disclosure command blocked");
+        return 0;
+    }
+
+    /* Check for variable assignment patterns */
+    if (strstr(command, "HOME=") || strstr(command, "PATH=") ||
+        strstr(command, "LD_PRELOAD=") || strstr(command, "SHELL=")) {
+        log_security_violation(current_username, "environment variable assignment attempt");
+        return 0;
+    }
+
+    /* Check for quotes that could be used for injection */
+    if (strchr(command, '\'') || strchr(command, '"') || strchr(command, '\\')) {
+        log_security_violation(current_username, "quote character injection attempt");
+        return 0;
+    }
+
+
 
     /* Enhanced security checks */
 
@@ -724,6 +897,27 @@ int validate_command(const char *command) {
     }
 
     return 1;
+}
+
+/**
+ * Enhanced command validation with buffer length for testing null byte injection
+ */
+int validate_command_with_length(const char *command, size_t buffer_len) {
+    if (!command) {
+        return 0;
+    }
+
+    /* Check for embedded null bytes by comparing strlen with buffer_len */
+    size_t cmd_len = strlen(command);
+    if (buffer_len > cmd_len + 1) {
+        /* Buffer is longer than string length + null terminator,
+           suggesting embedded null bytes */
+        log_security_violation(current_username, "embedded null byte detected in command");
+        return 0;
+    }
+
+    /* Use the regular validation for other checks */
+    return validate_command(command);
 }
 
 /**

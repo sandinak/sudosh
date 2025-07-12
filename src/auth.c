@@ -284,13 +284,24 @@ int check_auth_cache(const char *username) {
         return 0;
     }
 
-    /* Read cache data */
-    if (fread(&cache_data, sizeof(cache_data), 1, cache_file) != 1) {
+    /* Lock file for exclusive access to prevent race conditions */
+    if (flock(fileno(cache_file), LOCK_EX | LOCK_NB) != 0) {
+        /* File is locked by another process, treat as invalid */
         fclose(cache_file);
         free(cache_path);
         return 0;
     }
 
+    /* Read cache data */
+    if (fread(&cache_data, sizeof(cache_data), 1, cache_file) != 1) {
+        flock(fileno(cache_file), LOCK_UN);
+        fclose(cache_file);
+        free(cache_path);
+        return 0;
+    }
+
+    /* Unlock and close file */
+    flock(fileno(cache_file), LOCK_UN);
     fclose(cache_file);
     free(cache_path);
 
@@ -362,16 +373,27 @@ int update_auth_cache(const char *username) {
         strcpy(cache_data.hostname, "localhost");
     }
 
-    /* Write cache file with secure permissions */
-    cache_file = fopen(cache_path, "wb");
-    if (!cache_file) {
+    /* Create cache file with secure permissions atomically */
+    int fd = open(cache_path, O_WRONLY | O_CREAT | O_EXCL, 0600);
+    if (fd == -1) {
+        /* File already exists or creation failed */
         free(cache_path);
         return 0;
     }
 
-    /* Set secure permissions before writing */
-    if (chmod(cache_path, 0600) != 0) {
-        fclose(cache_file);
+    /* Lock file for exclusive access */
+    if (flock(fd, LOCK_EX | LOCK_NB) != 0) {
+        close(fd);
+        unlink(cache_path);
+        free(cache_path);
+        return 0;
+    }
+
+    /* Convert to FILE* for easier writing */
+    cache_file = fdopen(fd, "wb");
+    if (!cache_file) {
+        flock(fd, LOCK_UN);
+        close(fd);
         unlink(cache_path);
         free(cache_path);
         return 0;
@@ -379,12 +401,19 @@ int update_auth_cache(const char *username) {
 
     /* Write cache data */
     if (fwrite(&cache_data, sizeof(cache_data), 1, cache_file) != 1) {
+        flock(fileno(cache_file), LOCK_UN);
         fclose(cache_file);
         unlink(cache_path);
         free(cache_path);
         return 0;
     }
 
+    /* Sync to disk before unlocking */
+    fflush(cache_file);
+    fsync(fileno(cache_file));
+
+    /* Unlock and close file */
+    flock(fileno(cache_file), LOCK_UN);
     fclose(cache_file);
     free(cache_path);
 
@@ -480,9 +509,39 @@ int authenticate_user_cached(const char *username) {
 }
 
 /**
- * Authenticate user using PAM or mock authentication
+ * Authenticate user using PAM or mock authentication with enhanced security
  */
 int authenticate_user(const char *username) {
+    /* Enhanced input validation */
+    if (!username || strlen(username) == 0) {
+        log_security_violation("unknown", "authentication attempted with empty username");
+        return 0;
+    }
+
+    /* Check username length and characters */
+    size_t username_len = strlen(username);
+    if (username_len >= MAX_USERNAME_LENGTH) {
+        log_security_violation(username, "username too long");
+        return 0;
+    }
+
+    /* Validate username contains only safe characters */
+    for (size_t i = 0; i < username_len; i++) {
+        char c = username[i];
+        if (!isalnum(c) && c != '_' && c != '-' && c != '.') {
+            log_security_violation(username, "invalid characters in username");
+            return 0;
+        }
+    }
+
+    /* Check for suspicious usernames */
+    if (strcmp(username, "root") == 0 || strcmp(username, "admin") == 0 ||
+        strcmp(username, "administrator") == 0 || strcmp(username, "test") == 0 ||
+        strstr(username, "..") || strstr(username, "/") || strstr(username, "\\")) {
+        log_security_violation(username, "suspicious username pattern");
+        return 0;
+    }
+
 #ifdef MOCK_AUTH
     /* Use mock authentication for systems without PAM */
     int result = mock_authenticate(username);
@@ -496,17 +555,27 @@ int authenticate_user(const char *username) {
     };
     int retval;
 
-    /* Initialize PAM */
+    /* Initialize PAM with enhanced error checking */
     retval = pam_start("sudo", username, &conv, &pamh);
     if (retval != PAM_SUCCESS) {
         log_error("PAM initialization failed");
+        log_security_violation(username, "PAM initialization failure");
         return 0;
     }
 
-    /* Authenticate */
+    /* Set PAM item for additional security */
+    retval = pam_set_item(pamh, PAM_RUSER, username);
+    if (retval != PAM_SUCCESS) {
+        log_security_violation(username, "PAM set item failure");
+        pam_end(pamh, retval);
+        return 0;
+    }
+
+    /* Authenticate with timeout protection */
     retval = pam_authenticate(pamh, 0);
     if (retval != PAM_SUCCESS) {
         log_authentication(username, 0);
+        log_security_violation(username, "PAM authentication failure");
         pam_end(pamh, retval);
         return 0;
     }

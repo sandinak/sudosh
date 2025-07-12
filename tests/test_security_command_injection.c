@@ -56,12 +56,12 @@ int test_null_byte_injection() {
     strcpy(malicious_command, "ls");
     malicious_command[2] = '\0';
     strcpy(malicious_command + 3, "; whoami");
-    
-    /* Test if null byte injection is blocked */
-    if (!validate_command(malicious_command)) {
+
+    /* Test if null byte injection is blocked using the enhanced validation */
+    if (!validate_command_with_length(malicious_command, 11)) { /* "ls" + null + "; whoami" = 11 chars */
         return 0; /* Blocked - secure */
     }
-    
+
     return 1; /* Vulnerable */
 }
 
@@ -197,15 +197,34 @@ int test_unicode_injection() {
         "ls\\u0000whoami",        /* Unicode null */
         NULL
     };
-    
+
+    size_t command_lengths[] = {
+        11,  /* "ls\x00whoami" - 11 chars including null */
+        11,  /* "ls\x0awhoami" - 11 chars */
+        11,  /* "ls\x0dwhoami" - 11 chars */
+        11,  /* "ls\x09whoami" - 11 chars */
+        11,  /* "ls%00whoami" - 11 chars */
+        12,  /* "ls%0awhoami" - 12 chars */
+        14   /* "ls\\u0000whoami" - 14 chars */
+    };
+
     for (int i = 0; unicode_commands[i]; i++) {
-        if (!validate_command(unicode_commands[i])) {
+        int result;
+        if (i == 0) {
+            /* First command has embedded null, use enhanced validation */
+            result = validate_command_with_length(unicode_commands[i], command_lengths[i]);
+        } else {
+            /* Other commands can use regular validation */
+            result = validate_command(unicode_commands[i]);
+        }
+
+        if (!result) {
             continue; /* Blocked */
         } else {
             return 1; /* Vulnerable */
         }
     }
-    
+
     return 0; /* All blocked - secure */
 }
 
