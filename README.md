@@ -2,7 +2,7 @@
 
 **Author**: Branson Matheson <branson@sandsite.org>
 
-[![Version](https://img.shields.io/badge/version-1.4.0-blue.svg)](https://github.com/sandinak/sudosh)
+[![Version](https://img.shields.io/badge/version-1.5.0-orange.svg)](docs/CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Security](https://img.shields.io/badge/security-CVE--hardened-red.svg)](docs/CVE_ANALYSIS.md)
 [![Testing](https://img.shields.io/badge/testing-comprehensive-green.svg)](docs/TESTING.md)

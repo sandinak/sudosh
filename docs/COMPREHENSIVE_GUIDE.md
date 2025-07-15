@@ -1,7 +1,7 @@
 # Sudosh - User Guide
 
 **Author**: Branson Matheson <branson@sandsite.org>
-**Version**: 1.4.0
+**Version**: 1.5.0
 
 ## Overview
 
