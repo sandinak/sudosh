@@ -18,6 +18,9 @@ static volatile sig_atomic_t interrupted = 0;
 static volatile sig_atomic_t received_sigint = 0;
 static char *current_username = NULL;
 
+/* Global test mode flag - bypasses interactive prompts */
+int test_mode = 0;
+
 /**
  * Signal handler for cleanup
  * Enhanced based on sudo's signal handling improvements
@@ -1288,6 +1291,14 @@ int prompt_user_confirmation(const char *command, const char *warning) {
 
     printf("\n⚠️  WARNING: %s\n", warning);
     printf("Command: %s\n", command);
+
+    /* In test mode, automatically deny dangerous commands */
+    if (test_mode) {
+        printf("This command could be dangerous. Are you sure you want to proceed? (yes/no): ");
+        printf("Command cancelled for safety.\n");
+        return 0;
+    }
+
     printf("This command could be dangerous. Are you sure you want to proceed? (yes/no): ");
     fflush(stdout);
 

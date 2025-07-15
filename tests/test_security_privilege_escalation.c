@@ -263,8 +263,11 @@ int test_resource_limit_bypass() {
 }
 
 int main() {
+    /* Enable test mode to bypass interactive prompts */
+    test_mode = 1;
+
     printf("=== Security Tests - Privilege Escalation ===\n");
-    
+
     /* Initialize security test counters */
     security_count = 0;
     security_passes = 0;

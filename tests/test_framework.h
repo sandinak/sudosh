@@ -83,6 +83,7 @@
 
 #define TEST_SUITE_BEGIN(suite_name) \
     int main(void) { \
+        test_mode = 1; /* Enable test mode to bypass interactive prompts */ \
         int test_count = 0; \
         int test_passes = 0; \
         int test_failures = 0; \

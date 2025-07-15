@@ -241,9 +241,12 @@ void generate_security_report() {
 }
 
 int main() {
+    /* Enable test mode to bypass interactive prompts */
+    test_mode = 1;
+
     printf("=== Comprehensive Security Assessment ===\n");
     printf("Running all security test suites...\n\n");
-    
+
     /* Initialize categories */
     category_count = 0;
     

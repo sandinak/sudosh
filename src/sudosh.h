@@ -53,6 +53,9 @@ extern char **environ;
 /* Global verbose flag */
 extern int verbose_mode;
 
+/* Global test mode flag - bypasses interactive prompts */
+extern int test_mode;
+
 /* Debug levels based on sudo's debugging system */
 #define DEBUG_NONE    0
 #define DEBUG_ERROR   1

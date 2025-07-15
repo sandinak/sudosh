@@ -332,8 +332,11 @@ int test_concurrent_session_race() {
 }
 
 int main() {
+    /* Enable test mode to bypass interactive prompts */
+    test_mode = 1;
+
     printf("=== Security Tests - Race Conditions and Timing Attacks ===\n");
-    
+
     /* Initialize security test counters */
     security_count = 0;
     security_passes = 0;
