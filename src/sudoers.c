@@ -15,6 +15,10 @@
 #define SUDOERS_PATH "/etc/sudoers"
 #define SUDOERS_DIR "/etc/sudoers.d"
 
+/* Enhanced security constants based on sudo's improvements */
+#define MAX_SUDOERS_FILE_SIZE (1024 * 1024)  /* 1MB max file size */
+#define MAX_INCLUDE_DEPTH 10                  /* Prevent infinite recursion */
+
 /**
  * Create a new userspec entry
  */
@@ -287,10 +291,63 @@ static void drop_after_sudoers_read(int escalated, uid_t saved_euid) {
 }
 
 /**
+ * Enhanced file validation for sudoers files
+ * Based on sudo's security improvements
+ */
+static int validate_sudoers_file_security(const char *filepath) {
+    struct stat file_stat;
+
+    if (!filepath) {
+        return 0;
+    }
+
+    /* Check if file exists and get stats */
+    if (stat(filepath, &file_stat) != 0) {
+        return 0;
+    }
+
+    /* Must be a regular file */
+    if (!S_ISREG(file_stat.st_mode)) {
+        log_security_violation("sudoers", "non-regular file in sudoers path");
+        return 0;
+    }
+
+    /* Check file size to prevent DoS attacks */
+    if (file_stat.st_size > MAX_SUDOERS_FILE_SIZE) {
+        log_security_violation("sudoers", "sudoers file too large");
+        return 0;
+    }
+
+    /* File must be owned by root */
+    if (file_stat.st_uid != 0) {
+        log_security_violation("sudoers", "sudoers file not owned by root");
+        return 0;
+    }
+
+    /* File must not be world-writable */
+    if (file_stat.st_mode & S_IWOTH) {
+        log_security_violation("sudoers", "sudoers file is world-writable");
+        return 0;
+    }
+
+    /* File must not be group-writable unless group is root */
+    if ((file_stat.st_mode & S_IWGRP) && file_stat.st_gid != 0) {
+        log_security_violation("sudoers", "sudoers file is group-writable by non-root group");
+        return 0;
+    }
+
+    return 1;
+}
+
+/**
  * Check if filename is valid for sudoers include
- * Valid files must not contain '.' or '~' and must be regular files
+ * Enhanced validation based on sudo's security improvements
  */
 static int is_valid_sudoers_file(const char *filename) {
+    if (!filename || *filename == '\0') {
+        return 0;
+    }
+
     /* Skip files with dots (except at start for hidden files) */
     if (strchr(filename, '.') != NULL) {
         return 0;
@@ -405,6 +462,12 @@ struct sudoers_config *parse_sudoers_file(const char *filename) {
 
     if (!filename) {
         filename = SUDOERS_PATH;
+    }
+
+    /* Validate file security before parsing */
+    if (!validate_sudoers_file_security(filename)) {
+        log_security_violation("sudoers", "sudoers file failed security validation");
+        return NULL;
     }
 
     config = malloc(sizeof(struct sudoers_config));

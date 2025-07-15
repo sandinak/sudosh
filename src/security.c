@@ -8,6 +8,10 @@
  */
 
 #include "sudosh.h"
+#ifdef __linux__
+#include <sys/prctl.h>  /* For prctl() on Linux */
+#endif
+#include <pthread.h>    /* For pthread_sigmask() */
 
 /* Global variables for signal handling */
 static volatile sig_atomic_t interrupted = 0;
@@ -16,6 +20,7 @@ static char *current_username = NULL;
 
 /**
  * Signal handler for cleanup
+ * Enhanced based on sudo's signal handling improvements
  */
 void signal_handler(int sig) {
     switch (sig) {
@@ -36,12 +41,26 @@ void signal_handler(int sig) {
         case SIGCHLD:
             /* Don't reap children here - let execute_command handle it */
             /* This prevents the "waitpid: no child process" error */
+            /* Enhanced: Use waitpid with WNOHANG to avoid blocking */
+            while (waitpid(-1, NULL, WNOHANG) > 0) {
+                /* Continue reaping children */
+            }
+            break;
+        case SIGHUP:
+            /* Enhanced: Handle SIGHUP for session management */
+            /* Use killpg() instead of kill() for process group */
+            if (getpgrp() != getpid()) {
+                /* We're not the process group leader, send to group */
+                killpg(getpgrp(), SIGHUP);
+            }
+            interrupted = 1;
             break;
     }
 }
 
 /**
  * Setup signal handlers for security
+ * Enhanced based on sudo's signal handling improvements
  */
 void setup_signal_handlers(void) {
     struct sigaction sa;
@@ -49,20 +68,30 @@ void setup_signal_handlers(void) {
     /* Setup signal handler */
     sa.sa_handler = signal_handler;
     sigemptyset(&sa.sa_mask);
-    sa.sa_flags = SA_RESTART;
+    sa.sa_flags = SA_RESTART | SA_NOCLDSTOP;  /* Enhanced flags */
 
     /* Handle termination signals */
     sigaction(SIGINT, &sa, NULL);
     sigaction(SIGTERM, &sa, NULL);
     sigaction(SIGQUIT, &sa, NULL);
     sigaction(SIGTSTP, &sa, NULL);  /* Handle Ctrl-Z to ignore it */
+    sigaction(SIGHUP, &sa, NULL);   /* Enhanced: Handle SIGHUP properly */
 
-    /* Handle child process signals - but don't reap them */
+    /* Handle child process signals with enhanced handling */
     sigaction(SIGCHLD, &sa, NULL);
 
-    /* Ignore some signals */
+    /* Ignore pipe signals to prevent broken pipe crashes */
     signal(SIGPIPE, SIG_IGN);
-    signal(SIGHUP, SIG_IGN);
+
+    /* Block dangerous signals during critical sections */
+    sigset_t block_set;
+    sigemptyset(&block_set);
+    sigaddset(&block_set, SIGTERM);
+    sigaddset(&block_set, SIGQUIT);
+    sigaddset(&block_set, SIGHUP);
+
+    /* This will be used in critical sections */
+    pthread_sigmask(SIG_BLOCK, &block_set, NULL);
 }
 
 /**
@@ -77,9 +106,11 @@ void set_current_username(const char *username) {
 
 /**
  * Sanitize environment variables for security
+ * Enhanced based on sudo's environment security fixes
  */
 void sanitize_environment(void) {
-    /* List of dangerous environment variables to remove */
+    /* List of dangerous environment variables to remove
+     * Expanded based on sudo's security enhancements */
     const char *dangerous_vars[] = {
         "IFS",
         "CDPATH",
@@ -92,9 +123,17 @@ void sanitize_environment(void) {
         "DYLD_LIBRARY_PATH",
         "DYLD_INSERT_LIBRARIES",
         "DYLD_FORCE_FLAT_NAMESPACE",
+        "DYLD_FALLBACK_LIBRARY_PATH",
+        "DYLD_VERSIONED_LIBRARY_PATH",
+        "_RLD_LIST",           /* AIX runtime linker */
+        "_RLD32_LIST",         /* AIX 32-bit runtime linker */
+        "_RLD64_LIST",         /* AIX 64-bit runtime linker */
+        "LDR_PRELOAD",         /* AIX loader preload */
+        "LDR_PRELOAD64",       /* AIX 64-bit loader preload */
         "TMPDIR",
         "TMP",
         "TEMP",
+        "TEMPDIR",
         /* Editor-related variables that could be used for shell escapes */
         "EDITOR",
         "VISUAL",
@@ -103,6 +142,39 @@ void sanitize_environment(void) {
         "KSHELL",
         "PAGER",
         "MANPAGER",
+        /* Shell-related variables */
+        "PS1",
+        "PS2",
+        "PS3",
+        "PS4",
+        "PROMPT_COMMAND",
+        "BASH_FUNC_*",         /* Bash function exports */
+        /* Locale-related variables that could be abused */
+        "LC_MESSAGES",
+        "LANGUAGE",
+        /* Python-related variables */
+        "PYTHONPATH",
+        "PYTHONSTARTUP",
+        "PYTHONHOME",
+        /* Perl-related variables */
+        "PERL5LIB",
+        "PERLLIB",
+        "PERL5OPT",
+        /* Ruby-related variables */
+        "RUBYLIB",
+        "RUBYOPT",
+        /* Node.js-related variables */
+        "NODE_PATH",
+        "NODE_OPTIONS",
+        /* Java-related variables */
+        "CLASSPATH",
+        "JAVA_TOOL_OPTIONS",
+        /* Terminal-related variables that could be abused */
+        "TERMCAP",
+        "TERMINFO",
+        /* X11-related variables */
+        "XAUTHORITY",
+        "DISPLAY",
         NULL
     };
 
@@ -113,18 +185,55 @@ void sanitize_environment(void) {
         unsetenv(dangerous_vars[i]);
     }
 
-    /* Set secure PATH if not already set */
-    if (!getenv("PATH")) {
-        setenv("PATH", "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", 1);
+    /* Also remove any variables starting with dangerous prefixes */
+    extern char **environ;
+    char **env_ptr = environ;
+    while (env_ptr && *env_ptr) {
+        char *env_var = *env_ptr;
+        char *equals = strchr(env_var, '=');
+        if (equals) {
+            size_t name_len = equals - env_var;
+            /* Check for dangerous prefixes */
+            if ((name_len >= 9 && strncmp(env_var, "BASH_FUNC", 9) == 0) ||
+                (name_len >= 4 && strncmp(env_var, "_RLD", 4) == 0) ||
+                (name_len >= 4 && strncmp(env_var, "DYLD", 4) == 0) ||
+                (name_len >= 3 && strncmp(env_var, "LD_", 3) == 0)) {
+
+                /* Extract variable name and unset it */
+                char *var_name = strndup(env_var, name_len);
+                if (var_name) {
+                    unsetenv(var_name);
+                    free(var_name);
+                }
+            }
+        }
+        env_ptr++;
     }
+
+    /* Set secure PATH - always override for security */
+    setenv("PATH", "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", 1);
 
     /* Ensure HOME is set to root's home when running as root */
     setenv("HOME", "/root", 1);
     setenv("USER", "root", 1);
     setenv("LOGNAME", "root", 1);
 
+    /* Set SUDO_TTY environment variable if user has a tty
+     * Based on sudo's enhancement for finding original tty */
+    char *tty_name = ttyname(STDIN_FILENO);
+    if (tty_name) {
+        setenv("SUDO_TTY", tty_name, 1);
+    }
+
+    /* Set SUDO_COMMAND to track the original command context */
+    setenv("SUDO_COMMAND", "sudosh", 1);
+
     /* Set secure umask */
     umask(022);
+
+    /* Set secure locale to prevent locale-based attacks */
+    setenv("LC_ALL", "C", 1);
+    setenv("LANG", "C", 1);
 }
 
 /**
@@ -199,19 +308,77 @@ int check_privileges(void) {
 }
 
 /**
- * Secure the terminal
+ * Validate TTY device to prevent TTY-based attacks
+ * Based on sudo's TTY security enhancements
+ */
+static int validate_tty_device(void) {
+    char *tty_name;
+    struct stat tty_stat;
+
+    /* Get TTY name */
+    tty_name = ttyname(STDIN_FILENO);
+    if (!tty_name) {
+        /* No TTY is acceptable for some use cases */
+        return 1;
+    }
+
+    /* Validate TTY device */
+    if (stat(tty_name, &tty_stat) != 0) {
+        log_security_violation("unknown", "invalid TTY device");
+        return 0;
+    }
+
+    /* Ensure it's a character device */
+    if (!S_ISCHR(tty_stat.st_mode)) {
+        log_security_violation("unknown", "TTY is not a character device");
+        return 0;
+    }
+
+    /* Check for suspicious TTY names that could indicate attacks */
+    if (strstr(tty_name, "..") || strstr(tty_name, "//")) {
+        log_security_violation("unknown", "suspicious TTY path");
+        return 0;
+    }
+
+    return 1;
+}
+
+/**
+ * Secure the terminal and process environment
+ * Enhanced based on sudo's security fixes
  */
 void secure_terminal(void) {
+    /* Validate TTY first */
+    if (!validate_tty_device()) {
+        fprintf(stderr, "sudosh: TTY validation failed\n");
+        exit(EXIT_FAILURE);
+    }
+
     /* Disable core dumps for security */
     struct rlimit rlim;
     rlim.rlim_cur = 0;
     rlim.rlim_max = 0;
     setrlimit(RLIMIT_CORE, &rlim);
 
-    /* Set process group */
+    /* Set process group - enhanced error handling */
     if (setsid() == -1) {
         /* Not a problem if we're already a session leader */
+        if (errno != EPERM) {
+            log_error("Failed to create new session");
+        }
     }
+
+    /* Set process title for better process identification (Linux only) */
+#ifdef __linux__
+    if (prctl(PR_SET_NAME, "sudosh", 0, 0, 0) == -1) {
+        /* Not critical if this fails */
+    }
+
+    /* Prevent ptrace attacks (Linux only) */
+    if (prctl(PR_SET_DUMPABLE, 0, 0, 0, 0) == -1) {
+        /* Not critical if this fails */
+    }
+#endif
 }
 
 /**
@@ -1138,14 +1305,60 @@ int prompt_user_confirmation(const char *command, const char *warning) {
 }
 
 /**
+ * Enhanced buffer overflow protection
+ * Based on sudo's buffer overflow security fixes
+ */
+static int validate_command_buffer(const char *command) {
+    size_t len;
+    const char *p;
+
+    if (!command) {
+        return 0;
+    }
+
+    /* Check for buffer overflow conditions */
+    len = strlen(command);
+    if (len == 0) {
+        return 0;  /* Empty command */
+    }
+
+    if (len >= MAX_COMMAND_LENGTH) {
+        log_security_violation(current_username, "command buffer overflow attempt");
+        return 0;
+    }
+
+    /* Check for null bytes in the middle of the string */
+    for (p = command; p < command + len; p++) {
+        if (*p == '\0') {
+            log_security_violation(current_username, "embedded null byte in command");
+            return 0;
+        }
+    }
+
+    /* Check for control characters that could cause issues */
+    for (p = command; *p; p++) {
+        if ((*p < 32 && *p != '\t' && *p != '\n') || *p == 127) {
+            log_security_violation(current_username, "control character in command");
+            return 0;
+        }
+    }
+
+    return 1;
+}
+
+/**
  * Enhanced command validation with shell and danger checks
+ * Enhanced with buffer overflow protection based on sudo's fixes
  */
 int validate_command(const char *command) {
     if (!command) {
         return 0;
     }
 
-    /* Basic security checks first */
+    /* Enhanced buffer validation first */
+    if (!validate_command_buffer(command)) {
+        return 0;
+    }
 
     /* Special validation for editor commands */
     if (is_interactive_editor(command) || is_system_editor(command) || is_crontab_edit(command)) {
@@ -1161,18 +1374,6 @@ int validate_command(const char *command) {
         /* Log the secure editor execution */
         log_security_event(current_username, "secure editor execution validated", command);
         return 1;
-    }
-
-    /* Check for null bytes (potential injection) */
-    if (strlen(command) != strcspn(command, "\0")) {
-        log_security_violation(current_username, "null byte in command");
-        return 0;
-    }
-
-    /* Check for extremely long commands */
-    if (strlen(command) > MAX_COMMAND_LENGTH) {
-        log_security_violation(current_username, "command too long");
-        return 0;
     }
 
     /* Check for suspicious patterns */

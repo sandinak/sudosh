@@ -81,7 +81,31 @@ int parse_command(const char *input, struct command_info *cmd) {
 }
 
 /**
+ * Enhanced error handling for system calls
+ * Based on sudo's stability improvements
+ */
+static int handle_system_error(const char *operation, int error_code) {
+    char error_msg[256];
+
+    snprintf(error_msg, sizeof(error_msg), "%s failed: %s", operation, strerror(error_code));
+    log_error(error_msg);
+
+    /* Return appropriate exit code based on error type */
+    switch (error_code) {
+        case ENOENT:
+            return EXIT_COMMAND_NOT_FOUND;
+        case EACCES:
+            return EXIT_AUTH_FAILURE;
+        case ENOMEM:
+            return EXIT_FAILURE;
+        default:
+            return EXIT_FAILURE;
+    }
+}
+
+/**
  * Execute command with elevated privileges
+ * Enhanced with better error handling based on sudo's improvements
  */
 int execute_command(struct command_info *cmd, struct user_info *user) {
     (void)user;  /* Suppress unused parameter warning */
@@ -89,8 +113,10 @@ int execute_command(struct command_info *cmd, struct user_info *user) {
     int status;
     char *command_path;
     struct passwd *target_pwd = NULL;
+    int saved_errno;
 
     if (!cmd || !cmd->argv || !cmd->argv[0]) {
+        log_error("Invalid command structure");
         return -1;
     }
 
@@ -98,8 +124,9 @@ int execute_command(struct command_info *cmd, struct user_info *user) {
     if (target_user) {
         target_pwd = getpwnam(target_user);
         if (!target_pwd) {
+            saved_errno = errno;
             fprintf(stderr, "sudosh: target user '%s' not found\n", target_user);
-            return -1;
+            return handle_system_error("getpwnam", saved_errno);
         }
     }
 
@@ -113,23 +140,25 @@ int execute_command(struct command_info *cmd, struct user_info *user) {
     } else {
         command_path = strdup(cmd->argv[0]);
         if (!command_path) {
-            return -1;
+            saved_errno = errno;
+            return handle_system_error("strdup", saved_errno);
         }
     }
 
     /* Check if command exists and is executable */
     if (access(command_path, X_OK) != 0) {
+        saved_errno = errno;
         fprintf(stderr, "sudosh: %s: permission denied or not found\n", command_path);
         free(command_path);
-        return EXIT_COMMAND_NOT_FOUND;
+        return handle_system_error("access", saved_errno);
     }
 
-    /* Fork and execute */
+    /* Fork and execute with enhanced error handling */
     pid = fork();
     if (pid == -1) {
-        perror("fork");
+        saved_errno = errno;
         free(command_path);
-        return -1;
+        return handle_system_error("fork", saved_errno);
     }
 
     if (pid == 0) {
@@ -223,10 +252,32 @@ int execute_command(struct command_info *cmd, struct user_info *user) {
         sigaction(SIGQUIT, &ignore_action, &old_sigquit);
         sigaction(SIGTSTP, &ignore_action, &old_sigtstp);
 
-        /* Wait for child to complete */
+        /* Enhanced process waiting with better error handling */
         int wait_result;
+        int wait_attempts = 0;
+        const int max_wait_attempts = 3;
+
         do {
             wait_result = waitpid(pid, &status, 0);
+            if (wait_result == -1 && errno == EINTR) {
+                wait_attempts++;
+                if (wait_attempts >= max_wait_attempts) {
+                    /* Too many interruptions, try non-blocking wait */
+                    wait_result = waitpid(pid, &status, WNOHANG);
+                    if (wait_result == 0) {
+                        /* Child still running, send SIGTERM and wait briefly */
+                        kill(pid, SIGTERM);
+                        usleep(100000);  /* 100ms */
+                        wait_result = waitpid(pid, &status, WNOHANG);
+                        if (wait_result == 0) {
+                            /* Still running, force kill */
+                            kill(pid, SIGKILL);
+                            wait_result = waitpid(pid, &status, 0);
+                        }
+                    }
+                    break;
+                }
+            }
         } while (wait_result == -1 && errno == EINTR);
 
         /* Restore original signal handlers */
@@ -235,21 +286,38 @@ int execute_command(struct command_info *cmd, struct user_info *user) {
         sigaction(SIGTSTP, &old_sigtstp, NULL);
 
         if (wait_result == -1) {
-            if (errno != ECHILD) {  /* Don't report error if child already reaped */
-                perror("waitpid");
+            saved_errno = errno;
+            if (saved_errno != ECHILD) {  /* Don't report error if child already reaped */
+                return handle_system_error("waitpid", saved_errno);
             }
             return -1;
         }
 
-        /* Return the exit status */
+        /* Enhanced exit status handling */
         if (WIFEXITED(status)) {
-            return WEXITSTATUS(status);
+            int exit_code = WEXITSTATUS(status);
+            /* Log successful command completion */
+            if (exit_code == 0) {
+                log_command_success(cmd->command);
+            } else {
+                log_command_failure(cmd->command, exit_code);
+            }
+            return exit_code;
         } else if (WIFSIGNALED(status)) {
             int sig = WTERMSIG(status);
+            char signal_msg[128];
+            snprintf(signal_msg, sizeof(signal_msg), "Command terminated by signal %d", sig);
+            log_command_failure(cmd->command, 128 + sig);
+
             /* Don't print message for common interactive program signals */
             if (sig != SIGPIPE && sig != SIGINT && sig != SIGQUIT && sig != SIGTERM) {
-                fprintf(stderr, "Command terminated by signal %d\n", sig);
+                fprintf(stderr, "%s\n", signal_msg);
             }
+            return 128 + sig;
+        } else if (WIFSTOPPED(status)) {
+            /* Handle stopped processes */
+            int sig = WSTOPSIG(status);
+            fprintf(stderr, "Command stopped by signal %d\n", sig);
             return 128 + sig;
         }
     }

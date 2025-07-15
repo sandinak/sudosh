@@ -704,3 +704,83 @@ char *expand_history(const char *command) {
 
     return result;
 }
+
+/**
+ * Log successful command execution
+ * Enhanced logging based on sudo's improvements
+ */
+void log_command_success(const char *command) {
+    char hostname[256];
+    char *tty;
+    char *pwd;
+
+    if (!logging_initialized) {
+        init_logging();
+    }
+
+    /* Get hostname */
+    if (gethostname(hostname, sizeof(hostname)) != 0) {
+        strcpy(hostname, "unknown");
+    }
+    hostname[sizeof(hostname) - 1] = '\0';
+
+    /* Get TTY */
+    tty = ttyname(STDIN_FILENO);
+    if (!tty) {
+        tty = "unknown";
+    }
+
+    /* Get current directory */
+    pwd = getcwd(NULL, 0);
+    if (!pwd) {
+        pwd = strdup("unknown");
+    }
+
+    /* Log to syslog */
+    syslog(LOG_NOTICE, "COMMAND SUCCESS: user=root ; tty=%s ; pwd=%s ; host=%s ; command=%s",
+           tty, pwd, hostname, command);
+
+    if (pwd && strcmp(pwd, "unknown") != 0) {
+        free(pwd);
+    }
+}
+
+/**
+ * Log failed command execution
+ * Enhanced logging based on sudo's improvements
+ */
+void log_command_failure(const char *command, int exit_code) {
+    char hostname[256];
+    char *tty;
+    char *pwd;
+
+    if (!logging_initialized) {
+        init_logging();
+    }
+
+    /* Get hostname */
+    if (gethostname(hostname, sizeof(hostname)) != 0) {
+        strcpy(hostname, "unknown");
+    }
+    hostname[sizeof(hostname) - 1] = '\0';
+
+    /* Get TTY */
+    tty = ttyname(STDIN_FILENO);
+    if (!tty) {
+        tty = "unknown";
+    }
+
+    /* Get current directory */
+    pwd = getcwd(NULL, 0);
+    if (!pwd) {
+        pwd = strdup("unknown");
+    }
+
+    /* Log to syslog */
+    syslog(LOG_WARNING, "COMMAND FAILURE: user=root ; tty=%s ; pwd=%s ; host=%s ; exit_code=%d ; command=%s",
+           tty, pwd, hostname, exit_code, command);
+
+    if (pwd && strcmp(pwd, "unknown") != 0) {
+        free(pwd);
+    }
+}

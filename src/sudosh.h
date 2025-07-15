@@ -53,6 +53,16 @@ extern char **environ;
 /* Global verbose flag */
 extern int verbose_mode;
 
+/* Debug levels based on sudo's debugging system */
+#define DEBUG_NONE    0
+#define DEBUG_ERROR   1
+#define DEBUG_WARN    2
+#define DEBUG_INFO    3
+#define DEBUG_VERBOSE 4
+#define DEBUG_TRACE   5
+
+extern int debug_level;
+
 /* Configuration constants */
 #define MAX_COMMAND_LENGTH 4096
 #define MAX_USERNAME_LENGTH 256
@@ -197,7 +207,16 @@ void log_session_end(const char *username);
 void log_error(const char *message);
 void log_security_violation(const char *username, const char *violation);
 void log_security_event(const char *username, const char *event, const char *details);
+void log_command_success(const char *command);
+void log_command_failure(const char *command, int exit_code);
 void close_logging(void);
+
+/* Debug and diagnostic functions */
+void debug_printf(int level, const char *format, ...);
+void debug_init(int level);
+void debug_dump_environment(void);
+void debug_dump_user_info(const struct user_info *user);
+void debug_dump_command_info(const struct command_info *cmd);
 
 /* Session logging functions */
 int init_session_logging(const char *logfile);
