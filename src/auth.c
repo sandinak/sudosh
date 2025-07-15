@@ -954,6 +954,67 @@ int check_nopasswd_sudo_l(const char *username) {
 }
 
 /**
+ * Check if user is allowed to run a specific command according to sudo configuration
+ */
+int check_command_permission(const char *username, const char *command) {
+    char sudo_command[512];
+    FILE *fp;
+    char buffer[1024];
+    int is_allowed = 0;
+    char *cmd_copy, *cmd_name, *saveptr;
+
+    /* Check for NULL or empty parameters */
+    if (!username || *username == '\0' || !command || *command == '\0') {
+        return 0;
+    }
+
+    /* Extract just the command name (first word) for checking */
+    cmd_copy = strdup(command);
+    if (!cmd_copy) {
+        return 0;
+    }
+
+    cmd_name = strtok_r(cmd_copy, " \t", &saveptr);
+    if (!cmd_name) {
+        free(cmd_copy);
+        return 0;
+    }
+
+    /* Build sudo -l command to check specific command permission */
+    snprintf(sudo_command, sizeof(sudo_command), "sudo -l -U %s %s 2>/dev/null", username, cmd_name);
+
+    /* Execute sudo -l to check if this specific command is allowed */
+    fp = popen(sudo_command, "r");
+    if (!fp) {
+        free(cmd_copy);
+        return 0;
+    }
+
+    /* Read output and check for permission indicators */
+    while (fgets(buffer, sizeof(buffer), fp)) {
+        /* Look for the command in the allowed list */
+        if (strstr(buffer, cmd_name) ||
+            strstr(buffer, "ALL") ||
+            strstr(buffer, "(ALL)") ||
+            strstr(buffer, "NOPASSWD:")) {
+            is_allowed = 1;
+            break;
+        }
+
+        /* Check for explicit denial */
+        if (strstr(buffer, "may not run sudo") ||
+            strstr(buffer, "not allowed to run")) {
+            is_allowed = 0;
+            break;
+        }
+    }
+
+    pclose(fp);
+    free(cmd_copy);
+    return is_allowed;
+}
+
+/**
  * Check if user has sudo privileges by calling sudo -l
  * This properly checks the sudoers configuration
  */

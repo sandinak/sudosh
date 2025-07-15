@@ -56,6 +56,9 @@ extern char **environ;
 /* Global verbose flag */
 extern int verbose_mode;
 
+/* Global test mode flag */
+extern int test_mode;
+
 /* Configuration constants */
 #define MAX_COMMAND_LENGTH 4096
 #define MAX_USERNAME_LENGTH 256
@@ -251,6 +254,7 @@ struct user_info *get_user_info_sssd(const char *username);
 
 /* Enhanced privilege checking */
 int check_sudo_privileges_enhanced(const char *username);
+int check_command_permission(const char *username, const char *command);
 
 /* List available commands */
 void list_available_commands(const char *username);

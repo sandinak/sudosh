@@ -172,12 +172,19 @@ int main_loop(void) {
             continue;
         }
 
-        /* Check if user has privileges for this command */
+        /* Check if user has privileges for this specific command */
         if (!has_sudo_privileges && !is_safe_command(command_line)) {
             fprintf(stderr, "sudosh: %s is not in the sudoers file and '%s' is not a safe command\n",
                     username, command_line);
             fprintf(stderr, "Available safe commands: ls, pwd, whoami, id, date, uptime, w, who\n");
             log_security_violation(username, "attempted privileged command without sudoers access");
+            free(command_line);
+            continue;
+        } else if (has_sudo_privileges && !check_command_permission(username, command_line)) {
+            /* User has sudo privileges but not for this specific command */
+            fprintf(stderr, "sudosh: %s is not allowed to run '%s' according to sudoers configuration\n",
+                    username, command_line);
+            log_security_violation(username, "attempted command not permitted by sudoers");
             free(command_line);
             continue;
         }

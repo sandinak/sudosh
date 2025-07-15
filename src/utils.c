@@ -8,6 +8,9 @@
  */
 
 #include "sudosh.h"
+
+/* Global test mode flag */
+int test_mode = 0;
 #include <ctype.h>
 
 /* Global target user for -u option */
