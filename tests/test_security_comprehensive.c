@@ -262,7 +262,13 @@ int main() {
     
     printf("5. Race Condition Tests...\n");
     run_security_test("bin/test_security_race_conditions", "Race Conditions");
-    
+
+    printf("6. CVE Validation Tests...\n");
+    run_security_test("bin/test_cve_validation", "CVE Validation");
+
+    printf("7. Enhanced Security Features Tests...\n");
+    run_security_test("bin/test_security_enhanced", "Enhanced Security");
+
     printf("\n=== Generating Security Report ===\n");
     generate_security_report();
     

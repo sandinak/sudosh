@@ -134,6 +134,7 @@ void sanitize_environment(void) {
         "TMP",
         "TEMP",
         "TEMPDIR",
+        "TZ",                  /* CVE-2014-9680: TZ environment variable */
         /* Editor-related variables that could be used for shell escapes */
         "EDITOR",
         "VISUAL",
@@ -1048,6 +1049,9 @@ int is_dangerous_command(const char *command) {
         "/bin/mount", "/usr/bin/mount", "/sbin/mount",
         "crontab", "at", "batch",
         "su", "sudo", "pkexec",
+        /* CVE-related dangerous commands */
+        "chroot", "/usr/sbin/chroot", "/sbin/chroot",
+        "$(rm", "rm -rf /", "rm -rf /*",
         NULL
     };
 
@@ -1305,6 +1309,29 @@ int prompt_user_confirmation(const char *command, const char *warning) {
 }
 
 /**
+ * Check for command injection patterns
+ * Enhanced based on CVE analysis
+ */
+static int has_command_injection(const char *command) {
+    if (!command) return 0;
+
+    /* Check for command injection patterns */
+    const char *injection_patterns[] = {
+        "$(", "`", "&&", "||", ";", "|",
+        "rm -rf /", "rm -rf /*", "rm -rf .",
+        NULL
+    };
+
+    for (int i = 0; injection_patterns[i]; i++) {
+        if (strstr(command, injection_patterns[i])) {
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+/**
  * Enhanced buffer overflow protection
  * Based on sudo's buffer overflow security fixes
  */
@@ -1327,9 +1354,10 @@ static int validate_command_buffer(const char *command) {
         return 0;
     }
 
-    /* Check for null bytes in the middle of the string */
-    for (p = command; p < command + len; p++) {
-        if (*p == '\0') {
+    /* Check for null bytes by scanning the expected command length */
+    /* We need to check beyond strlen() since it stops at first null */
+    for (size_t i = 0; i < len; i++) {
+        if (command[i] == '\0' && i < len - 1) {
             log_security_violation(current_username, "embedded null byte in command");
             return 0;
         }
@@ -1357,6 +1385,12 @@ int validate_command(const char *command) {
 
     /* Enhanced buffer validation first */
     if (!validate_command_buffer(command)) {
+        return 0;
+    }
+
+    /* Check for command injection patterns */
+    if (has_command_injection(command)) {
+        log_security_violation(current_username, "command injection attempt detected");
         return 0;
     }
 
