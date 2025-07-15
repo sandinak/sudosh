@@ -162,21 +162,27 @@ int main_loop(void) {
             continue;
         }
 
-        /* Check for editor commands that should be redirected to sudoedit */
-        if (is_interactive_editor(command_line) || is_crontab_edit(command_line)) {
-            char *sudoedit_command = redirect_to_sudoedit(command_line);
-            if (sudoedit_command) {
-                printf("sudosh: redirecting to secure editor: %s\n", sudoedit_command);
-                log_security_event(username, "editor command redirected to sudoedit", command_line);
-
-                /* Replace the original command with the sudoedit version */
-                free(command_line);
-                command_line = sudoedit_command;
-            } else {
-                fprintf(stderr, "sudosh: failed to redirect editor command to sudoedit\n");
+        /* Check for editor commands and apply native security protections */
+        if (is_interactive_editor(command_line) || is_system_editor(command_line) || is_crontab_edit(command_line)) {
+            /* Apply native editor protections */
+            if (!apply_native_editor_protections(command_line)) {
+                fprintf(stderr, "sudosh: editor command blocked due to security restrictions\n");
                 free(command_line);
                 continue;
             }
+
+            /* Create monitored editor command to prevent shell escapes */
+            char *monitored_command = create_monitored_editor_command(command_line);
+            if (!monitored_command) {
+                fprintf(stderr, "sudosh: failed to create secure editor wrapper\n");
+                free(command_line);
+                continue;
+            }
+
+            /* Replace with monitored command */
+            printf("sudosh: executing editor with shell escape protection\n");
+            free(command_line);
+            command_line = monitored_command;
         }
 
         /* Validate command for security */
@@ -203,8 +209,21 @@ int main_loop(void) {
             continue;
         }
 
+        /* Check if this is a temporary wrapper file that needs cleanup */
+        int is_wrapper = (strstr(command_line, "/tmp/sudosh_monitored_editor_") != NULL);
+        char *wrapper_path = NULL;
+        if (is_wrapper) {
+            wrapper_path = strdup(command_line);
+        }
+
         /* Execute command */
         result = execute_command(&cmd, user);
+
+        /* Clean up temporary wrapper file if it was created */
+        if (is_wrapper && wrapper_path) {
+            unlink(wrapper_path);
+            free(wrapper_path);
+        }
 
         /* Log command execution with target user info */
         if (target_user) {
@@ -266,11 +285,11 @@ int main(int argc, char *argv[]) {
             printf("  -h, --help              Show this help message\n");
             printf("      --version           Show version information\n");
             printf("  -v, --verbose           Enable verbose output\n");
-            printf("  -l, --log-session FILE  Log entire session to FILE\n");
+            printf("  -l, --log-session [FILE] Log entire session to FILE or timestamped file\n");
             printf("  -u, --user USER         Run commands as target USER\n\n");
             printf("sudosh provides an interactive shell with sudo privileges.\n");
             printf("All commands are authenticated and logged to syslog.\n");
-            printf("Use -l to also log the complete session to a file.\n");
+            printf("Use -l to log the complete session to a timestamped file, or -l FILE for specific file.\n");
             printf("Use -v for verbose output including privilege detection details.\n");
             printf("Use -u to run commands as a specific target user (requires sudoers permission).\n");
             return EXIT_SUCCESS;
@@ -280,12 +299,22 @@ int main(int argc, char *argv[]) {
         } else if (strcmp(argv[i], "--verbose") == 0 || strcmp(argv[i], "-v") == 0) {
             verbose_mode = 1;
         } else if (strcmp(argv[i], "--log-session") == 0 || strcmp(argv[i], "-l") == 0) {
-            if (i + 1 >= argc) {
-                fprintf(stderr, "sudosh: option '%s' requires an argument\n", argv[i]);
-                fprintf(stderr, "Try '%s --help' for more information.\n", argv[0]);
-                return EXIT_FAILURE;
+            /* Check if next argument exists and is not another flag */
+            if (i + 1 < argc && argv[i + 1][0] != '-') {
+                /* Use specified filename */
+                session_logfile = argv[++i];
+            } else {
+                /* Create timestamped logfile in current directory */
+                static char timestamp_logfile[256];
+                time_t now = time(NULL);
+                struct tm *tm_info = localtime(&now);
+                snprintf(timestamp_logfile, sizeof(timestamp_logfile),
+                        "sudosh-session-%04d%02d%02d-%02d%02d%02d.log",
+                        tm_info->tm_year + 1900, tm_info->tm_mon + 1, tm_info->tm_mday,
+                        tm_info->tm_hour, tm_info->tm_min, tm_info->tm_sec);
+                session_logfile = timestamp_logfile;
+                printf("sudosh: logging session to %s\n", session_logfile);
             }
-            session_logfile = argv[++i];
         } else if (strcmp(argv[i], "--user") == 0 || strcmp(argv[i], "-u") == 0) {
             if (i + 1 >= argc) {
                 fprintf(stderr, "sudosh: option '%s' requires an argument\n", argv[i]);

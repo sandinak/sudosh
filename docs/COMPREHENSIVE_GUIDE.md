@@ -1,42 +1,100 @@
-# Sudosh - Comprehensive Guide
+# Sudosh - User Guide
 
 **Author**: Branson Matheson <branson@sandsite.org>
+**Version**: 1.4.0
 
 ## Overview
 
-Sudosh is a secure, interactive sudo shell that provides elevated privileges with extensive logging, security protections, and audit capabilities. This comprehensive guide covers all aspects of sudosh including features, security enhancements, implementation details, and troubleshooting.
+Sudosh is a secure, interactive sudo shell that provides elevated privileges with extensive logging, security protections, and audit capabilities. This guide covers installation, usage, and administration of sudosh.
 
 ## Table of Contents
 
-1. [Core Features](#core-features)
-2. [Security Features](#security-features)
-3. [Interactive Enhancements](#interactive-enhancements)
-4. [Target User Functionality](#target-user-functionality)
-5. [Installation and Configuration](#installation-and-configuration)
-6. [Usage Examples](#usage-examples)
-7. [Security Testing](#security-testing)
+1. [Quick Start](#quick-start)
+2. [Installation](#installation)
+3. [Command Line Options](#command-line-options)
+4. [Interactive Features](#interactive-features)
+5. [Security Features](#security-features)
+6. [Configuration](#configuration)
+7. [Logging and Auditing](#logging-and-auditing)
 8. [Troubleshooting](#troubleshooting)
-9. [Development and Contributing](#development-and-contributing)
+9. [Advanced Usage](#advanced-usage)
 
-## Core Features
+## Quick Start
 
-### Interactive Shell Environment
-- **Command Prompt**: Professional `root@hostname:/path##` prompt
-- **Session Management**: Complete session logging and audit trails
-- **Command History**: Persistent history with timestamps in `~/.sudosh_history`
-- **Built-in Commands**: `help`, `history`, `commands`, `cd`, `pwd`, `exit`
+### Basic Usage
+```bash
+# Start sudosh with default settings
+sudo sudosh
 
-### Authentication and Authorization
-- **PAM Integration**: Secure authentication using system PAM modules
-- **Sudoers Validation**: Comprehensive sudoers file parsing and validation
-- **Group Membership**: Support for `wheel` and `sudo` groups
-- **SSSD Integration**: Enterprise authentication with Active Directory/LDAP
+# Start with session logging to timestamped file
+sudo sudosh -l
 
-### Comprehensive Logging
-- **Syslog Integration**: All commands logged to system syslog
-- **Session Logging**: Optional complete session recording
-- **Command Auditing**: Detailed command execution tracking
-- **Security Events**: Authentication failures and security violations
+# Start with session logging to specific file
+sudo sudosh -l /var/log/my-session.log
+
+# Start with verbose output
+sudo sudosh -v
+
+# Run commands as specific user
+sudo sudosh -u username
+```
+
+### First Time Setup
+1. Ensure you're in the `wheel` or `sudo` group
+2. Run `sudo sudosh` to start an interactive session
+3. Use `help` command to see available features
+4. Use `history` to see command history
+5. Use `exit` or Ctrl-D to end session
+
+## Installation
+
+### Prerequisites
+- Linux or macOS system
+- GCC compiler
+- PAM development libraries
+- Make utility
+
+### Build from Source
+```bash
+git clone https://github.com/sandinak/sudosh.git
+cd sudosh
+make
+sudo make install
+```
+
+### Package Installation
+```bash
+# Debian/Ubuntu
+sudo apt-get install sudosh
+
+# Red Hat/CentOS
+sudo yum install sudosh
+
+# macOS with Homebrew
+brew install sudosh
+```
+
+## Command Line Options
+
+### Available Options
+- `-h, --help`: Show help message and exit
+- `--version`: Show version information and exit
+- `-v, --verbose`: Enable verbose output for debugging
+- `-l, --log-session [FILE]`: Log session to file (timestamped if no file specified)
+- `-u, --user USER`: Run commands as target user (requires sudoers permission)
+
+### Session Logging Examples
+```bash
+# Create timestamped log in current directory
+sudosh -l
+# Creates: sudosh-session-20250715-143022.log
+
+# Log to specific file
+sudosh -l /var/log/admin-session.log
+
+# Combine with other options
+sudosh -l -v -u postgres
+```
 
 ## Security Features
 

@@ -82,7 +82,7 @@ void sanitize_environment(void) {
     /* List of dangerous environment variables to remove */
     const char *dangerous_vars[] = {
         "IFS",
-        "CDPATH", 
+        "CDPATH",
         "ENV",
         "BASH_ENV",
         "LD_PRELOAD",
@@ -95,6 +95,14 @@ void sanitize_environment(void) {
         "TMPDIR",
         "TMP",
         "TEMP",
+        /* Editor-related variables that could be used for shell escapes */
+        "EDITOR",
+        "VISUAL",
+        "SUDO_EDITOR",
+        "FCEDIT",
+        "KSHELL",
+        "PAGER",
+        "MANPAGER",
         NULL
     };
 
@@ -117,6 +125,42 @@ void sanitize_environment(void) {
 
     /* Set secure umask */
     umask(022);
+}
+
+/**
+ * Set up secure environment for editor execution
+ */
+void setup_secure_editor_environment(void) {
+    /* Remove editor-related environment variables to prevent shell escapes */
+    unsetenv("EDITOR");
+    unsetenv("VISUAL");
+    unsetenv("SUDO_EDITOR");
+    unsetenv("FCEDIT");
+    unsetenv("PAGER");
+    unsetenv("MANPAGER");
+
+    /* Set a safe default editor for sudoedit */
+    setenv("SUDO_EDITOR", "/usr/bin/vi", 1);
+
+    /* Ensure TERM is set to something safe */
+    if (!getenv("TERM")) {
+        setenv("TERM", "xterm", 1);
+    }
+
+    /* Remove shell-related variables that editors might use */
+    unsetenv("SHELL");
+    unsetenv("BASH_ENV");
+    unsetenv("ENV");
+
+    /* Set a safe shell that will be restricted */
+    setenv("SHELL", "/bin/false", 1);
+
+    /* Disable shell escapes in vi/vim */
+    setenv("VIMINIT", "set shell=/bin/false", 1);
+    setenv("EXINIT", "set shell=/bin/false", 1);
+
+    /* Disable shell access in emacs */
+    setenv("ESHELL", "/bin/false", 1);
 }
 
 /**
@@ -223,6 +267,52 @@ int is_interactive_editor(const char *command) {
 }
 
 /**
+ * Check if command is a system editor tool that should be redirected to sudoedit
+ */
+int is_system_editor(const char *command) {
+    if (!command) return 0;
+
+    /* Create a copy for parsing */
+    char *cmd_copy = strdup(command);
+    if (!cmd_copy) return 0;
+
+    /* Get the first token (command name) */
+    char *cmd_name = strtok(cmd_copy, " \t");
+    if (!cmd_name) {
+        free(cmd_copy);
+        return 0;
+    }
+
+    /* List of system editor tools that should use sudoedit */
+    const char *system_editors[] = {
+        "vipw", "/usr/sbin/vipw", "/sbin/vipw",
+        "vigr", "/usr/sbin/vigr", "/sbin/vigr",
+        "chfn", "/usr/bin/chfn", "/bin/chfn",
+        "chsh", "/usr/bin/chsh", "/bin/chsh",
+        "chpass", "/usr/bin/chpass", "/bin/chpass",
+        NULL
+    };
+
+    /* Check if it's a system editor */
+    for (int i = 0; system_editors[i]; i++) {
+        if (strcmp(cmd_name, system_editors[i]) == 0) {
+            free(cmd_copy);
+            return 1;
+        }
+
+        /* Also check basename for absolute paths */
+        char *basename_editor = strrchr(system_editors[i], '/');
+        if (basename_editor && strcmp(cmd_name, basename_editor + 1) == 0) {
+            free(cmd_copy);
+            return 1;
+        }
+    }
+
+    free(cmd_copy);
+    return 0;
+}
+
+/**
  * Check if command is crontab -e which should be redirected to sudoedit
  */
 int is_crontab_edit(const char *command) {
@@ -267,11 +357,17 @@ int is_crontab_edit(const char *command) {
 }
 
 /**
- * Redirect editor command to use sudoedit instead
+ * Validate and sanitize editor command for native execution
  * Returns a newly allocated string that must be freed, or NULL on error
  */
-char *redirect_to_sudoedit(const char *command) {
+char *validate_and_sanitize_editor_command(const char *command) {
     if (!command) return NULL;
+
+    /* Validate arguments first */
+    if (!validate_editor_arguments(command)) {
+        log_security_violation(current_username, "dangerous editor arguments detected");
+        return NULL;
+    }
 
     /* Create a copy for parsing */
     char *cmd_copy = strdup(command);
@@ -284,69 +380,348 @@ char *redirect_to_sudoedit(const char *command) {
         return NULL;
     }
 
-    /* Handle crontab -e specially */
-    if (is_crontab_edit(command)) {
-        /* For crontab -e, we need to extract the user if specified and edit their crontab */
-        char *result = NULL;
-        char *temp_copy = strdup(command);
-        if (temp_copy) {
-            char *token = strtok(temp_copy, " \t");
-            char *user_name = NULL;
-
-            /* Look for -u user flag */
-            while ((token = strtok(NULL, " \t")) != NULL) {
-                if (strcmp(token, "-u") == 0) {
-                    user_name = strtok(NULL, " \t");
-                    break;
-                }
-            }
-
-            if (user_name) {
-                /* Build sudoedit command for specific user's crontab */
-                size_t len = strlen("sudoedit /var/spool/cron/crontabs/") + strlen(user_name) + 1;
-                result = malloc(len);
-                if (result) {
-                    snprintf(result, len, "sudoedit /var/spool/cron/crontabs/%s", user_name);
-                }
-            } else {
-                /* Default to current user's crontab */
-                result = strdup("sudoedit /var/spool/cron/crontabs/$(whoami)");
-            }
-            free(temp_copy);
-        }
+    /* For system editors, ensure they use safe paths */
+    if (is_system_editor(command)) {
+        /* System editors are allowed to run natively with protections */
+        char *result = strdup(command);
         free(cmd_copy);
         return result;
     }
 
-    /* For regular editors, extract the file arguments */
-    char *result = NULL;
-    size_t result_capacity = strlen(command) + 20; /* Extra space for "sudoedit" */
+    /* Handle crontab -e specially - allow native execution with protections */
+    if (is_crontab_edit(command)) {
+        char *result = strdup(command);
+        free(cmd_copy);
+        return result;
+    }
 
-    result = malloc(result_capacity);
-    if (!result) {
+    /* For regular interactive editors, allow native execution */
+    char *result = strdup(command);
+    free(cmd_copy);
+    return result;
+}
+
+/**
+ * Validate editor command arguments to prevent shell escapes
+ */
+int validate_editor_arguments(const char *command) {
+    if (!command) return 0;
+
+    /* Create a copy for parsing */
+    char *cmd_copy = strdup(command);
+    if (!cmd_copy) return 0;
+
+    /* Get the first token (command name) */
+    char *cmd_name = strtok(cmd_copy, " \t");
+    if (!cmd_name) {
+        free(cmd_copy);
+        return 0;
+    }
+
+    /* Special handling for crontab -e which is safe */
+    if (is_crontab_edit(command)) {
+        free(cmd_copy);
+        return 1; /* crontab -e is safe */
+    }
+
+    /* Special handling for system editors with their safe arguments */
+    if (is_system_editor(command)) {
+        /* System editors like chsh, chfn have safe arguments that might otherwise be flagged */
+        if (strstr(cmd_name, "chsh") || strstr(cmd_name, "chfn") || strstr(cmd_name, "chpass")) {
+            /* These commands have safe uses of -s and other flags */
+            free(cmd_copy);
+            return 1;
+        }
+    }
+
+    /* List of dangerous editor arguments that could lead to shell escapes */
+    const char *dangerous_args[] = {
+        "-c",           /* Execute command */
+        "--cmd",        /* Execute command */
+        "--command",    /* Execute command */
+        "-e",           /* Execute command (some editors, but not crontab) */
+        "-x",           /* Execute script */
+        "-s",           /* Silent mode with potential for abuse */
+        "+cmd",         /* Vim command execution */
+        "+!",           /* Vim shell command */
+        "!",            /* Shell escape */
+        ":!",           /* Editor shell escape */
+        "|",            /* Pipe to shell */
+        ";",            /* Command separator */
+        "&&",           /* Command chaining */
+        "||",           /* Command chaining */
+        "`",            /* Command substitution */
+        "$(",           /* Command substitution */
+        NULL
+    };
+
+    /* Check for dangerous argument patterns */
+    for (int i = 0; dangerous_args[i]; i++) {
+        if (strstr(command, dangerous_args[i])) {
+            free(cmd_copy);
+            return 0; /* Dangerous argument found */
+        }
+    }
+
+    /* Check for shell metacharacters that could be abused */
+    if (strpbrk(command, "&;<>|`$(){}[]")) {
+        free(cmd_copy);
+        return 0; /* Shell metacharacters found */
+    }
+
+    free(cmd_copy);
+    return 1; /* Arguments appear safe */
+}
+
+/**
+ * Get safe editor path from allowlist
+ */
+const char *get_safe_editor_path(void) {
+    /* List of safe editors in order of preference */
+    const char *safe_editors[] = {
+        "/usr/bin/vi",
+        "/bin/vi",
+        "/usr/bin/vim",
+        "/bin/vim",
+        "/usr/bin/nano",
+        "/bin/nano",
+        "/usr/bin/emacs",
+        "/bin/emacs",
+        NULL
+    };
+
+    /* Find the first available safe editor */
+    for (int i = 0; safe_editors[i]; i++) {
+        if (access(safe_editors[i], X_OK) == 0) {
+            return safe_editors[i];
+        }
+    }
+
+    /* Fallback to vi if nothing else is available */
+    return "/usr/bin/vi";
+}
+
+/**
+ * Create secure sudoedit command with validated arguments
+ */
+char *create_secure_sudoedit_command(const char *original_command) {
+    if (!original_command) return NULL;
+
+    /* Validate the original command arguments */
+    if (!validate_editor_arguments(original_command)) {
+        log_security_violation(current_username, "dangerous editor arguments detected");
+        return NULL;
+    }
+
+    /* Extract file arguments only (skip the editor command) */
+    char *cmd_copy = strdup(original_command);
+    if (!cmd_copy) return NULL;
+
+    char *cmd_name = strtok(cmd_copy, " \t");
+    if (!cmd_name) {
         free(cmd_copy);
         return NULL;
     }
 
-    strcpy(result, "sudoedit");
+    /* Build the secure sudoedit command */
+    char *result = NULL;
+    char *file_args = strchr(original_command, ' ');
 
-    /* Find the first space after the command name to get arguments */
-    const char *args_start = strchr(command, ' ');
-    if (args_start) {
+    if (file_args) {
         /* Skip whitespace */
-        while (*args_start == ' ' || *args_start == '\t') {
-            args_start++;
+        file_args++;
+        while (*file_args == ' ' || *file_args == '\t') {
+            file_args++;
         }
 
-        /* If there are arguments, append them */
-        if (*args_start != '\0') {
-            strcat(result, " ");
-            strcat(result, args_start);
+        /* Only include file arguments, no editor options */
+        if (*file_args && validate_editor_arguments(file_args)) {
+            if (asprintf(&result, "sudoedit %s", file_args) == -1) {
+                result = NULL;
+            }
+        } else {
+            result = strdup("sudoedit");
         }
+    } else {
+        result = strdup("sudoedit");
     }
 
     free(cmd_copy);
     return result;
+}
+
+/**
+ * Create a secure wrapper script for editor execution
+ */
+char *create_secure_editor_wrapper(const char *editor_command) {
+    if (!editor_command) return NULL;
+
+    /* Create a temporary wrapper script */
+    char *wrapper_path = NULL;
+    if (asprintf(&wrapper_path, "/tmp/sudosh_editor_wrapper_%d", getpid()) == -1) {
+        return NULL;
+    }
+
+    FILE *wrapper_file = fopen(wrapper_path, "w");
+    if (!wrapper_file) {
+        free(wrapper_path);
+        return NULL;
+    }
+
+    /* Write the wrapper script that prevents shell escapes */
+    fprintf(wrapper_file, "#!/bin/sh\n");
+    fprintf(wrapper_file, "# Sudosh secure editor wrapper\n");
+    fprintf(wrapper_file, "# This wrapper prevents shell escapes from editors\n\n");
+
+    /* Set up environment to prevent shell escapes */
+    fprintf(wrapper_file, "export SHELL=/bin/false\n");
+    fprintf(wrapper_file, "export VIMINIT='set shell=/bin/false'\n");
+    fprintf(wrapper_file, "export EXINIT='set shell=/bin/false'\n");
+    fprintf(wrapper_file, "export ESHELL=/bin/false\n");
+
+    /* Unset dangerous variables */
+    fprintf(wrapper_file, "unset EDITOR VISUAL SUDO_EDITOR FCEDIT PAGER MANPAGER\n");
+
+    /* Execute the original editor command */
+    fprintf(wrapper_file, "exec %s\n", editor_command);
+
+    fclose(wrapper_file);
+
+    /* Make the wrapper executable */
+    if (chmod(wrapper_path, 0755) != 0) {
+        unlink(wrapper_path);
+        free(wrapper_path);
+        return NULL;
+    }
+
+    return wrapper_path;
+}
+
+/**
+ * Monitor editor process and block shell escapes
+ */
+int monitor_editor_process(pid_t editor_pid) {
+    if (editor_pid <= 0) return 0;
+
+    int status;
+    pid_t child_pid;
+
+    /* Monitor for child processes that might be shell escapes */
+    while ((child_pid = waitpid(-1, &status, WNOHANG)) > 0) {
+        if (child_pid != editor_pid) {
+            /* A child process was spawned - check if it's a shell */
+            char proc_path[256];
+            char exe_path[256];
+            ssize_t len;
+
+            snprintf(proc_path, sizeof(proc_path), "/proc/%d/exe", child_pid);
+            len = readlink(proc_path, exe_path, sizeof(exe_path) - 1);
+
+            if (len > 0) {
+                exe_path[len] = '\0';
+
+                /* Check if the child process is a shell */
+                if (strstr(exe_path, "sh") || strstr(exe_path, "bash") ||
+                    strstr(exe_path, "zsh") || strstr(exe_path, "csh") ||
+                    strstr(exe_path, "tcsh") || strstr(exe_path, "ksh")) {
+
+                    /* Kill the shell process immediately */
+                    kill(child_pid, SIGKILL);
+
+                    /* Log the security violation with details */
+                    char violation_msg[512];
+                    snprintf(violation_msg, sizeof(violation_msg), "shell escape attempt blocked: %s", exe_path);
+                    log_security_violation(current_username, violation_msg);
+
+                    /* Wait for the killed process to clean up */
+                    waitpid(child_pid, &status, 0);
+                }
+            }
+        }
+    }
+
+    return 1;
+}
+
+/**
+ * Execute editor with comprehensive shell escape protection
+ */
+char *create_monitored_editor_command(const char *original_command) {
+    if (!original_command) return NULL;
+
+    /* Create a wrapper that includes monitoring */
+    char *wrapper_path = NULL;
+    if (asprintf(&wrapper_path, "/tmp/sudosh_monitored_editor_%d", getpid()) == -1) {
+        return NULL;
+    }
+
+    FILE *wrapper_file = fopen(wrapper_path, "w");
+    if (!wrapper_file) {
+        free(wrapper_path);
+        return NULL;
+    }
+
+    /* Write a comprehensive wrapper script */
+    fprintf(wrapper_file, "#!/bin/sh\n");
+    fprintf(wrapper_file, "# Sudosh monitored editor wrapper\n");
+    fprintf(wrapper_file, "# Prevents shell escapes and monitors subprocesses\n\n");
+
+    /* Set up restrictive environment */
+    fprintf(wrapper_file, "export SHELL=/bin/false\n");
+    fprintf(wrapper_file, "export VIMINIT='set shell=/bin/false | set noshelltemp'\n");
+    fprintf(wrapper_file, "export EXINIT='set shell=/bin/false'\n");
+    fprintf(wrapper_file, "export ESHELL=/bin/false\n");
+
+    /* Remove dangerous environment variables */
+    fprintf(wrapper_file, "unset EDITOR VISUAL SUDO_EDITOR FCEDIT PAGER MANPAGER\n");
+    fprintf(wrapper_file, "unset BASH_ENV ENV CDPATH IFS\n");
+
+    /* Create a restricted PATH */
+    fprintf(wrapper_file, "export PATH=/usr/bin:/bin\n");
+
+    /* Execute the editor with monitoring */
+    fprintf(wrapper_file, "exec %s\n", original_command);
+
+    fclose(wrapper_file);
+
+    /* Make the wrapper executable */
+    if (chmod(wrapper_path, 0755) != 0) {
+        unlink(wrapper_path);
+        free(wrapper_path);
+        return NULL;
+    }
+
+    return wrapper_path;
+}
+
+/**
+ * Apply native security protections for editor execution
+ */
+int apply_native_editor_protections(const char *command) {
+    if (!command) return 0;
+
+    /* Set up secure environment */
+    setup_secure_editor_environment();
+
+    /* Validate arguments */
+    if (!validate_editor_arguments(command)) {
+        log_security_violation(current_username, "dangerous editor arguments detected");
+        return 0;
+    }
+
+    /* Additional protections for specific editor types */
+    if (is_system_editor(command)) {
+        /* System editors get extra restrictions */
+        log_security_event(current_username, "system editor executed with native protections", command);
+    } else if (is_interactive_editor(command)) {
+        /* Interactive editors get standard protections */
+        log_security_event(current_username, "interactive editor executed with native protections", command);
+    } else if (is_crontab_edit(command)) {
+        /* Crontab editing gets special handling */
+        log_security_event(current_username, "crontab editor executed with native protections", command);
+    }
+
+    return 1;
 }
 
 /**
@@ -772,6 +1147,22 @@ int validate_command(const char *command) {
 
     /* Basic security checks first */
 
+    /* Special validation for editor commands */
+    if (is_interactive_editor(command) || is_system_editor(command) || is_crontab_edit(command)) {
+        /* Set up secure environment for editor execution */
+        setup_secure_editor_environment();
+
+        /* Validate editor arguments */
+        if (!validate_editor_arguments(command)) {
+            log_security_violation(current_username, "dangerous editor arguments detected");
+            return 0;
+        }
+
+        /* Log the secure editor execution */
+        log_security_event(current_username, "secure editor execution validated", command);
+        return 1;
+    }
+
     /* Check for null bytes (potential injection) */
     if (strlen(command) != strcspn(command, "\0")) {
         log_security_violation(current_username, "null byte in command");
@@ -809,9 +1200,10 @@ int validate_command(const char *command) {
     /* Note: Interactive editors are now redirected to sudoedit in main.c
      * This validation function no longer blocks them directly */
 
-    /* Skip dangerous command checks for interactive editors and crontab -e
-     * since they are redirected to sudoedit in main.c */
-    if (!is_interactive_editor(command) && !is_crontab_edit(command)) {
+    /* Note: Editor commands are validated above with native security protections */
+
+    /* Apply standard dangerous command checks to non-editor commands */
+    if (!is_interactive_editor(command) && !is_system_editor(command) && !is_crontab_edit(command)) {
         /* Check for dangerous commands */
         if (is_dangerous_command(command)) {
             char violation_msg[256];

@@ -57,7 +57,7 @@ extern int verbose_mode;
 #define MAX_COMMAND_LENGTH 4096
 #define MAX_USERNAME_LENGTH 256
 #define MAX_PASSWORD_LENGTH 256
-#define SUDOSH_VERSION "1.3.0"
+#define SUDOSH_VERSION "1.4.0"
 #define INACTIVITY_TIMEOUT 300  /* 300 seconds (5 minutes) */
 
 /* Platform-specific compatibility macros */
@@ -220,6 +220,7 @@ void add_to_history_buffer(const char *command);
 
 /* Security functions */
 void sanitize_environment(void);
+void setup_secure_editor_environment(void);
 void setup_signal_handlers(void);
 void set_current_username(const char *username);
 void drop_privileges(void);
@@ -236,8 +237,16 @@ void cleanup_security(void);
 int is_shell_command(const char *command);
 int is_ssh_command(const char *command);
 int is_interactive_editor(const char *command);
+int is_system_editor(const char *command);
 int is_crontab_edit(const char *command);
-char *redirect_to_sudoedit(const char *command);
+char *validate_and_sanitize_editor_command(const char *command);
+int validate_editor_arguments(const char *command);
+const char *get_safe_editor_path(void);
+char *create_secure_sudoedit_command(const char *original_command);
+int apply_native_editor_protections(const char *command);
+char *create_secure_editor_wrapper(const char *editor_command);
+int monitor_editor_process(pid_t editor_pid);
+char *create_monitored_editor_command(const char *original_command);
 int is_safe_command(const char *command);
 int is_dangerous_command(const char *command);
 int check_dangerous_flags(const char *command);

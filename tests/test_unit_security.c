@@ -214,53 +214,111 @@ int test_interactive_editor_detection() {
     return 1;
 }
 
-/* Test editor redirection functionality */
-int test_editor_redirection() {
-    /* Test basic editor redirection */
-    char *redirected = redirect_to_sudoedit("vi /etc/passwd");
-    TEST_ASSERT_NOT_NULL(redirected, "vi command should be redirected");
-    if (redirected) {
-        TEST_ASSERT_STR_EQ("sudoedit /etc/passwd", redirected, "vi should redirect to sudoedit with same file");
-        free(redirected);
+/* Test native editor protection functionality */
+int test_native_editor_protection() {
+    /* Test basic editor validation and sanitization */
+    char *sanitized = validate_and_sanitize_editor_command("vi /etc/passwd");
+    TEST_ASSERT_NOT_NULL(sanitized, "vi command should be validated");
+    if (sanitized) {
+        TEST_ASSERT_STR_EQ("vi /etc/passwd", sanitized, "safe vi command should remain unchanged");
+        free(sanitized);
     }
 
     /* Test vim with multiple files */
-    redirected = redirect_to_sudoedit("vim file1.txt file2.txt");
-    TEST_ASSERT_NOT_NULL(redirected, "vim with multiple files should be redirected");
-    if (redirected) {
-        TEST_ASSERT_STR_EQ("sudoedit file1.txt file2.txt", redirected, "vim should redirect to sudoedit with same files");
-        free(redirected);
+    sanitized = validate_and_sanitize_editor_command("vim file1.txt file2.txt");
+    TEST_ASSERT_NOT_NULL(sanitized, "vim with multiple files should be validated");
+    if (sanitized) {
+        TEST_ASSERT_STR_EQ("vim file1.txt file2.txt", sanitized, "safe vim command should remain unchanged");
+        free(sanitized);
     }
 
-    /* Test emacs with options */
-    redirected = redirect_to_sudoedit("emacs -nw file.txt");
-    TEST_ASSERT_NOT_NULL(redirected, "emacs with options should be redirected");
-    if (redirected) {
-        TEST_ASSERT_STR_EQ("sudoedit -nw file.txt", redirected, "emacs should redirect to sudoedit with same options");
-        free(redirected);
+    /* Test system editor validation */
+    sanitized = validate_and_sanitize_editor_command("vipw");
+    TEST_ASSERT_NOT_NULL(sanitized, "vipw command should be validated");
+    if (sanitized) {
+        TEST_ASSERT_STR_EQ("vipw", sanitized, "safe vipw command should remain unchanged");
+        free(sanitized);
     }
 
-    /* Test crontab -e */
-    redirected = redirect_to_sudoedit("crontab -e");
-    TEST_ASSERT_NOT_NULL(redirected, "crontab -e should be redirected");
-    if (redirected) {
-        /* Should redirect to edit current user's crontab */
-        TEST_ASSERT(strstr(redirected, "sudoedit") != NULL, "crontab -e should redirect to sudoedit");
-        TEST_ASSERT(strstr(redirected, "crontab") != NULL, "should reference crontab file");
-        free(redirected);
+    /* Test crontab -e validation */
+    sanitized = validate_and_sanitize_editor_command("crontab -e");
+    TEST_ASSERT_NOT_NULL(sanitized, "crontab -e should be validated");
+    if (sanitized) {
+        TEST_ASSERT_STR_EQ("crontab -e", sanitized, "safe crontab command should remain unchanged");
+        free(sanitized);
     }
 
-    /* Test crontab -e -u user */
-    redirected = redirect_to_sudoedit("crontab -e -u testuser");
-    TEST_ASSERT_NOT_NULL(redirected, "crontab -e -u should be redirected");
-    if (redirected) {
-        TEST_ASSERT_STR_EQ("sudoedit /var/spool/cron/crontabs/testuser", redirected, "crontab -e -u should redirect to user's crontab");
-        free(redirected);
-    }
+    /* Test dangerous commands are rejected */
+    sanitized = validate_and_sanitize_editor_command("vi -c 'shell'");
+    TEST_ASSERT_NULL(sanitized, "dangerous vi command should be rejected");
+
+    sanitized = validate_and_sanitize_editor_command("vim +!sh");
+    TEST_ASSERT_NULL(sanitized, "dangerous vim command should be rejected");
+
+    /* Test native protection application */
+    TEST_ASSERT_EQ(1, apply_native_editor_protections("vi /etc/passwd"), "safe editor should pass protection");
+    TEST_ASSERT_EQ(0, apply_native_editor_protections("vi -c 'shell'"), "dangerous editor should fail protection");
 
     /* Test NULL input */
-    redirected = redirect_to_sudoedit(NULL);
-    TEST_ASSERT_NULL(redirected, "NULL input should return NULL");
+    sanitized = validate_and_sanitize_editor_command(NULL);
+    TEST_ASSERT_NULL(sanitized, "NULL input should return NULL");
+
+    return 1;
+}
+
+/* Test system editor detection functions directly */
+int test_system_editor_detection() {
+    /* Test system editor detection */
+    TEST_ASSERT_EQ(1, is_system_editor("vipw"), "vipw should be detected as system editor");
+    TEST_ASSERT_EQ(1, is_system_editor("vigr"), "vigr should be detected as system editor");
+    TEST_ASSERT_EQ(1, is_system_editor("chfn"), "chfn should be detected as system editor");
+    TEST_ASSERT_EQ(1, is_system_editor("chsh"), "chsh should be detected as system editor");
+    TEST_ASSERT_EQ(1, is_system_editor("chpass"), "chpass should be detected as system editor");
+
+    /* Test with absolute paths */
+    TEST_ASSERT_EQ(1, is_system_editor("/usr/sbin/vipw"), "absolute vipw path should be detected");
+    TEST_ASSERT_EQ(1, is_system_editor("/usr/bin/chfn"), "absolute chfn path should be detected");
+
+    /* Test with arguments */
+    TEST_ASSERT_EQ(1, is_system_editor("chfn username"), "chfn with args should be detected");
+    TEST_ASSERT_EQ(1, is_system_editor("chsh -s /bin/bash"), "chsh with args should be detected");
+
+    /* Test non-system editors */
+    TEST_ASSERT_EQ(0, is_system_editor("vi"), "vi should not be detected as system editor");
+    TEST_ASSERT_EQ(0, is_system_editor("vim"), "vim should not be detected as system editor");
+    TEST_ASSERT_EQ(0, is_system_editor("ls"), "ls should not be detected as system editor");
+
+    /* Test edge cases */
+    TEST_ASSERT_EQ(0, is_system_editor(""), "empty string should not be detected");
+    TEST_ASSERT_EQ(0, is_system_editor(NULL), "NULL should not be detected");
+
+    return 1;
+}
+
+/* Test editor argument validation mechanisms */
+int test_sudoedit_protection() {
+    /* Test argument validation */
+    TEST_ASSERT_EQ(1, validate_editor_arguments("vi /etc/passwd"), "safe vi command should pass");
+    TEST_ASSERT_EQ(1, validate_editor_arguments("vim file.txt"), "safe vim command should pass");
+    TEST_ASSERT_EQ(0, validate_editor_arguments("vi -c 'shell'"), "dangerous vi command should fail");
+    TEST_ASSERT_EQ(0, validate_editor_arguments("vim +!sh"), "dangerous vim command should fail");
+    TEST_ASSERT_EQ(0, validate_editor_arguments("emacs file.txt; sh"), "command injection should fail");
+
+    /* Test secure command creation (still used internally) */
+    char *secure_cmd = create_secure_sudoedit_command("vi /etc/passwd");
+    TEST_ASSERT_NOT_NULL(secure_cmd, "secure command should be created");
+    if (secure_cmd) {
+        TEST_ASSERT_STR_EQ("sudoedit /etc/passwd", secure_cmd, "should create secure sudoedit command");
+        free(secure_cmd);
+    }
+
+    secure_cmd = create_secure_sudoedit_command("vi -c 'shell'");
+    TEST_ASSERT_NULL(secure_cmd, "dangerous command should be rejected");
+
+    /* Test native editor protection application */
+    TEST_ASSERT_EQ(1, apply_native_editor_protections("vi /etc/passwd"), "safe editor should pass");
+    TEST_ASSERT_EQ(0, apply_native_editor_protections("vi -c 'shell'"), "dangerous editor should fail");
+    TEST_ASSERT_EQ(1, apply_native_editor_protections("vipw"), "system editor should pass with protections");
 
     return 1;
 }
@@ -426,7 +484,9 @@ TEST_SUITE_BEGIN("Unit Tests - Security")
     RUN_TEST(test_dangerous_command_detection);
     RUN_TEST(test_ssh_command_detection);
     RUN_TEST(test_interactive_editor_detection);
-    RUN_TEST(test_editor_redirection);
+    RUN_TEST(test_system_editor_detection);
+    RUN_TEST(test_native_editor_protection);
+    RUN_TEST(test_sudoedit_protection);
     RUN_TEST(test_crontab_edit_detection);
     RUN_TEST(test_safe_command_detection);
     RUN_TEST(test_signal_handling);

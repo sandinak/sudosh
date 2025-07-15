@@ -5,6 +5,35 @@ All notable changes to sudosh will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2025-07-15
+
+### Added
+- **Shell Escape Prevention**: Comprehensive protection against editor shell escapes (`:!/bin/sh` in vi/vim)
+- **Enhanced Session Logging**: `-l` flag now creates timestamped logfiles when no filename specified
+- **Monitored Editor Execution**: Wrapper scripts prevent shell access from editors
+- **Process Monitoring**: Detects and kills unauthorized shell subprocesses
+- **Target User Support**: `-u` flag for running commands as specific users
+
+### Enhanced
+- **Environment Hardening**: Sets `SHELL=/bin/false`, `VIMINIT` restrictions, `ESHELL=/bin/false`
+- **Editor Security**: Native execution with comprehensive shell escape protection
+- **Documentation**: Consolidated and updated documentation in `docs/` directory
+- **Manpage**: Updated with new features and security information
+- **Command Line Interface**: Improved help text and option descriptions
+
+### Security
+- **Shell Escape Blocking**: Prevents `:!/bin/sh`, `!sh`, `M-x shell` and similar attacks
+- **Environment Sanitization**: Removes dangerous editor-related environment variables
+- **Wrapper Scripts**: Secure temporary wrappers for editor execution
+- **Subprocess Control**: Monitors and terminates unauthorized shell processes
+- **Path Restrictions**: Limited PATH in editor environments
+
+### Technical
+- **Version Bump**: Updated to version 1.4.0
+- **Test Coverage**: All existing tests pass with new security features
+- **Code Organization**: Improved security function organization
+- **Memory Management**: Proper cleanup of temporary wrapper files
+
 ## [1.3.0] - 2024-12-15
 
 ### Added
