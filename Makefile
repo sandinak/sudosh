@@ -112,6 +112,10 @@ $(OBJDIR)/$(TESTDIR):
 $(BINDIR)/test_%: $(OBJDIR)/$(TESTDIR)/test_%.o $(LIB_OBJECTS) | $(BINDIR)
 	$(CC) $^ -o $@ $(LDFLAGS)
 
+# Special rule for pthread-dependent tests
+$(BINDIR)/test_security_race_conditions: $(OBJDIR)/$(TESTDIR)/test_security_race_conditions.o $(LIB_OBJECTS) | $(BINDIR)
+	$(CC) $^ -o $@ $(LDFLAGS) -lpthread
+
 # Build all tests
 tests: $(LIB_OBJECTS) | $(OBJDIR)/$(TESTDIR)
 tests: $(TEST_TARGETS)
