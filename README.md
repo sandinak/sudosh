@@ -624,13 +624,13 @@ make security-tests
   - Redirection: "file redirection is blocked for security reasons"
 
 **Extended Security Protections:**
-- **Pager security**: Added protections for dangerous pagers that can execute commands or spawn editors
-  - `less` (can execute shell commands with `!` and spawn editors with `v`)
-  - `more` (similar capabilities on some systems)
-  - `most` (advanced pager with command execution features)
-  - `pg` (traditional pager with potential security risks)
-- **Comprehensive blocking**: All interactive tools that can bypass security are now blocked
-- **Clear security messages**: Specific explanations for why each type of command is blocked
+- **Secure pager execution**: Pagers now run with security restrictions instead of being blocked entirely
+  - `less`, `more`, `most`, `pg` allowed with shell escape prevention
+  - Environment variables set to disable dangerous features (LESSSECURE=1, EDITOR=/bin/false)
+  - Shell command execution disabled while preserving file viewing functionality
+  - All pager usage logged for security auditing
+- **Comprehensive security**: Interactive tools that can bypass security are properly restricted
+- **Clear security messages**: Specific explanations for security restrictions and blocked operations
 
 **Documentation Updates:**
 - Updated man page with new help shortcut and security protections

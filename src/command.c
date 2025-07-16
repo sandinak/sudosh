@@ -162,6 +162,11 @@ int execute_command(struct command_info *cmd, struct user_info *user) {
             environ = cmd->envp;
         }
 
+        /* Set up secure environment for pagers */
+        if (is_secure_pager(cmd->command)) {
+            setup_secure_pager_environment();
+        }
+
         /* Change to target user privileges */
         if (target_pwd) {
             /* Running as specific target user */

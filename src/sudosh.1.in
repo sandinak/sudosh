@@ -238,6 +238,9 @@ sudosh implements intelligent "gut check" warnings that distinguish between safe
 .B cat, head, tail
 - File viewing commands on system files
 .IP \(bu 4
+.B less, more, most, pg
+- Pagers with security restrictions (shell escapes disabled)
+.IP \(bu 4
 .B ls, find, locate, grep
 - File listing and searching commands
 .IP \(bu 4
@@ -248,9 +251,6 @@ sudosh implements intelligent "gut check" warnings that distinguish between safe
 .IP \(bu 4
 .B Interactive editors: vi, vim, emacs, nano
 - Can execute shell commands and bypass security (use sudoedit instead)
-.IP \(bu 4
-.B Dangerous pagers: less, more, most
-- Can execute shell commands (!) or spawn editors (v) and bypass security
 .IP \(bu 4
 .B Shell commands: bash, sh, zsh, csh
 - Direct shell access is not permitted
@@ -316,6 +316,19 @@ When these commands are detected, sudosh displays a simplified warning message a
 - Commands with --overwrite, --force, or similar destructive options
 
 This helps prevent accidental execution of potentially destructive operations while reducing warning fatigue for experienced administrators.
+
+.B Secure Pager Execution:
+Pagers like \fBless\fR, \fBmore\fR, \fBmost\fR, and \fBpg\fR are allowed to run but with security restrictions to prevent shell escapes:
+.IP \(bu 4
+Shell command execution is disabled (LESSSECURE=1)
+.IP \(bu 4
+Editor spawning is prevented (EDITOR=/bin/false, VISUAL=/bin/false)
+.IP \(bu 4
+Shell access is blocked (SHELL=/bin/false)
+.IP \(bu 4
+Dangerous environment variables are cleared or overridden
+.IP \(bu 4
+All pager usage is logged for security auditing
 
 .SS Privilege Management
 .IP \(bu 4

@@ -232,9 +232,9 @@ void secure_terminal(void) {
 }
 
 /**
- * Check if command is a pager that could allow shell escape or editor spawning
+ * Check if command is a pager that needs secure execution
  */
-int is_dangerous_pager(const char *command) {
+int is_secure_pager(const char *command) {
     if (!command) return 0;
 
     /* Create a copy for parsing */
@@ -248,7 +248,7 @@ int is_dangerous_pager(const char *command) {
         return 0;
     }
 
-    /* List of pagers that can execute shell commands or spawn editors */
+    /* List of pagers that can be run securely with restrictions */
     const char *pagers[] = {
         "less", "/bin/less", "/usr/bin/less", "/usr/local/bin/less",
         "more", "/bin/more", "/usr/bin/more", "/usr/local/bin/more",
@@ -257,7 +257,7 @@ int is_dangerous_pager(const char *command) {
         NULL
     };
 
-    /* Check if it's a dangerous pager */
+    /* Check if it's a pager that needs secure execution */
     for (int i = 0; pagers[i]; i++) {
         if (strcmp(cmd_name, pagers[i]) == 0) {
             free(cmd_copy);
@@ -274,6 +274,36 @@ int is_dangerous_pager(const char *command) {
 
     free(cmd_copy);
     return 0;
+}
+
+/**
+ * Setup secure environment for pagers to prevent shell escapes
+ */
+void setup_secure_pager_environment(void) {
+    /* Disable shell command execution in less */
+    setenv("LESSSECURE", "1", 1);
+
+    /* Disable shell escapes in less */
+    setenv("LESSOPEN", "", 1);
+    setenv("LESSCLOSE", "", 1);
+
+    /* Disable editor spawning in less */
+    setenv("VISUAL", "/bin/false", 1);
+    setenv("EDITOR", "/bin/false", 1);
+
+    /* Disable shell for more/most */
+    setenv("SHELL", "/bin/false", 1);
+
+    /* Disable pager-specific dangerous features */
+    setenv("PAGER", "", 1);
+
+    /* Remove any existing dangerous environment variables */
+    unsetenv("LESS");
+    unsetenv("MORE");
+    unsetenv("MOST");
+
+    /* Set restrictive umask */
+    umask(0077);
 }
 
 /**
@@ -1060,12 +1090,11 @@ int validate_command(const char *command) {
         return 0;
     }
 
-    /* Block dangerous pagers that can execute shell commands or spawn editors */
-    if (is_dangerous_pager(command)) {
-        log_security_violation(current_username, "dangerous pager blocked");
-        fprintf(stderr, "sudosh: pagers like less/more/most are not permitted\n");
-        fprintf(stderr, "sudosh: these pagers can execute shell commands (!) or spawn editors (v) and bypass security\n");
-        return 0;
+    /* Log secure pager usage for audit purposes */
+    if (is_secure_pager(command)) {
+        char audit_msg[256];
+        snprintf(audit_msg, sizeof(audit_msg), "secure pager execution: %s", command);
+        log_security_violation(current_username, audit_msg);
     }
 
     /* Check if user has unrestricted access - if so, skip warnings but still log */
