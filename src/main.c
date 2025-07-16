@@ -139,10 +139,7 @@ int main_loop(void) {
         /* Expand history references (e.g., !1, !42) */
         char *expanded_command = expand_history(command_line);
         if (expanded_command) {
-            /* Show the expanded command if it's different */
-            if (strcmp(command_line, expanded_command) != 0) {
-                printf("Expanded: %s\n", expanded_command);
-            }
+            /* Silent expansion per Unix philosophy - expansion is logged but not displayed */
             free(command_line);
             command_line = expanded_command;
         }
@@ -319,7 +316,7 @@ int main(int argc, char *argv[]) {
             fprintf(stderr, "sudosh: failed to initialize session logging to '%s'\n", session_logfile);
             return EXIT_FAILURE;
         }
-        printf("Session logging enabled to: %s\n", session_logfile);
+        /* Session logging enabled silently - logged to syslog for audit */
     }
 
     /* Initialize security measures */

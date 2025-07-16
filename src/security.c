@@ -302,6 +302,12 @@ void setup_secure_pager_environment(void) {
     unsetenv("MORE");
     unsetenv("MOST");
 
+    /* Additional Shellshock (CVE-2014-6271) protection - clear bash-related variables */
+    unsetenv("BASH_ENV");
+    unsetenv("BASH_FUNC_*");
+    unsetenv("BASH_CMDS");
+    unsetenv("BASH_ALIASES");
+
     /* Set restrictive umask */
     umask(0077);
 }
@@ -934,10 +940,24 @@ int validate_command(const char *command) {
         }
     }
 
-    /* Check for extremely long commands */
+    /* Check for extremely long commands (CVE-2022-3715 mitigation) */
     if (cmd_len > MAX_COMMAND_LENGTH) {
         log_security_violation(current_username, "command too long");
         return 0;
+    }
+
+    /* Enhanced parameter validation to prevent heap buffer overflow (CVE-2022-3715) */
+    const char *dangerous_patterns[] = {
+        "${", "$(", "`", "\\x", "\\u", "\\U", "\\N", NULL
+    };
+    for (int i = 0; dangerous_patterns[i]; i++) {
+        if (strstr(command, dangerous_patterns[i])) {
+            char violation_msg[256];
+            snprintf(violation_msg, sizeof(violation_msg),
+                    "dangerous parameter pattern '%s' detected (CVE-2022-3715 protection)", dangerous_patterns[i]);
+            log_security_violation(current_username, violation_msg);
+            return 0;
+        }
     }
 
     /* Enhanced path traversal detection */

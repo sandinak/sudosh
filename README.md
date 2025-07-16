@@ -30,6 +30,9 @@ Sudosh is a comprehensive, secure interactive shell that provides elevated privi
 - 📝 **Comprehensive audit trail** - All actions logged with context regardless of warnings
 - 🔐 **Sudoers integration** - Full compatibility with existing sudo rules
 - 🎯 **Privilege-aware warnings** - Users with ALL commands skip warnings but maintain logging
+- 🛡️ **CVE vulnerability protection** - Audited against major bash CVEs (2014-2024)
+- 🔐 **Environment hardening** - Comprehensive sanitization against injection attacks
+- 🧪 **Security testing** - Automated CVE-specific regression tests
 
 ### **User Experience**
 - **Enhanced prompt** - Shows current directory and target user context
@@ -614,14 +617,26 @@ make security-tests
 ## 📋 **Changelog**
 
 ### **Version 1.7.0** (Latest)
-#### Enhanced User Interface and Extended Security Protections
+#### Enhanced User Interface, Security Protections, and CVE Audit
 
-**User Interface Improvements:**
+**Shell Experience Improvements:**
+- **Authentic shell behavior**: Removed verbose command feedback messages for Unix philosophy compliance
+  - Eliminated "Changed to: /path/directory" message from `cd` command
+  - Removed "Goodbye!" message from `exit` command
+  - Silent operation for successful commands, errors only when needed
 - **Single question mark help**: Added `?` as a shortcut for the help command
-- **Cleaner exit experience**: Removed "Exiting sudosh" message for smoother user experience
 - **Enhanced error messages**: Improved pipe and redirection rejection messages with specific explanations
   - Pipes: "pipes are not supported - only single commands are supported"
   - Redirection: "file redirection is blocked for security reasons"
+
+**Comprehensive CVE Security Audit:**
+- **Systematic vulnerability review**: Audited against major bash CVEs (2014-2024)
+- **CVE-2014-6271 (Shellshock)**: Protected via environment sanitization and input validation
+- **CVE-2014-7169 (Shellshock variant)**: Mitigated through controlled execution model
+- **CVE-2014-7186/7187 (Memory corruption)**: Prevented by input length limits and validation
+- **CVE-2019-9924 (rbash bypass)**: Not applicable - custom security model used
+- **CVE-2022-3715 (Heap overflow)**: Enhanced parameter validation implemented
+- **Security audit documentation**: Complete analysis in SECURITY_AUDIT.md
 
 **Extended Security Protections:**
 - **Secure pager execution**: Pagers now run with security restrictions instead of being blocked entirely
@@ -629,13 +644,19 @@ make security-tests
   - Environment variables set to disable dangerous features (LESSSECURE=1, EDITOR=/bin/false)
   - Shell command execution disabled while preserving file viewing functionality
   - All pager usage logged for security auditing
-- **Comprehensive security**: Interactive tools that can bypass security are properly restricted
-- **Clear security messages**: Specific explanations for security restrictions and blocked operations
+- **Enhanced parameter validation**: Additional protections against heap buffer overflow attacks
+- **Environment hardening**: Comprehensive bash-related environment variable sanitization
+- **CVE-specific protections**: Targeted mitigations for known vulnerability patterns
+
+**Testing and Quality Assurance:**
+- **Security test suite**: Comprehensive CVE-specific test cases in tests/security_cve_tests.sh
+- **Regression testing**: Automated tests for all major CVE attack vectors
+- **Shell behavior validation**: Tests for authentic shell experience improvements
 
 **Documentation Updates:**
-- Updated man page with new help shortcut and security protections
-- Enhanced README with new features and security improvements
-- Updated built-in help messages to reflect new functionality
+- **Security audit report**: Complete CVE analysis and risk assessment in SECURITY_AUDIT.md
+- **Enhanced man page**: Updated with security protections and shell improvements
+- **Comprehensive README**: Detailed feature descriptions and security documentation
 
 ### **Version 1.6.0**
 #### Simplified Security Warnings and Enhanced Archive Safety

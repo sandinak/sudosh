@@ -889,18 +889,13 @@ int handle_builtin_command(const char *command) {
         }
 
         if (chdir(dir) == 0) {
-            /* Successfully changed directory */
-            char *new_cwd = getcwd(NULL, 0);
-            if (new_cwd) {
-                printf("Changed to: %s\n", new_cwd);
-                free(new_cwd);
-            }
+            /* Successfully changed directory - silent operation per Unix philosophy */
         } else {
             fprintf(stderr, "cd: %s: %s\n", dir, strerror(errno));
         }
         handled = 1;
     } else if (strcmp(token, "exit") == 0 || strcmp(token, "quit") == 0) {
-        printf("Goodbye!\n");
+        /* Silent exit per Unix philosophy */
         free(trimmed);
         return -1; /* Signal to exit */
     }

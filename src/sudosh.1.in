@@ -330,6 +330,21 @@ Dangerous environment variables are cleared or overridden
 .IP \(bu 4
 All pager usage is logged for security auditing
 
+.B CVE Vulnerability Protection:
+Sudosh has been audited against major bash CVE vulnerabilities and implements specific protections:
+.IP \(bu 4
+\fBCVE-2014-6271 (Shellshock)\fR: Protected via environment sanitization and input validation
+.IP \(bu 4
+\fBCVE-2014-7169 (Shellshock variant)\fR: Mitigated through controlled execution model
+.IP \(bu 4
+\fBCVE-2014-7186/7187 (Memory corruption)\fR: Prevented by input length limits and validation
+.IP \(bu 4
+\fBCVE-2019-9924 (rbash bypass)\fR: Not applicable - custom security model used
+.IP \(bu 4
+\fBCVE-2022-3715 (Heap overflow)\fR: Enhanced parameter validation implemented
+.IP \(bu 4
+Complete vulnerability analysis available in SECURITY_AUDIT.md
+
 .SS Privilege Management
 .IP \(bu 4
 Requires setuid root or running as root
