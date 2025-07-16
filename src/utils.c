@@ -718,10 +718,20 @@ char *read_command(void) {
                 /* Ignore other escape sequences */
             }
         } else if (c == '\t') {
-            /* Tab - perform path completion */
+            /* Tab - perform completion */
             char *prefix = find_completion_start(buffer, pos);
             if (prefix) {
-                char **matches = complete_path(prefix, 0, strlen(prefix));
+                char **matches = NULL;
+
+                /* Determine if we're completing a command or a path */
+                if (is_command_position(buffer, pos)) {
+                    /* Complete command names */
+                    matches = complete_command(prefix);
+                } else {
+                    /* Complete file/directory paths */
+                    matches = complete_path(prefix, 0, strlen(prefix));
+                }
+
                 if (matches && matches[0]) {
                     if (matches[1] == NULL) {
                         /* Single match - complete it */
@@ -1007,6 +1017,163 @@ void cleanup_and_exit(int exit_code) {
 }
 
 /**
+ * Complete command names from PATH
+ */
+char **complete_command(const char *text) {
+    char **matches = NULL;
+    int match_count = 0;
+    int match_capacity = 16;
+
+    /* Allocate initial matches array */
+    matches = malloc(match_capacity * sizeof(char *));
+    if (!matches) {
+        return NULL;
+    }
+
+    /* Get PATH environment variable */
+    char *path_env = getenv("PATH");
+    if (!path_env) {
+        free(matches);
+        return NULL;
+    }
+
+    /* Make a copy of PATH for tokenization */
+    char *path_copy = strdup(path_env);
+    if (!path_copy) {
+        free(matches);
+        return NULL;
+    }
+
+    int text_len = strlen(text);
+    char *dir, *saveptr;
+
+    /* Search each directory in PATH */
+    dir = strtok_r(path_copy, ":", &saveptr);
+    while (dir != NULL) {
+        DIR *dirp = opendir(dir);
+        if (dirp != NULL) {
+            struct dirent *entry;
+            while ((entry = readdir(dirp)) != NULL) {
+                /* Skip . and .. */
+                if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
+                    continue;
+                }
+
+                /* Check if entry matches prefix */
+                if (strncmp(entry->d_name, text, text_len) == 0) {
+                    /* Build full path to check if it's executable */
+                    char full_path[PATH_MAX];
+                    snprintf(full_path, sizeof(full_path), "%s/%s", dir, entry->d_name);
+
+                    struct stat st;
+                    if (stat(full_path, &st) == 0 && S_ISREG(st.st_mode) && (st.st_mode & S_IXUSR)) {
+                        /* Check if we already have this command */
+                        int found = 0;
+                        for (int i = 0; i < match_count; i++) {
+                            if (strcmp(matches[i], entry->d_name) == 0) {
+                                found = 1;
+                                break;
+                            }
+                        }
+
+                        if (!found) {
+                            /* Expand matches array if needed */
+                            if (match_count >= match_capacity - 1) {
+                                match_capacity *= 2;
+                                char **new_matches = realloc(matches, match_capacity * sizeof(char *));
+                                if (!new_matches) {
+                                    /* Clean up on failure */
+                                    for (int i = 0; i < match_count; i++) {
+                                        free(matches[i]);
+                                    }
+                                    free(matches);
+                                    free(path_copy);
+                                    closedir(dirp);
+                                    return NULL;
+                                }
+                                matches = new_matches;
+                            }
+
+                            /* Add command to matches */
+                            matches[match_count] = strdup(entry->d_name);
+                            if (matches[match_count]) {
+                                match_count++;
+                            }
+                        }
+                    }
+                }
+            }
+            closedir(dirp);
+        }
+        dir = strtok_r(NULL, ":", &saveptr);
+    }
+
+    free(path_copy);
+
+    /* Add built-in commands that match */
+    const char *builtins[] = {"help", "commands", "history", "pwd", "cd", "exit", "quit", NULL};
+    for (int i = 0; builtins[i]; i++) {
+        if (strncmp(builtins[i], text, text_len) == 0) {
+            /* Check if we already have this command */
+            int found = 0;
+            for (int j = 0; j < match_count; j++) {
+                if (strcmp(matches[j], builtins[i]) == 0) {
+                    found = 1;
+                    break;
+                }
+            }
+
+            if (!found) {
+                /* Expand matches array if needed */
+                if (match_count >= match_capacity - 1) {
+                    match_capacity *= 2;
+                    char **new_matches = realloc(matches, match_capacity * sizeof(char *));
+                    if (!new_matches) {
+                        /* Clean up on failure */
+                        for (int j = 0; j < match_count; j++) {
+                            free(matches[j]);
+                        }
+                        free(matches);
+                        return NULL;
+                    }
+                    matches = new_matches;
+                }
+
+                matches[match_count] = strdup(builtins[i]);
+                if (matches[match_count]) {
+                    match_count++;
+                }
+            }
+        }
+    }
+
+    /* Null-terminate the matches array */
+    matches[match_count] = NULL;
+
+    return matches;
+}
+
+/**
+ * Check if we're completing the first word (command) or subsequent words (arguments)
+ */
+int is_command_position(const char *buffer, int pos) {
+    /* Find the start of the current word */
+    int start = pos;
+    while (start > 0 && buffer[start - 1] != ' ' && buffer[start - 1] != '\t') {
+        start--;
+    }
+
+    /* Check if there are any non-whitespace characters before this word */
+    for (int i = 0; i < start; i++) {
+        if (buffer[i] != ' ' && buffer[i] != '\t') {
+            return 0; /* Not the first word */
+        }
+    }
+
+    return 1; /* This is the first word (command position) */
+}
+
+/**
  * Find the start of the word to complete at the given position
  */
 char *find_completion_start(const char *buffer, int pos) {
@@ -1119,15 +1286,18 @@ char **complete_path(const char *text, int start, int end) {
                 matches = new_matches;
             }
 
-            /* Create full path for the match */
+            /* Create the completion match */
             char *full_match;
             if (strcmp(dir_path, "./") == 0) {
+                /* Current directory - just use the filename */
                 full_match = strdup(entry->d_name);
             } else {
+                /* Include the directory path */
                 int full_len = strlen(dir_path) + strlen(entry->d_name) + 1;
                 full_match = malloc(full_len);
                 if (full_match) {
                     strcpy(full_match, dir_path);
+                    /* dir_path already includes trailing slash */
                     strcat(full_match, entry->d_name);
                 }
             }
