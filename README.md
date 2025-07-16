@@ -3,7 +3,7 @@
 **Author**: Branson Matheson <branson@sandsite.org>
 **Development**: This project was primarily developed using [Augment Code](https://www.augmentcode.com) AI assistance
 
-[![Version](https://img.shields.io/badge/version-1.5.0-blue.svg)](https://github.com/sandinak/sudosh)
+[![Version](https://img.shields.io/badge/version-1.6.0-blue.svg)](https://github.com/sandinak/sudosh)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Security](https://img.shields.io/badge/security-enhanced-red.svg)](docs/ENHANCED_SECURITY_FEATURES.md)
 
@@ -23,11 +23,13 @@ Sudosh is a comprehensive, secure interactive shell that provides elevated privi
 
 ### **Security Features**
 - 🔒 **Shell command blocking** - Prevents bash, sh, python -c, etc.
-- ⚠️ **Dangerous command detection** - Warns about init, shutdown, rm -rf, etc.
+- ⚠️ **Smart warning system** - Simplified prompts for dangerous operations
 - 🛡️ **System directory protection** - Monitors access to /etc, /dev, /proc, etc.
+- 📦 **Archive extraction safety** - Warns about potentially destructive archive operations
 - 🔑 **Authentication caching** - Secure credential caching similar to sudo (15-minute default)
-- 📝 **Comprehensive audit trail** - All actions logged with context
+- 📝 **Comprehensive audit trail** - All actions logged with context regardless of warnings
 - 🔐 **Sudoers integration** - Full compatibility with existing sudo rules
+- 🎯 **Privilege-aware warnings** - Users with ALL commands skip warnings but maintain logging
 
 ### **User Experience**
 - **Enhanced prompt** - Shows current directory and target user context
@@ -205,17 +207,24 @@ Sudosh validates permissions at multiple levels:
 sudosh:/home/user## bash
 sudosh: shell commands are not permitted
 
-# Dangerous commands require confirmation
+# Dangerous commands require confirmation (simplified prompts)
 sudosh:/home/user## rm -rf /important/data
-⚠️  WARNING: This command uses dangerous recursive or force flags
-Command: rm -rf /important/data
-This command could be dangerous. Are you sure you want to proceed? (yes/no):
+⚠️  Command uses recursive/force flags
+Continue? (y/N):
+
+# Archive extraction warnings
+sudosh:/home/user## tar -xf archive.tar /etc/
+⚠️  Archive extraction may overwrite files
+Continue? (y/N):
 
 # System directory access is monitored
 sudosh:/home/user## ls /etc
-⚠️  WARNING: This command accesses critical system directories
-Command: ls /etc
-This command could be dangerous. Are you sure you want to proceed? (yes/no):
+⚠️  Accesses system directories
+Continue? (y/N):
+
+# Users with ALL commands in sudoers skip warnings (but commands are still logged)
+sudosh:/home/admin## rm -rf /tmp/test
+# No warning for users with unrestricted access, but logged to syslog
 ```
 
 ## 📝 **Configuration**
@@ -604,7 +613,28 @@ make security-tests
 
 ## 📋 **Changelog**
 
-### **Version 1.5.0** (Latest)
+### **Version 1.6.0** (Latest)
+**Simplified Security Warnings and Enhanced Archive Safety**
+
+**New Features:**
+- **Simplified warning system**: Shorter, clearer prompts (y/N instead of yes/no)
+- **Archive extraction safety**: New warnings for potentially destructive archive operations
+  - Detects `tar -x`, `unzip`, `gunzip`, and other extraction commands
+  - Warns when extracting to existing directories or system paths
+  - Checks for dangerous flags like `--overwrite` and `--force`
+- **Privilege-aware warnings**: Users with ALL commands in sudoers skip warnings while maintaining audit logs
+- **Reduced warning fatigue**: Removed common administrative commands from dangerous list
+  - Package management: `apt`, `yum`, `dnf`, `rpm`, `dpkg`
+  - Service management: `systemctl`, `service`, `chkconfig`
+  - Scheduling: `crontab`, `at`, `batch`
+
+**Improvements:**
+- More intuitive warning prompts with shorter messages
+- Better user experience for experienced administrators
+- Maintained comprehensive security logging for compliance
+- Enhanced documentation with updated examples
+
+### **Version 1.5.0**
 **Enhanced Permission Analysis and Source Attribution**
 
 **New Features:**

@@ -288,7 +288,20 @@ sudosh implements intelligent "gut check" warnings that distinguish between safe
 .B /sys/*
 - System and kernel parameters
 
-When these commands are detected, sudosh displays a warning message and prompts for explicit confirmation with "yes" before proceeding. This helps prevent accidental execution of potentially destructive operations.
+When these commands are detected, sudosh displays a simplified warning message and prompts for confirmation with "y/N" before proceeding. Users with ALL commands in their sudoers configuration will skip warnings but all commands are still logged for audit purposes.
+
+.B Archive Extraction Safety:
+.IP \(bu 4
+.B tar -x, unzip, gunzip, bunzip2
+- Archive extraction commands that may overwrite files
+.IP \(bu 4
+.B Extraction to system directories
+- Operations targeting /etc, /usr, /var, or other critical paths
+.IP \(bu 4
+.B Dangerous extraction flags
+- Commands with --overwrite, --force, or similar destructive options
+
+This helps prevent accidental execution of potentially destructive operations while reducing warning fatigue for experienced administrators.
 
 .SS Privilege Management
 .IP \(bu 4

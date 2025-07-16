@@ -63,7 +63,7 @@ extern int test_mode;
 #define MAX_COMMAND_LENGTH 4096
 #define MAX_USERNAME_LENGTH 256
 #define MAX_PASSWORD_LENGTH 256
-#define SUDOSH_VERSION "1.5.3"
+#define SUDOSH_VERSION "1.6.0"
 #define INACTIVITY_TIMEOUT 300  /* 300 seconds (5 minutes) */
 
 /* Authentication cache constants */
@@ -319,6 +319,8 @@ int check_dangerous_flags(const char *command);
 int check_system_directory_access(const char *command);
 int is_safe_readonly_command(const char *command);
 int is_dangerous_system_operation(const char *command);
+int is_destructive_archive_operation(const char *command);
+int user_has_unrestricted_access(const char *username);
 int prompt_user_confirmation(const char *command, const char *warning);
 
 /* Target user functionality */

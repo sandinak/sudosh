@@ -438,7 +438,6 @@ int is_dangerous_command(const char *command) {
         "/sbin/iptables", "/usr/sbin/iptables",
         "mount", "umount", "swapon", "swapoff",
         "/bin/mount", "/usr/bin/mount", "/sbin/mount",
-        "crontab", "at", "batch",
         "su", "sudo", "pkexec",
         NULL
     };
@@ -570,9 +569,6 @@ int is_dangerous_system_operation(const char *command) {
         "mkdir", "touch", "truncate",
         "tar", "gzip", "gunzip", "zip", "unzip",
         "make", "gcc", "g++", "cc", "ld",
-        "dpkg", "apt", "apt-get", "yum", "dnf", "rpm", "zypper",
-        "systemctl", "service", "chkconfig", "update-rc.d",
-        "crontab", "at", "batch",
         "useradd", "userdel", "usermod", "groupadd", "groupdel",
         "passwd", "chpasswd", "pwconv", "pwunconv",
         "mount", "umount", "swapon", "swapoff",
@@ -669,14 +665,162 @@ int check_system_directory_access(const char *command) {
 }
 
 /**
+ * Check if user has unrestricted sudo access (ALL commands)
+ */
+int user_has_unrestricted_access(const char *username) {
+    if (!username) return 0;
+
+    struct sudoers_config *sudoers_config = parse_sudoers_file(NULL);
+    if (!sudoers_config) return 0;
+
+    char hostname[256];
+    if (gethostname(hostname, sizeof(hostname)) != 0) {
+        strcpy(hostname, "localhost");
+    }
+
+    struct sudoers_userspec *spec = sudoers_config->userspecs;
+    while (spec) {
+        /* Check if this rule applies to the user */
+        if (spec->users) {
+            for (int i = 0; spec->users && spec->users[i]; i++) {
+                int user_matches = 0;
+
+                /* Direct username match */
+                if (strcmp(spec->users[i], username) == 0) {
+                    user_matches = 1;
+                }
+                /* Group membership check */
+                else if (spec->users[i][0] == '%') {
+                    struct group *grp = getgrnam(spec->users[i] + 1);
+                    if (grp && grp->gr_mem) {
+                        for (char **member = grp->gr_mem; member && *member; member++) {
+                            if (*member && strcmp(*member, username) == 0) {
+                                user_matches = 1;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                if (user_matches) {
+                    /* Check if hostname matches */
+                    if (spec->hosts) {
+                        for (int j = 0; spec->hosts[j]; j++) {
+                            if (strcmp(spec->hosts[j], "ALL") == 0 ||
+                                strcmp(spec->hosts[j], hostname) == 0) {
+                                /* Check if commands include ALL */
+                                if (spec->commands) {
+                                    for (int k = 0; spec->commands[k]; k++) {
+                                        if (strcmp(spec->commands[k], "ALL") == 0) {
+                                            free_sudoers_config(sudoers_config);
+                                            return 1; /* User has unrestricted access */
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        spec = spec->next;
+    }
+
+    free_sudoers_config(sudoers_config);
+    return 0;
+}
+
+/**
+ * Check if command is a potentially destructive archive operation
+ */
+int is_destructive_archive_operation(const char *command) {
+    if (!command) return 0;
+
+    /* Archive extraction commands that could overwrite files */
+    const char *archive_commands[] = {
+        "tar", "untar", "gtar",
+        "unzip", "gunzip", "bunzip2", "unxz",
+        "dump", "restore", "cpio",
+        "7z", "7za", "7zr",
+        "rar", "unrar",
+        NULL
+    };
+
+    /* Extract the command name */
+    char *cmd_copy = strdup(command);
+    if (!cmd_copy) return 0;
+
+    char *cmd_name = strtok(cmd_copy, " \t");
+    if (!cmd_name) {
+        free(cmd_copy);
+        return 0;
+    }
+
+    /* Check if it's an archive command */
+    int is_archive_cmd = 0;
+    for (int i = 0; archive_commands[i]; i++) {
+        if (strcmp(cmd_name, archive_commands[i]) == 0) {
+            is_archive_cmd = 1;
+            break;
+        }
+        /* Also check basename for absolute paths */
+        char *basename_cmd = strrchr(archive_commands[i], '/');
+        if (basename_cmd && strcmp(cmd_name, basename_cmd + 1) == 0) {
+            is_archive_cmd = 1;
+            break;
+        }
+    }
+
+    if (!is_archive_cmd) {
+        free(cmd_copy);
+        return 0;
+    }
+
+    /* Check for extraction flags and potentially dangerous patterns */
+    if (strstr(command, " -x") ||           /* tar extract */
+        strstr(command, " --extract") ||
+        strstr(command, " -d ") ||          /* unzip to directory */
+        strstr(command, " --overwrite") ||  /* force overwrite */
+        strstr(command, " --force") ||
+        strstr(command, " -f ") ||          /* force flags */
+        strstr(command, " -o ") ||          /* overwrite flags */
+        strstr(command, " -y ") ||          /* yes to all */
+        (strcmp(cmd_name, "unzip") == 0) || /* unzip is extraction by default */
+        (strcmp(cmd_name, "gunzip") == 0) ||
+        (strcmp(cmd_name, "bunzip2") == 0) ||
+        (strcmp(cmd_name, "unxz") == 0)) {
+
+        /* Check if extracting to existing directories or system paths */
+        if (strstr(command, " /") ||        /* absolute paths */
+            strstr(command, " ./") ||       /* current directory */
+            strstr(command, " ../") ||      /* parent directory */
+            strstr(command, " ~") ||        /* home directory */
+            strstr(command, "/etc") ||      /* system directories */
+            strstr(command, "/usr") ||
+            strstr(command, "/var") ||
+            strstr(command, "/opt")) {
+            free(cmd_copy);
+            return 1;
+        }
+
+        /* Default warning for extraction operations */
+        free(cmd_copy);
+        return 1;
+    }
+
+    free(cmd_copy);
+    return 0;
+}
+
+/**
  * Prompt user for confirmation of dangerous command
  */
 int prompt_user_confirmation(const char *command, const char *warning) {
     char response[10];
+    (void)command; /* Suppress unused parameter warning */
 
-    printf("\n⚠️  WARNING: %s\n", warning);
-    printf("Command: %s\n", command);
-    printf("This command could be dangerous. Are you sure you want to proceed? (yes/no): ");
+    printf("\n⚠️  %s\n", warning);
+    printf("Continue? (y/N): ");
     fflush(stdout);
 
     if (fgets(response, sizeof(response), stdin) == NULL) {
@@ -686,13 +830,13 @@ int prompt_user_confirmation(const char *command, const char *warning) {
     /* Trim newline */
     response[strcspn(response, "\n")] = '\0';
 
-    /* Only accept explicit "yes" */
-    if (strcmp(response, "yes") == 0) {
-        printf("Proceeding with dangerous command...\n");
+    /* Accept 'y', 'Y', 'yes', 'YES' */
+    if (strcmp(response, "y") == 0 || strcmp(response, "Y") == 0 ||
+        strcmp(response, "yes") == 0 || strcmp(response, "YES") == 0) {
         return 1;
     }
 
-    printf("Command cancelled for safety.\n");
+    printf("Cancelled.\n");
     return 0;
 }
 
@@ -863,13 +1007,16 @@ int validate_command(const char *command) {
         return 0;
     }
 
+    /* Check if user has unrestricted access - if so, skip warnings but still log */
+    int has_unrestricted_access = user_has_unrestricted_access(current_username);
+
     /* Check for dangerous commands */
     if (is_dangerous_command(command)) {
         char violation_msg[256];
         snprintf(violation_msg, sizeof(violation_msg), "dangerous command attempted: %s", command);
         log_security_violation(current_username, violation_msg);
 
-        if (!prompt_user_confirmation(command, "This is a potentially dangerous system command")) {
+        if (!has_unrestricted_access && !prompt_user_confirmation(command, "Potentially dangerous system command")) {
             return 0;
         }
     }
@@ -880,7 +1027,18 @@ int validate_command(const char *command) {
         snprintf(violation_msg, sizeof(violation_msg), "dangerous flags detected: %s", command);
         log_security_violation(current_username, violation_msg);
 
-        if (!prompt_user_confirmation(command, "This command uses dangerous recursive or force flags")) {
+        if (!has_unrestricted_access && !prompt_user_confirmation(command, "Command uses recursive/force flags")) {
+            return 0;
+        }
+    }
+
+    /* Check for destructive archive operations */
+    if (is_destructive_archive_operation(command)) {
+        char violation_msg[256];
+        snprintf(violation_msg, sizeof(violation_msg), "destructive archive operation: %s", command);
+        log_security_violation(current_username, violation_msg);
+
+        if (!has_unrestricted_access && !prompt_user_confirmation(command, "Archive extraction may overwrite files")) {
             return 0;
         }
     }
@@ -891,7 +1049,7 @@ int validate_command(const char *command) {
         snprintf(violation_msg, sizeof(violation_msg), "system directory access: %s", command);
         log_security_violation(current_username, violation_msg);
 
-        if (!prompt_user_confirmation(command, "This command accesses critical system directories")) {
+        if (!has_unrestricted_access && !prompt_user_confirmation(command, "Accesses system directories")) {
             return 0;
         }
     }
