@@ -121,7 +121,7 @@ sudo sudosh -l
 ```
 
 ### **Command Line Options**
-```
+```text
 Usage: sudosh [options]
 
 Options:
@@ -142,7 +142,7 @@ sudo sudosh -l
 ```
 
 **Example Output:**
-```
+```text
 Sudo privileges for user on hostname:
 =====================================
 
@@ -273,13 +273,13 @@ sudo log show --predicate 'process == "sudosh"' --start "$(date '+%Y-%m-%d')"
 
 ### **Command Logging**
 All commands are logged with full context:
-```
+```text
 Dec 15 10:30:15 hostname sudosh[1234]: user: ls -la (SUCCESS)
 Dec 15 10:30:20 hostname sudosh[1234]: user: systemctl restart nginx (as www-data) (SUCCESS)
 Dec 15 10:30:25 hostname sudosh[1234]: user: SECURITY VIOLATION: shell command blocked
 ```
 
-### **Viewing Sudo Logs**
+### **Viewing System Logs**
 
 #### **Linux Systems**
 ```bash
@@ -352,9 +352,9 @@ Persistent command history with timestamps:
 [2024-12-15 10:30:25] history
 ```
 
-### **Viewing Sudo Logs**
+### **Viewing Sudosh Logs**
 
-#### **macOS Systems**
+#### **macOS Unified Logging**
 On macOS, sudo logs are managed by the unified logging system. Use these commands to view sudosh logs:
 
 **View Recent Sudosh Logs:**
@@ -393,7 +393,7 @@ log show --last 24h --predicate 'process == "sudosh"' > sudosh_logs.txt
 log show --last 24h --predicate 'process == "sudosh"' --style json > sudosh_logs.json
 ```
 
-#### **Linux Systems**
+#### **Linux Syslog Systems**
 On Linux, sudo logs are typically managed by syslog. Location and commands vary by distribution:
 
 **Ubuntu/Debian Systems:**
@@ -614,7 +614,7 @@ make security-tests
 ## 📋 **Changelog**
 
 ### **Version 1.6.0** (Latest)
-**Simplified Security Warnings and Enhanced Archive Safety**
+#### Simplified Security Warnings and Enhanced Archive Safety
 
 **New Features:**
 - **Simplified warning system**: Shorter, clearer prompts (y/N instead of yes/no)
@@ -635,7 +635,7 @@ make security-tests
 - Enhanced documentation with updated examples
 
 ### **Version 1.5.0**
-**Enhanced Permission Analysis and Source Attribution**
+#### Enhanced Permission Analysis and Source Attribution
 
 **New Features:**
 - **Enhanced `-l` option**: Now shows detailed permission source attribution
@@ -658,7 +658,7 @@ make security-tests
 - Fixed null pointer dereferences in group membership checking
 
 ### **Version 1.4.0**
-**Target User Support and Enhanced Security**
+#### Target User Support and Enhanced Security
 
 **New Features:**
 - Target user functionality with `-u` option
