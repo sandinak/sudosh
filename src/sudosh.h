@@ -63,7 +63,7 @@ extern int test_mode;
 #define MAX_COMMAND_LENGTH 4096
 #define MAX_USERNAME_LENGTH 256
 #define MAX_PASSWORD_LENGTH 256
-#define SUDOSH_VERSION "1.6.0"
+#define SUDOSH_VERSION "1.7.0"
 #define INACTIVITY_TIMEOUT 300  /* 300 seconds (5 minutes) */
 
 /* Authentication cache constants */
@@ -312,6 +312,7 @@ void cleanup_security(void);
 /* Enhanced command security functions */
 int is_shell_command(const char *command);
 int is_ssh_command(const char *command);
+int is_dangerous_pager(const char *command);
 int is_interactive_editor(const char *command);
 int is_safe_command(const char *command);
 int is_dangerous_command(const char *command);

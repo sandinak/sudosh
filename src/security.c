@@ -232,6 +232,51 @@ void secure_terminal(void) {
 }
 
 /**
+ * Check if command is a pager that could allow shell escape or editor spawning
+ */
+int is_dangerous_pager(const char *command) {
+    if (!command) return 0;
+
+    /* Create a copy for parsing */
+    char *cmd_copy = strdup(command);
+    if (!cmd_copy) return 0;
+
+    /* Get the first token (command name) */
+    char *cmd_name = strtok(cmd_copy, " \t");
+    if (!cmd_name) {
+        free(cmd_copy);
+        return 0;
+    }
+
+    /* List of pagers that can execute shell commands or spawn editors */
+    const char *pagers[] = {
+        "less", "/bin/less", "/usr/bin/less", "/usr/local/bin/less",
+        "more", "/bin/more", "/usr/bin/more", "/usr/local/bin/more",
+        "most", "/bin/most", "/usr/bin/most", "/usr/local/bin/most",
+        "pg", "/bin/pg", "/usr/bin/pg", "/usr/local/bin/pg",
+        NULL
+    };
+
+    /* Check if it's a dangerous pager */
+    for (int i = 0; pagers[i]; i++) {
+        if (strcmp(cmd_name, pagers[i]) == 0) {
+            free(cmd_copy);
+            return 1;
+        }
+
+        /* Also check basename for absolute paths */
+        char *basename_pager = strrchr(pagers[i], '/');
+        if (basename_pager && strcmp(cmd_name, basename_pager + 1) == 0) {
+            free(cmd_copy);
+            return 1;
+        }
+    }
+
+    free(cmd_copy);
+    return 0;
+}
+
+/**
  * Check if command is an interactive editor that could allow shell escape
  */
 int is_interactive_editor(const char *command) {
@@ -872,8 +917,15 @@ int validate_command(const char *command) {
         return 0;
     }
 
-    /* Check for shell metacharacters that enable command injection */
-    const char *dangerous_chars = ";|&`$(){}[]<>*?~";
+    /* Check for pipes specifically with helpful message */
+    if (strchr(command, '|')) {
+        log_security_violation(current_username, "pipe character detected in command");
+        fprintf(stderr, "sudosh: pipes are not supported - only single commands are supported\n");
+        return 0;
+    }
+
+    /* Check for other shell metacharacters that enable command injection */
+    const char *dangerous_chars = ";&`$(){}[]<>*?~";
     for (const char *p = dangerous_chars; *p; p++) {
         if (strchr(command, *p)) {
             char violation_msg[256];
@@ -897,6 +949,7 @@ int validate_command(const char *command) {
         strstr(command, " 2>> ") || strstr(command, " &> ") ||
         strstr(command, " &>> ")) {
         log_security_violation(current_username, "I/O redirection attempt");
+        fprintf(stderr, "sudosh: file redirection is blocked for security reasons\n");
         return 0;
     }
 
@@ -1004,6 +1057,14 @@ int validate_command(const char *command) {
         log_security_violation(current_username, "interactive editor blocked");
         fprintf(stderr, "sudosh: interactive editors are not permitted (use sudoedit instead)\n");
         fprintf(stderr, "sudosh: editors like vi/vim/emacs can execute shell commands and bypass security\n");
+        return 0;
+    }
+
+    /* Block dangerous pagers that can execute shell commands or spawn editors */
+    if (is_dangerous_pager(command)) {
+        log_security_violation(current_username, "dangerous pager blocked");
+        fprintf(stderr, "sudosh: pagers like less/more/most are not permitted\n");
+        fprintf(stderr, "sudosh: these pagers can execute shell commands (!) or spawn editors (v) and bypass security\n");
         return 0;
     }
 

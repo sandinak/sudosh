@@ -3,7 +3,7 @@
 **Author**: Branson Matheson <branson@sandsite.org>
 **Development**: This project was primarily developed using [Augment Code](https://www.augmentcode.com) AI assistance
 
-[![Version](https://img.shields.io/badge/version-1.6.0-blue.svg)](https://github.com/sandinak/sudosh)
+[![Version](https://img.shields.io/badge/version-1.7.0-blue.svg)](https://github.com/sandinak/sudosh)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Security](https://img.shields.io/badge/security-enhanced-red.svg)](docs/ENHANCED_SECURITY_FEATURES.md)
 
@@ -613,7 +613,31 @@ make security-tests
 
 ## 📋 **Changelog**
 
-### **Version 1.6.0** (Latest)
+### **Version 1.7.0** (Latest)
+#### Enhanced User Interface and Extended Security Protections
+
+**User Interface Improvements:**
+- **Single question mark help**: Added `?` as a shortcut for the help command
+- **Cleaner exit experience**: Removed "Exiting sudosh" message for smoother user experience
+- **Enhanced error messages**: Improved pipe and redirection rejection messages with specific explanations
+  - Pipes: "pipes are not supported - only single commands are supported"
+  - Redirection: "file redirection is blocked for security reasons"
+
+**Extended Security Protections:**
+- **Pager security**: Added protections for dangerous pagers that can execute commands or spawn editors
+  - `less` (can execute shell commands with `!` and spawn editors with `v`)
+  - `more` (similar capabilities on some systems)
+  - `most` (advanced pager with command execution features)
+  - `pg` (traditional pager with potential security risks)
+- **Comprehensive blocking**: All interactive tools that can bypass security are now blocked
+- **Clear security messages**: Specific explanations for why each type of command is blocked
+
+**Documentation Updates:**
+- Updated man page with new help shortcut and security protections
+- Enhanced README with new features and security improvements
+- Updated built-in help messages to reflect new functionality
+
+### **Version 1.6.0**
 #### Simplified Security Warnings and Enhanced Archive Safety
 
 **New Features:**

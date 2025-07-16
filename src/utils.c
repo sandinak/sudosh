@@ -122,7 +122,7 @@ void print_banner(void) {
 void print_help(void) {
     printf("sudosh - Interactive sudo shell\n\n");
     printf("Available built-in commands:\n");
-    printf("  help          - Show this help message\n");
+    printf("  help, ?       - Show this help message\n");
     printf("  commands      - List all available commands\n");
     printf("  history       - Show command history\n");
     printf("  cd <dir>      - Change current directory\n");
@@ -157,7 +157,7 @@ void print_commands(void) {
     printf("  cd            - Change current directory\n");
     printf("  commands      - List all available commands\n");
     printf("  exit          - Exit sudosh\n");
-    printf("  help          - Show help message\n");
+    printf("  help, ?       - Show help message\n");
     printf("  pwd           - Print current working directory\n");
     printf("  quit          - Exit sudosh\n");
     printf("\n");
@@ -848,7 +848,7 @@ int handle_builtin_command(const char *command) {
         return 0;
     }
 
-    if (strcmp(token, "help") == 0) {
+    if (strcmp(token, "help") == 0 || strcmp(token, "?") == 0) {
         print_help();
         handled = 1;
     } else if (strcmp(token, "commands") == 0) {

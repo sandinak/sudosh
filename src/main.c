@@ -216,8 +216,6 @@ int main_loop(void) {
     /* Check if we exited due to interruption */
     if (is_interrupted()) {
         printf("\nInterrupted - exiting gracefully\n");
-    } else {
-        printf("\nExiting sudosh\n");
     }
 
     /* Log session end */
