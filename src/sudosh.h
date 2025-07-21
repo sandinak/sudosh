@@ -356,7 +356,7 @@ void preserve_color_environment(void);
 void cleanup_color_config(void);
 
 /* Tab completion functions */
-char **complete_path(const char *text, int start, int end);
+char **complete_path(const char *text, int start, int end, int executables_only);
 char **complete_command(const char *text);
 int is_command_position(const char *buffer, int pos);
 char *find_completion_start(const char *buffer, int pos);

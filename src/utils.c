@@ -731,9 +731,12 @@ char *read_command(void) {
                 if (is_command_position(buffer, pos) && prefix[0] != '/') {
                     /* Complete command names (but not if it's an absolute path) */
                     matches = complete_command(prefix);
+                } else if (is_command_position(buffer, pos) && prefix[0] == '/') {
+                    /* Complete absolute paths to executables only in command position */
+                    matches = complete_path(prefix, 0, strlen(prefix), 1);
                 } else {
-                    /* Complete file/directory paths (including absolute paths to executables) */
-                    matches = complete_path(prefix, 0, strlen(prefix));
+                    /* Complete file/directory paths (all files for arguments) */
+                    matches = complete_path(prefix, 0, strlen(prefix), 0);
                 }
 
                 if (matches && matches[0]) {
@@ -1266,7 +1269,7 @@ char *find_completion_start(const char *buffer, int pos) {
 /**
  * Complete file/directory paths
  */
-char **complete_path(const char *text, int start, int end) {
+char **complete_path(const char *text, int start, int end, int executables_only) {
     (void)start; /* Suppress unused parameter warning */
     (void)end;   /* Suppress unused parameter warning */
 
@@ -1374,6 +1377,13 @@ char **complete_path(const char *text, int start, int end) {
                         strcat(dir_match, "/");
                         free(full_match);
                         full_match = dir_match;
+                    }
+                } else if (executables_only) {
+                    /* If filtering for executables only, check if file is executable */
+                    if (stat(full_match, &st) != 0 || !S_ISREG(st.st_mode) || !(st.st_mode & S_IXUSR)) {
+                        /* Not an executable file - skip this match */
+                        free(full_match);
+                        continue;
                     }
                 }
 
