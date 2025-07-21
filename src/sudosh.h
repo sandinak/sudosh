@@ -361,6 +361,8 @@ char **complete_command(const char *text);
 int is_command_position(const char *buffer, int pos);
 char *find_completion_start(const char *buffer, int pos);
 void insert_completion(char *buffer, int *pos, int *len, const char *completion, const char *prefix);
+int get_terminal_width(void);
+void display_matches_in_columns(char **matches);
 
 /* Main program functions */
 int main_loop(void);

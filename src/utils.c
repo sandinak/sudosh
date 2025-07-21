@@ -18,6 +18,8 @@ char *target_user = NULL;
 #include <dirent.h>
 #include <sys/stat.h>
 #include <limits.h>
+#include <sys/ioctl.h>
+#include <termios.h>
 #include <errno.h>
 #include <pwd.h>
 #include <termios.h>
@@ -750,14 +752,9 @@ char *read_command(void) {
                         }
                         fflush(stdout);
                     } else {
-                        /* Multiple matches - show them */
+                        /* Multiple matches - show them in clean columns */
                         printf("\n");
-                        for (int i = 0; matches[i]; i++) {
-                            printf("%s  ", matches[i]);
-                            if ((i + 1) % 4 == 0) {
-                                printf("\n");
-                            }
-                        }
+                        display_matches_in_columns(matches);
                         if (matches[0] && strlen(matches[0]) > 0) {
                             /* Find common prefix among matches */
                             char common[256] = {0};
@@ -1020,6 +1017,65 @@ void cleanup_and_exit(int exit_code) {
     cleanup_security();
     close_logging();
     exit(exit_code);
+}
+
+/**
+ * Get terminal width, with fallback to 80 columns
+ */
+int get_terminal_width(void) {
+    struct winsize w;
+    if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &w) == 0 && w.ws_col > 0) {
+        return w.ws_col;
+    }
+    return 80; /* Default fallback */
+}
+
+/**
+ * Display completion matches in clean, aligned columns
+ */
+void display_matches_in_columns(char **matches) {
+    if (!matches || !matches[0]) {
+        return;
+    }
+
+    /* Count matches and find maximum width */
+    int match_count = 0;
+    int max_width = 0;
+
+    for (int i = 0; matches[i]; i++) {
+        match_count++;
+        int len = strlen(matches[i]);
+        if (len > max_width) {
+            max_width = len;
+        }
+    }
+
+    if (match_count == 0) {
+        return;
+    }
+
+    /* Get terminal width and calculate optimal columns */
+    int terminal_width = get_terminal_width();
+    int column_width = max_width + 2; /* Add 2 spaces for padding */
+    int num_columns = terminal_width / column_width;
+
+    /* Ensure at least 1 column and reasonable maximum */
+    if (num_columns < 1) num_columns = 1;
+    if (num_columns > 8) num_columns = 8; /* Reasonable maximum */
+
+    /* Calculate number of rows needed */
+    int num_rows = (match_count + num_columns - 1) / num_columns;
+
+    /* Display matches in column-major order (like ls) */
+    for (int row = 0; row < num_rows; row++) {
+        for (int col = 0; col < num_columns; col++) {
+            int index = col * num_rows + row;
+            if (index < match_count) {
+                printf("%-*s", column_width, matches[index]);
+            }
+        }
+        printf("\n");
+    }
 }
 
 /**
