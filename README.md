@@ -3,7 +3,7 @@
 **Author**: Branson Matheson <branson@sandsite.org>
 **Development**: This project was primarily developed using [Augment Code](https://www.augmentcode.com) AI assistance
 
-[![Version](https://img.shields.io/badge/version-1.7.2-blue.svg)](https://github.com/sandinak/sudosh)
+[![Version](https://img.shields.io/badge/version-1.7.1-blue.svg)](https://github.com/sandinak/sudosh)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Security](https://img.shields.io/badge/security-enhanced-red.svg)](docs/ENHANCED_SECURITY_FEATURES.md)
 
@@ -617,8 +617,15 @@ make security-tests
 
 ## 📋 **Changelog**
 
-### **Version 1.7.2** (Latest)
-#### Enhanced User Experience - Rules Command and Improved Error Messages
+### **Version 1.7.1** (Latest)
+#### Critical Security Bugfix - Sudo Permission Enforcement + Enhanced User Experience
+
+**🚨 CRITICAL SECURITY FIX:**
+- **Fixed privilege escalation vulnerability**: Sudosh was allowing any command to be run when users had general sudo privileges, instead of enforcing specific command permissions from sudoers configuration
+- **Added `check_command_permission()` function**: Uses `sudo -l -U username command` to validate specific command permissions against sudoers rules
+- **Enhanced main command loop**: Now validates each command against sudoers configuration before execution
+- **Improved security logging**: Added comprehensive audit trail for denied commands and security violations
+- **Maintains principle of least privilege**: Users now limited to commands explicitly allowed in their sudoers configuration
 
 **🆕 NEW FEATURES:**
 - **Added 'rules' built-in command**: Shows detailed sudo rules and their sources for the current user
@@ -646,22 +653,6 @@ make security-tests
 - Updated README with new command examples
 - Added comprehensive test suite for new features
 
-**🧪 TESTING:**
-- Added `test_rules_command.c` for comprehensive validation
-- Tests built-in command recognition and functionality
-- Validates enhanced error message content and formatting
-- Ensures proper integration with existing help system
-
-### **Version 1.7.1**
-#### Critical Security Bugfix - Sudo Permission Enforcement
-
-**🚨 CRITICAL SECURITY FIX:**
-- **Fixed privilege escalation vulnerability**: Sudosh was allowing any command to be run when users had general sudo privileges, instead of enforcing specific command permissions from sudoers configuration
-- **Added `check_command_permission()` function**: Uses `sudo -l -U username command` to validate specific command permissions against sudoers rules
-- **Enhanced main command loop**: Now validates each command against sudoers configuration before execution
-- **Improved security logging**: Added comprehensive audit trail for denied commands and security violations
-- **Maintains principle of least privilege**: Users now limited to commands explicitly allowed in their sudoers configuration
-
 **Security Impact:**
 - Prevents privilege escalation through unrestricted command execution
 - Ensures proper enforcement of sudoers constraints
@@ -669,6 +660,7 @@ make security-tests
 
 **Testing:**
 - Added comprehensive test suite (`test_sudo_permission_enforcement.c`)
+- Added `test_rules_command.c` for new feature validation
 - All existing functionality preserved with zero regressions
 - Enhanced error messages and user feedback
 
