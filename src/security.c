@@ -970,7 +970,27 @@ int validate_command(const char *command) {
     /* Check for pipes specifically with helpful message */
     if (strchr(command, '|')) {
         log_security_violation(current_username, "pipe character detected in command");
-        fprintf(stderr, "sudosh: pipes are not supported - only single commands are supported\n");
+        fprintf(stderr, "sudosh: pipes (|) are blocked for security reasons\n");
+        fprintf(stderr, "sudosh: pipes can be used to:\n");
+        fprintf(stderr, "sudosh:   - chain commands and bypass security controls\n");
+        fprintf(stderr, "sudosh:   - pass sensitive data to unauthorized commands\n");
+        fprintf(stderr, "sudosh:   - create complex command injection attacks\n");
+        fprintf(stderr, "sudosh: run commands individually instead of chaining them\n");
+        return 0;
+    }
+
+    /* Check for I/O redirection first (before general metacharacter check) */
+    if (strstr(command, " > ") || strstr(command, " >> ") ||
+        strstr(command, " < ") || strstr(command, " 2> ") ||
+        strstr(command, " 2>> ") || strstr(command, " &> ") ||
+        strstr(command, " &>> ")) {
+        log_security_violation(current_username, "I/O redirection attempt");
+        fprintf(stderr, "sudosh: I/O redirection is blocked for security reasons\n");
+        fprintf(stderr, "sudosh: redirection operators (>, >>, <, 2>, &>) can be used to:\n");
+        fprintf(stderr, "sudosh:   - overwrite critical system files\n");
+        fprintf(stderr, "sudosh:   - bypass file permissions and access controls\n");
+        fprintf(stderr, "sudosh:   - create privilege escalation vectors\n");
+        fprintf(stderr, "sudosh: use individual commands without redirection instead\n");
         return 0;
     }
 
@@ -993,15 +1013,7 @@ int validate_command(const char *command) {
         return 0;
     }
 
-    /* Check for I/O redirection that could be used maliciously */
-    if (strstr(command, " > ") || strstr(command, " >> ") ||
-        strstr(command, " < ") || strstr(command, " 2> ") ||
-        strstr(command, " 2>> ") || strstr(command, " &> ") ||
-        strstr(command, " &>> ")) {
-        log_security_violation(current_username, "I/O redirection attempt");
-        fprintf(stderr, "sudosh: file redirection is blocked for security reasons\n");
-        return 0;
-    }
+
 
     /* Check for environment variable injection */
     if (strstr(command, "$HOME") || strstr(command, "$PATH") ||

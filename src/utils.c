@@ -124,6 +124,7 @@ void print_help(void) {
     printf("Available built-in commands:\n");
     printf("  help, ?       - Show this help message\n");
     printf("  commands      - List all available commands\n");
+    printf("  rules         - Show sudo rules and their sources\n");
     printf("  history       - Show command history\n");
     printf("  cd <dir>      - Change current directory\n");
     printf("  pwd           - Print current working directory\n");
@@ -160,6 +161,7 @@ void print_commands(void) {
     printf("  help, ?       - Show help message\n");
     printf("  pwd           - Print current working directory\n");
     printf("  quit          - Exit sudosh\n");
+    printf("  rules         - Show sudo rules and their sources\n");
     printf("\n");
 
     /* Allocate array for system commands */
@@ -863,6 +865,15 @@ int handle_builtin_command(const char *command) {
         handled = 1;
     } else if (strcmp(token, "commands") == 0) {
         print_commands();
+        handled = 1;
+    } else if (strcmp(token, "rules") == 0) {
+        char *username = get_current_username();
+        if (username) {
+            list_available_commands(username);
+            free(username);
+        } else {
+            printf("Error: Could not determine current user\n");
+        }
         handled = 1;
     } else if (strcmp(token, "history") == 0) {
         print_history();

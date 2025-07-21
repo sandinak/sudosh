@@ -3,7 +3,7 @@
 **Author**: Branson Matheson <branson@sandsite.org>
 **Development**: This project was primarily developed using [Augment Code](https://www.augmentcode.com) AI assistance
 
-[![Version](https://img.shields.io/badge/version-1.7.1-blue.svg)](https://github.com/sandinak/sudosh)
+[![Version](https://img.shields.io/badge/version-1.7.2-blue.svg)](https://github.com/sandinak/sudosh)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Security](https://img.shields.io/badge/security-enhanced-red.svg)](docs/ENHANCED_SECURITY_FEATURES.md)
 
@@ -180,6 +180,7 @@ User is authorized to run sudo commands on hostname
 help                    # Show available commands
 history                 # Display command history
 commands                # List built-in commands
+rules                   # Show sudo rules and their sources
 exit                    # Exit sudosh
 
 # History navigation
@@ -616,7 +617,42 @@ make security-tests
 
 ## 📋 **Changelog**
 
-### **Version 1.7.1** (Latest)
+### **Version 1.7.2** (Latest)
+#### Enhanced User Experience - Rules Command and Improved Error Messages
+
+**🆕 NEW FEATURES:**
+- **Added 'rules' built-in command**: Shows detailed sudo rules and their sources for the current user
+  - Displays the same information as `sudo -l` but from within the interactive shell
+  - Shows direct sudoers rules, group-based privileges, and system-wide group rules
+  - Includes source file attribution for complete transparency
+  - Accessible via the `rules` command in the sudosh prompt
+
+**🔧 ENHANCED ERROR MESSAGES:**
+- **Improved I/O redirection error messages**: Now provides detailed explanation of security risks
+  - Explains how redirection operators can overwrite critical system files
+  - Details how redirects can bypass file permissions and access controls
+  - Warns about privilege escalation vectors
+  - Suggests using individual commands without redirection
+
+- **Enhanced pipe error messages**: More informative explanations for pipe blocking
+  - Explains how pipes can chain commands and bypass security controls
+  - Details risks of passing sensitive data to unauthorized commands
+  - Warns about complex command injection attacks
+  - Suggests running commands individually instead of chaining
+
+**📚 DOCUMENTATION UPDATES:**
+- Updated help system to include 'rules' command
+- Enhanced man page with detailed 'rules' command documentation
+- Updated README with new command examples
+- Added comprehensive test suite for new features
+
+**🧪 TESTING:**
+- Added `test_rules_command.c` for comprehensive validation
+- Tests built-in command recognition and functionality
+- Validates enhanced error message content and formatting
+- Ensures proper integration with existing help system
+
+### **Version 1.7.1**
 #### Critical Security Bugfix - Sudo Permission Enforcement
 
 **🚨 CRITICAL SECURITY FIX:**

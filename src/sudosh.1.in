@@ -84,6 +84,9 @@ Show available commands and usage examples. Both \fBhelp\fR and \fB?\fR display 
 .B commands
 List all available commands, including built-in commands and system commands found in PATH.
 .TP
+.B rules
+Show detailed sudo rules and their sources for the current user. Displays the same information as \fBsudosh -l\fR but from within the interactive shell. Shows direct sudoers rules, group-based privileges, and system-wide group rules with source file attribution.
+.TP
 .B history
 Show numbered command history from ~/.sudosh_history. Use with !<number> to execute previous commands.
 .TP
@@ -112,6 +115,7 @@ sudosh:/home/user# apt update && apt upgrade
 sudosh:/home/user# cd /var/log
 sudosh:/var/log# pwd
 sudosh:/var/log# commands
+sudosh:/var/log# rules
 sudosh:/var/log# help
 sudosh:/var/log# exit
 .fi
