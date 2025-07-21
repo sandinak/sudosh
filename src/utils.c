@@ -726,11 +726,11 @@ char *read_command(void) {
                 char **matches = NULL;
 
                 /* Determine if we're completing a command or a path */
-                if (is_command_position(buffer, pos)) {
-                    /* Complete command names */
+                if (is_command_position(buffer, pos) && prefix[0] != '/') {
+                    /* Complete command names (but not if it's an absolute path) */
                     matches = complete_command(prefix);
                 } else {
-                    /* Complete file/directory paths */
+                    /* Complete file/directory paths (including absolute paths to executables) */
                     matches = complete_path(prefix, 0, strlen(prefix));
                 }
 
