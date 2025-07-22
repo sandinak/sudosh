@@ -558,6 +558,7 @@ static char **tab_matches = NULL;  /* For cycling through completions */
 static int tab_match_index = -1;   /* Current match index */
 static char *tab_original_prefix = NULL;  /* Original prefix before cycling */
 static int tab_prefix_start = -1;  /* Start position of prefix in buffer */
+static char *tab_pending_completion = NULL;  /* Pending dangerous completion */
 
 /**
  * Clean up tab completion state
@@ -573,6 +574,10 @@ static void cleanup_tab_completion(void) {
     if (tab_original_prefix) {
         free(tab_original_prefix);
         tab_original_prefix = NULL;
+    }
+    if (tab_pending_completion) {
+        free(tab_pending_completion);
+        tab_pending_completion = NULL;
     }
     tab_match_index = -1;
     tab_prefix_start = -1;
@@ -895,8 +900,14 @@ char *read_command(void) {
                     }
                 }
 
-                /* Check if this is a continuation of previous tab completion */
-                if (tab_matches && tab_original_prefix &&
+                /* Check if this is a pending dangerous completion */
+                if (tab_pending_completion && tab_original_prefix &&
+                    strcmp(prefix, tab_original_prefix) == 0 &&
+                    prefix_start == tab_prefix_start) {
+                    /* User pressed tab again - complete the dangerous match */
+                    insert_completion(buffer, &pos, &len, tab_pending_completion, prefix);
+                    cleanup_tab_completion();
+                } else if (tab_matches && tab_original_prefix &&
                     strcmp(prefix, tab_original_prefix) == 0 &&
                     prefix_start == tab_prefix_start) {
                     /* Cycle to next match */
@@ -982,12 +993,50 @@ char *read_command(void) {
                             }
                             free(matches);
                         } else if (matches[1] == NULL) {
-                            /* Single match - complete it */
-                            insert_completion(buffer, &pos, &len, matches[0], prefix);
+                            /* Single match - check if it's safe to auto-complete */
+                            int prefix_len = strlen(prefix);
+                            int match_len = strlen(matches[0]);
+                            int is_dangerous_command = 0;
 
-                            /* Free matches since we're not cycling */
-                            free(matches[0]);
-                            free(matches);
+                            /* Check if this is a potentially dangerous command */
+                            if (is_command_position(buffer, pos) == 0) {
+                                /* This is an argument, check if the command is dangerous */
+                                char *cmd_start = buffer;
+                                while (*cmd_start == ' ' || *cmd_start == '\t') cmd_start++;
+                                if (strncmp(cmd_start, "rm ", 3) == 0 ||
+                                    strncmp(cmd_start, "rmdir ", 6) == 0 ||
+                                    strncmp(cmd_start, "mv ", 3) == 0 ||
+                                    strncmp(cmd_start, "cp ", 3) == 0) {
+                                    is_dangerous_command = 1;
+                                }
+                            }
+
+                            /* If the completion is much longer than prefix and it's a dangerous command,
+                               show it instead of auto-completing */
+                            if (is_dangerous_command && prefix_len > 0 && match_len > prefix_len * 2) {
+                                printf("\n");
+                                printf("Potential match: %s\n", matches[0]);
+                                printf("Press Tab again to complete, or continue typing to refine.\n");
+                                print_prompt();
+                                printf("%s", buffer);
+                                displayed_list = 1;
+
+                                /* Store for potential second tab completion */
+                                tab_pending_completion = strdup(matches[0]);
+                                tab_original_prefix = strdup(prefix);
+                                tab_prefix_start = prefix_start;
+
+                                /* Free matches since we're just displaying */
+                                free(matches[0]);
+                                free(matches);
+                            } else {
+                                /* Safe to auto-complete */
+                                insert_completion(buffer, &pos, &len, matches[0], prefix);
+
+                                /* Free matches since we're not cycling */
+                                free(matches[0]);
+                                free(matches);
+                            }
                         } else {
                             /* Multiple matches - set up for cycling through all matches */
                             tab_matches = matches;
