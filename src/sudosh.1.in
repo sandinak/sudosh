@@ -52,7 +52,7 @@ Run commands as the specified target user (requires sudoers permission).
 .SH USAGE
 .SH ENHANCED FEATURES
 .B sudosh
-version 1.9.2 introduces several enhanced features for improved security and usability:
+version 1.9.3 introduces several enhanced features for improved security and usability:
 
 .SS Permission Analysis
 The \fB\-l\fR option provides comprehensive sudo permission analysis with detailed source attribution. Unlike standard \fBsudo -l\fR, sudosh shows exactly which file grants each permission, making it easy to troubleshoot and audit sudo configurations.

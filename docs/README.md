@@ -32,6 +32,13 @@ Security testing framework documentation covering:
 - Security audit methodology
 - Compliance testing guidelines
 
+### **[RELEASE_HISTORY.md](RELEASE_HISTORY.md)**
+Complete release history and notes covering:
+- Version 1.9.3 (Latest) - Critical tab completion bugfix
+- Version 1.9.2 - Build quality and RPM packaging
+- Version 1.9.1 - Security enhancements and CVE protection
+- Previous versions and upgrade guidance
+
 ## Quick Links
 
 - **[Main README](../README.md)** - Project overview and quick start

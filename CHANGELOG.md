@@ -5,6 +5,19 @@ All notable changes to sudosh will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.3] - 2025-07-22
+
+### Fixed
+- **Critical Tab Completion Bug**: Fixed prefix duplication issue where `rm 10<tab>` would incorrectly expand to `rm 1010.58.98.229` instead of `rm 10.58.98.229`
+- **Robust Completion Logic**: Completely rewrote `insert_completion()` function to properly replace prefixes instead of just inserting
+- **Position Validation**: Added comprehensive validation to ensure prefix position calculations are correct
+- **Buffer Safety**: Enhanced bounds checking and prefix verification to prevent edge case failures
+
+### Technical
+- **Prefix Replacement**: Changed from insertion-based to replacement-based completion logic
+- **Error Handling**: Added graceful handling of invalid positions and mismatched prefixes
+- **Memory Safety**: Improved buffer manipulation to prevent overruns and corruption
+
 ## [1.9.2] - 2025-07-22
 
 ### Added

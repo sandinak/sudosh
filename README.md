@@ -3,7 +3,7 @@
 **Author**: Branson Matheson <branson@sandsite.org>
 **Development**: This project was primarily developed using [Augment Code](https://www.augmentcode.com) AI assistance
 
-[![Version](https://img.shields.io/badge/version-1.9.2-blue.svg)](https://github.com/sandinak/sudosh)
+[![Version](https://img.shields.io/badge/version-1.9.3-blue.svg)](https://github.com/sandinak/sudosh)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Security](https://img.shields.io/badge/security-enhanced-red.svg)](docs/ENHANCED_SECURITY_FEATURES.md)
 
@@ -657,7 +657,14 @@ make security-tests
 
 ## 📋 **Changelog**
 
-### **Version 1.9.2** (Latest)
+### **Version 1.9.3** (Latest) - Critical Bugfix
+
+**🚨 Critical Tab Completion Fix**
+- Fixed prefix duplication bug where `rm 10<tab>` would incorrectly expand to `rm 1010.58.98.229`
+- Complete rewrite of tab completion logic for robust prefix replacement
+- Enhanced validation and error handling for edge cases
+
+### **Version 1.9.2** - Build Quality & Packaging
 #### Enhanced Tab Completion System and Directory Path Completion Fix
 
 **🆕 MAJOR FEATURES:**
