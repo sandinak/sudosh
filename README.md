@@ -3,7 +3,7 @@
 **Author**: Branson Matheson <branson@sandsite.org>
 **Development**: This project was primarily developed using [Augment Code](https://www.augmentcode.com) AI assistance
 
-[![Version](https://img.shields.io/badge/version-1.9.1-blue.svg)](https://github.com/sandinak/sudosh)
+[![Version](https://img.shields.io/badge/version-1.9.2-blue.svg)](https://github.com/sandinak/sudosh)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Security](https://img.shields.io/badge/security-enhanced-red.svg)](docs/ENHANCED_SECURITY_FEATURES.md)
 
@@ -657,7 +657,7 @@ make security-tests
 
 ## 📋 **Changelog**
 
-### **Version 1.9.1** (Latest)
+### **Version 1.9.2** (Latest)
 #### Enhanced Tab Completion System and Directory Path Completion Fix
 
 **🆕 MAJOR FEATURES:**

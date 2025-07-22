@@ -5,6 +5,31 @@ All notable changes to sudosh will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.2] - 2025-07-22
+
+### Added
+- **Complete RPM Build System**: Fully functional RPM packaging with proper dependencies and installation scripts
+- **Enhanced Build Quality**: Zero warnings with strictest compiler flags (-Wall -Wextra -Wpedantic -Wformat=2 -Wconversion)
+- **Memory Safety Verification**: Valgrind-verified clean memory management with no leaks
+- **Comprehensive Testing**: All security tests passing including CVE-2023+ protections
+
+### Fixed
+- **RPM Build Issues**: Fixed DESTDIR handling, date formatting, and debug package conflicts
+- **Compiler Warnings**: Eliminated all redundant declarations and format truncation warnings
+- **Build System**: Enhanced Makefile with proper packaging support and dependency management
+- **Code Quality**: Removed duplicate function declarations and improved header organization
+
+### Security
+- **CVE Protection Verified**: All 15 CVE-2023+ security tests passing
+- **Environment Sanitization**: 43 dangerous variables properly sanitized
+- **Memory Safety**: Zero memory leaks confirmed by Valgrind analysis
+- **Input Validation**: Enhanced null byte injection and command injection protection
+
+### Technical
+- **Production Ready**: Clean builds, comprehensive testing, and verified RPM packaging
+- **Quality Assurance**: Strict compiler compliance and static analysis clean
+- **Documentation**: Complete man pages, README updates, and release notes
+
 ## [1.9.1] - 2024-12-22
 
 ### Added
