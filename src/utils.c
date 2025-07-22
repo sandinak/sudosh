@@ -128,8 +128,10 @@ void print_help(void) {
     printf("  commands      - List all available commands\n");
     printf("  rules         - Show sudo rules and their sources\n");
     printf("  history       - Show command history\n");
+    printf("  version       - Show version information\n");
     printf("  cd <dir>      - Change current directory\n");
     printf("  pwd           - Print current working directory\n");
+    printf("  path          - Show PATH environment variable and inaccessible directories\n");
     printf("  exit, quit    - Exit sudosh\n");
     printf("  <command>     - Execute command as root\n\n");
     printf("Examples:\n");
@@ -161,6 +163,7 @@ void print_commands(void) {
     printf("  commands      - List all available commands\n");
     printf("  exit          - Exit sudosh\n");
     printf("  help, ?       - Show help message\n");
+    printf("  path          - Show PATH environment variable and inaccessible directories\n");
     printf("  pwd           - Print current working directory\n");
     printf("  quit          - Exit sudosh\n");
     printf("  rules         - Show sudo rules and their sources\n");
@@ -449,6 +452,31 @@ static void print_prompt(void) {
     fflush(stdout);
 }
 
+/* Static variables for tab completion cycling */
+static char **tab_matches = NULL;  /* For cycling through completions */
+static int tab_match_index = -1;   /* Current match index */
+static char *tab_original_prefix = NULL;  /* Original prefix before cycling */
+static int tab_prefix_start = -1;  /* Start position of prefix in buffer */
+
+/**
+ * Clean up tab completion state
+ */
+static void cleanup_tab_completion(void) {
+    if (tab_matches) {
+        for (int i = 0; tab_matches[i]; i++) {
+            free(tab_matches[i]);
+        }
+        free(tab_matches);
+        tab_matches = NULL;
+    }
+    if (tab_original_prefix) {
+        free(tab_original_prefix);
+        tab_original_prefix = NULL;
+    }
+    tab_match_index = -1;
+    tab_prefix_start = -1;
+}
+
 /**
  * Read command from user with prompt and basic line editing
  */
@@ -525,10 +553,32 @@ char *read_command(void) {
             return NULL;
         }
 
-        /* Reset SIGINT flag if it was received - we continue on Ctrl-C */
+        /* Handle SIGINT (Ctrl-C) - clear current line and start fresh */
         if (received_sigint_signal()) {
             reset_sigint_flag();
-            /* Continue processing - don't exit on Ctrl-C */
+
+            /* Clear the current line */
+            if (len > 0) {
+                /* Move cursor to beginning of line and clear it */
+                printf("\r\033[K");
+                print_prompt();
+                fflush(stdout);
+
+                /* Reset buffer and position */
+                memset(buffer, 0, sizeof(buffer));
+                pos = 0;
+                len = 0;
+                history_index = -1;  /* Reset history navigation */
+                cleanup_tab_completion();  /* Reset tab completion */
+            } else {
+                /* If line is empty, just print ^C and start new line */
+                printf("^C\n");
+                print_prompt();
+                fflush(stdout);
+            }
+
+            /* Continue with fresh line */
+            continue;
         }
 
         /* Use select() to implement timeout */
@@ -572,6 +622,7 @@ char *read_command(void) {
             break;
         } else if (c == 127 || c == '\b') {
             /* Backspace */
+            cleanup_tab_completion();  /* Reset tab completion */
             if (pos > 0) {
                 pos--;
                 len--;
@@ -591,6 +642,7 @@ char *read_command(void) {
             }
         } else if (c == 1) {
             /* Ctrl-A: Beginning of line */
+            cleanup_tab_completion();  /* Reset tab completion */
             if (pos > 0) {
                 printf("\033[%dD", pos);
                 pos = 0;
@@ -598,6 +650,7 @@ char *read_command(void) {
             }
         } else if (c == 5) {
             /* Ctrl-E: End of line */
+            cleanup_tab_completion();  /* Reset tab completion */
             if (pos < len) {
                 printf("\033[%dC", len - pos);
                 pos = len;
@@ -605,6 +658,7 @@ char *read_command(void) {
             }
         } else if (c == 2) {
             /* Ctrl-B: Move left */
+            cleanup_tab_completion();  /* Reset tab completion */
             if (pos > 0) {
                 printf("\033[1D");
                 pos--;
@@ -612,6 +666,7 @@ char *read_command(void) {
             }
         } else if (c == 6) {
             /* Ctrl-F: Move right */
+            cleanup_tab_completion();  /* Reset tab completion */
             if (pos < len) {
                 printf("\033[1C");
                 pos++;
@@ -725,84 +780,172 @@ char *read_command(void) {
             /* Tab - perform completion */
             char *prefix = find_completion_start(buffer, pos);
             if (prefix) {
-                char **matches = NULL;
+                int prefix_start = pos - strlen(prefix);
+                int is_empty_prefix = (strlen(prefix) == 0);
 
-                /* Determine if we're completing a command or a path */
-                if (is_command_position(buffer, pos) && prefix[0] != '/') {
-                    /* Complete command names (but not if it's an absolute path) */
-                    matches = complete_command(prefix);
-                } else if (is_command_position(buffer, pos) && prefix[0] == '/') {
-                    /* Complete absolute paths to executables only in command position */
-                    matches = complete_path(prefix, 0, strlen(prefix), 1);
-                } else {
-                    /* Complete file/directory paths (all files for arguments) */
-                    matches = complete_path(prefix, 0, strlen(prefix), 0);
+                /* Special case: if prefix ends with '/' and we're at the end of it,
+                   treat it as empty prefix for that directory */
+                int is_directory_end = 0;
+                if (!is_empty_prefix && strlen(prefix) > 0 && prefix[strlen(prefix) - 1] == '/') {
+                    /* Check if cursor is at the end of the prefix (right after the '/') */
+                    if (pos == prefix_start + (int)strlen(prefix)) {
+                        is_directory_end = 1;
+                        is_empty_prefix = 1;  /* Treat as empty prefix */
+                    }
                 }
 
-                if (matches && matches[0]) {
-                    if (matches[1] == NULL) {
-                        /* Single match - complete it */
-                        insert_completion(buffer, &pos, &len, matches[0], prefix);
+                /* Check if this is a continuation of previous tab completion */
+                if (tab_matches && tab_original_prefix &&
+                    strcmp(prefix, tab_original_prefix) == 0 &&
+                    prefix_start == tab_prefix_start) {
+                    /* Cycle to next match */
+                    tab_match_index++;
+                    if (!tab_matches[tab_match_index]) {
+                        tab_match_index = 0; /* Wrap around */
+                    }
 
-                        /* Redraw line */
+                    /* Replace current completion with next match */
+                    /* First, remove the current completion */
+                    int current_completion_len = pos - tab_prefix_start;
+                    memmove(&buffer[tab_prefix_start], &buffer[pos], len - pos);
+                    len -= current_completion_len;
+                    pos = tab_prefix_start;
+
+                    /* Insert new completion */
+                    insert_completion(buffer, &pos, &len, tab_matches[tab_match_index], tab_original_prefix);
+                } else {
+                    /* New completion - clean up previous state */
+                    cleanup_tab_completion();
+
+                    char **matches = NULL;
+                    int displayed_list = 0;  /* Flag to track if we displayed a list */
+                    char *completion_text = prefix;  /* Text to use for completion */
+                    char *dir_context = NULL;  /* Directory context for empty prefix */
+
+                    /* For empty prefix, check if we have a directory context */
+                    if (is_empty_prefix) {
+                        if (is_directory_end) {
+                            /* Special case: we're at the end of a directory path ending with '/' */
+                            completion_text = prefix;  /* Use the directory path itself */
+                        } else {
+                            /* Normal empty prefix case */
+                            dir_context = get_directory_context_for_empty_prefix(buffer, pos);
+                            if (dir_context) {
+                                completion_text = dir_context;
+                            }
+                        }
+                    }
+
+                    /* Determine if we're completing a command or a path */
+                    if (is_command_position(buffer, pos) && completion_text[0] != '/') {
+                        /* Complete command names (but not if it's an absolute path) */
+                        matches = complete_command(completion_text);
+                    } else if (is_command_position(buffer, pos) && completion_text[0] == '/') {
+                        /* Complete absolute paths to executables only in command position */
+                        matches = complete_path(completion_text, 0, strlen(completion_text), 1, 0);
+                    } else if (is_cd_command(buffer, pos)) {
+                        /* Complete directories only for cd command */
+                        matches = complete_path(completion_text, 0, strlen(completion_text), 0, 1);
+                    } else {
+                        /* Complete file/directory paths (all files for arguments) */
+                        matches = complete_path(completion_text, 0, strlen(completion_text), 0, 0);
+                    }
+
+                    if (matches && matches[0]) {
+                        if (is_empty_prefix && (matches[1] != NULL || is_directory_end)) {
+                            /* Empty prefix with multiple matches OR directory end - display all options */
+                            printf("\n");
+                            display_matches_in_columns(matches);
+                            printf("\n");
+                            print_prompt();
+                            printf("%s", buffer);
+                            displayed_list = 1;
+
+                            /* Free matches since we're just displaying them */
+                            for (int i = 0; matches[i]; i++) {
+                                free(matches[i]);
+                            }
+                            free(matches);
+                        } else if (is_empty_prefix && matches[1] == NULL && dir_context) {
+                            /* Single match in directory context for empty prefix - display it instead of auto-completing */
+                            printf("\n");
+                            display_matches_in_columns(matches);
+                            printf("\n");
+                            print_prompt();
+                            printf("%s", buffer);
+                            displayed_list = 1;
+
+                            /* Free matches since we're just displaying them */
+                            for (int i = 0; matches[i]; i++) {
+                                free(matches[i]);
+                            }
+                            free(matches);
+                        } else if (matches[1] == NULL) {
+                            /* Single match - complete it */
+                            insert_completion(buffer, &pos, &len, matches[0], prefix);
+
+                            /* Free matches since we're not cycling */
+                            free(matches[0]);
+                            free(matches);
+                        } else {
+                            /* Multiple matches with partial prefix - set up for cycling */
+                            tab_matches = matches;
+                            tab_original_prefix = strdup(prefix);
+                            tab_prefix_start = prefix_start;
+                            tab_match_index = 0;
+
+                            /* Complete with first match */
+                            insert_completion(buffer, &pos, &len, matches[0], prefix);
+                        }
+                    } else if (is_empty_prefix) {
+                        /* No matches for empty prefix - show helpful message */
+                        printf("\n");
+                        if (is_command_position(buffer, pos)) {
+                            printf("(No commands available)\n");
+                        } else if (is_cd_command(buffer, pos)) {
+                            if (dir_context) {
+                                printf("(No directories found in %s)\n", dir_context);
+                            } else {
+                                printf("(No directories found)\n");
+                            }
+                        } else {
+                            if (dir_context) {
+                                printf("(No files or directories found in %s)\n", dir_context);
+                            } else {
+                                printf("(No files or directories found)\n");
+                            }
+                        }
+                        printf("\n");
+                        print_prompt();
+                        printf("%s", buffer);
+                        displayed_list = 1;
+                    }
+
+                    /* Clean up directory context */
+                    if (dir_context) {
+                        free(dir_context);
+                    }
+
+                    /* Redraw line if not already done above */
+                    if (!displayed_list) {
                         printf("\r\033[K");
                         print_prompt();
                         printf("%s", buffer);
-
-                        /* Move cursor to correct position */
-                        if (pos < len) {
-                            printf("\033[%dD", len - pos);
-                        }
-                        fflush(stdout);
-                    } else {
-                        /* Multiple matches - show them in clean columns */
-                        printf("\n");
-                        display_matches_in_columns(matches);
-                        if (matches[0] && strlen(matches[0]) > 0) {
-                            /* Find common prefix among matches */
-                            char common[256] = {0};
-                            int common_len = 0;
-                            int max_common = strlen(matches[0]);
-
-                            for (int i = 1; matches[i] && common_len < max_common; i++) {
-                                for (int j = 0; j < max_common && j < (int)strlen(matches[i]); j++) {
-                                    if (matches[0][j] != matches[i][j]) {
-                                        max_common = j;
-                                        break;
-                                    }
-                                }
-                            }
-
-                            if (max_common > (int)strlen(prefix)) {
-                                strncpy(common, matches[0], max_common);
-                                common[max_common] = '\0';
-                                insert_completion(buffer, &pos, &len, common, prefix);
-                            }
-                        }
-                        printf("\n");
-
-                        /* Redraw prompt and line */
-                        print_prompt();
-                        printf("%s", buffer);
-
-                        /* Move cursor to correct position */
-                        if (pos < len) {
-                            printf("\033[%dD", len - pos);
-                        }
-                        fflush(stdout);
                     }
-
-                    /* Free matches */
-                    for (int i = 0; matches[i]; i++) {
-                        free(matches[i]);
-                    }
-                    free(matches);
                 }
+
+                /* Move cursor to correct position */
+                if (pos < len) {
+                    printf("\033[%dD", len - pos);
+                }
+                fflush(stdout);
+
                 free(prefix);
             }
         } else if (c >= 32 && c < 127) {
             /* Printable character */
             history_index = -1;  /* Reset history navigation */
+            cleanup_tab_completion();  /* Reset tab completion */
             if (len < (int)sizeof(buffer) - 1) {
                 /* Insert character at current position */
                 memmove(&buffer[pos + 1], &buffer[pos], len - pos);
@@ -825,6 +968,9 @@ char *read_command(void) {
     /* Restore terminal settings */
     tcsetattr(STDIN_FILENO, TCSANOW, &old_termios);
 
+    /* Clean up tab completion state */
+    cleanup_tab_completion();
+
     /* Return a copy of the buffer */
     if (len > 0) {
         line = malloc(len + 1);
@@ -839,6 +985,98 @@ char *read_command(void) {
     }
 
     return line;
+}
+
+/**
+ * Validate PATH for security issues
+ */
+int validate_path_security(const char *path_env) {
+    if (!path_env) {
+        return 0; /* No PATH is a security issue */
+    }
+
+    char *path_copy = strdup(path_env);
+    if (!path_copy) {
+        return 0;
+    }
+
+    char *dir, *saveptr;
+    int issues_found = 0;
+
+    dir = strtok_r(path_copy, ":", &saveptr);
+    while (dir != NULL) {
+        /* Check for current directory (.) */
+        if (strcmp(dir, ".") == 0) {
+            printf("⚠️  Security Issue: Current directory (.) in PATH\n");
+            printf("   Risk: Commands in current directory may be executed unintentionally\n");
+            issues_found++;
+        }
+
+        /* Check for empty directory (::) */
+        if (strlen(dir) == 0) {
+            printf("⚠️  Security Issue: Empty directory in PATH\n");
+            printf("   Risk: Equivalent to current directory in PATH\n");
+            issues_found++;
+        }
+
+        /* Check for relative paths */
+        if (dir[0] != '/') {
+            printf("⚠️  Security Issue: Relative path '%s' in PATH\n", dir);
+            printf("   Risk: Path resolution depends on current directory\n");
+            issues_found++;
+        }
+
+        /* Check if directory exists and is accessible */
+        struct stat st;
+        if (stat(dir, &st) != 0) {
+            printf("⚠️  Warning: PATH directory '%s' does not exist or is not accessible\n", dir);
+        } else if (!S_ISDIR(st.st_mode)) {
+            printf("⚠️  Warning: PATH entry '%s' is not a directory\n", dir);
+        }
+
+        dir = strtok_r(NULL, ":", &saveptr);
+    }
+
+    free(path_copy);
+    return issues_found == 0;
+}
+
+/**
+ * Print PATH information with minimal, clean output
+ */
+void print_path_info(void) {
+    const char *path_env = getenv("PATH");
+
+    if (!path_env) {
+        printf("(no PATH set)\n");
+        return;
+    }
+
+    /* Print the raw PATH value */
+    printf("%s\n", path_env);
+
+    /* Check each directory and report only inaccessible ones */
+    char *path_copy = strdup(path_env);
+    if (!path_copy) {
+        return;
+    }
+
+    char *dir, *saveptr;
+
+    dir = strtok_r(path_copy, ":", &saveptr);
+    while (dir != NULL) {
+        /* Skip empty directories */
+        if (strlen(dir) > 0) {
+            /* Check if directory is accessible */
+            if (access(dir, R_OK) != 0) {
+                printf("INACCESSIBLE: %s\n", dir);
+            }
+        }
+
+        dir = strtok_r(NULL, ":", &saveptr);
+    }
+
+    free(path_copy);
 }
 
 /**
@@ -878,6 +1116,9 @@ int handle_builtin_command(const char *command) {
     } else if (strcmp(token, "history") == 0) {
         print_history();
         handled = 1;
+    } else if (strcmp(token, "version") == 0) {
+        printf("sudosh %s\n", SUDOSH_VERSION);
+        handled = 1;
     } else if (strcmp(token, "pwd") == 0) {
         char *cwd = getcwd(NULL, 0);
         if (cwd) {
@@ -886,6 +1127,9 @@ int handle_builtin_command(const char *command) {
         } else {
             perror("pwd");
         }
+        handled = 1;
+    } else if (strcmp(token, "path") == 0) {
+        print_path_info();
         handled = 1;
     } else if (strcmp(token, "cd") == 0) {
         char *dir = strtok_r(NULL, " \t", &saveptr);
@@ -1176,7 +1420,7 @@ char **complete_command(const char *text) {
     free(path_copy);
 
     /* Add built-in commands that match */
-    const char *builtins[] = {"help", "commands", "history", "pwd", "cd", "exit", "quit", NULL};
+    const char *builtins[] = {"help", "commands", "history", "pwd", "path", "cd", "exit", "quit", NULL};
     for (int i = 0; builtins[i]; i++) {
         if (strncmp(builtins[i], text, text_len) == 0) {
             /* Check if we already have this command */
@@ -1267,11 +1511,209 @@ char *find_completion_start(const char *buffer, int pos) {
 }
 
 /**
+ * Complete = expansion (like zsh)
+ */
+char **complete_equals_expansion(const char *text) {
+    if (!text || text[0] != '=') {
+        return NULL;
+    }
+
+    /* Skip the = character */
+    const char *command_prefix = text + 1;
+    if (strlen(command_prefix) == 0) {
+        return NULL;
+    }
+
+    char **matches = NULL;
+    int match_count = 0;
+    int match_capacity = 16;
+
+    /* Allocate initial matches array */
+    matches = malloc(match_capacity * sizeof(char *));
+    if (!matches) {
+        return NULL;
+    }
+
+    /* Get PATH environment variable */
+    char *path_env = getenv("PATH");
+    if (!path_env) {
+        free(matches);
+        return NULL;
+    }
+
+    /* Make a copy of PATH for tokenization */
+    char *path_copy = strdup(path_env);
+    if (!path_copy) {
+        free(matches);
+        return NULL;
+    }
+
+    int prefix_len = strlen(command_prefix);
+    char *dir, *saveptr;
+
+    /* Search each directory in PATH */
+    dir = strtok_r(path_copy, ":", &saveptr);
+    while (dir != NULL) {
+        DIR *dirp = opendir(dir);
+        if (dirp != NULL) {
+            struct dirent *entry;
+            while ((entry = readdir(dirp)) != NULL) {
+                /* Skip . and .. */
+                if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
+                    continue;
+                }
+
+                /* Check if entry matches prefix */
+                if (strncmp(entry->d_name, command_prefix, prefix_len) == 0) {
+                    /* Build full path to check if it's executable */
+                    char full_path[PATH_MAX];
+                    snprintf(full_path, sizeof(full_path), "%s/%s", dir, entry->d_name);
+
+                    struct stat st;
+                    if (stat(full_path, &st) == 0 && S_ISREG(st.st_mode) && (st.st_mode & S_IXUSR)) {
+                        /* Check if we already have this command */
+                        int found = 0;
+                        for (int j = 0; j < match_count; j++) {
+                            if (strcmp(matches[j], full_path) == 0) {
+                                found = 1;
+                                break;
+                            }
+                        }
+
+                        if (!found) {
+                            /* Expand matches array if needed */
+                            if (match_count >= match_capacity - 1) {
+                                match_capacity *= 2;
+                                char **new_matches = realloc(matches, match_capacity * sizeof(char *));
+                                if (!new_matches) {
+                                    /* Clean up on failure */
+                                    for (int i = 0; i < match_count; i++) {
+                                        free(matches[i]);
+                                    }
+                                    free(matches);
+                                    free(path_copy);
+                                    closedir(dirp);
+                                    return NULL;
+                                }
+                                matches = new_matches;
+                            }
+
+                            /* Add full path to matches */
+                            matches[match_count] = strdup(full_path);
+                            if (matches[match_count]) {
+                                match_count++;
+                            }
+                        }
+                    }
+                }
+            }
+            closedir(dirp);
+        }
+        dir = strtok_r(NULL, ":", &saveptr);
+    }
+
+    free(path_copy);
+
+    /* Sort matches alphabetically */
+    for (int i = 0; i < match_count - 1; i++) {
+        for (int j = i + 1; j < match_count; j++) {
+            if (strcmp(matches[i], matches[j]) > 0) {
+                char *temp = matches[i];
+                matches[i] = matches[j];
+                matches[j] = temp;
+            }
+        }
+    }
+
+    /* Null-terminate the matches array */
+    matches[match_count] = NULL;
+
+    return matches;
+}
+
+/**
+ * Extract directory context for empty prefix completion
+ * Returns the directory path that should be used for completion when prefix is empty
+ * For example: "ls /etc/ " should return "/etc/" for completion context
+ */
+char *get_directory_context_for_empty_prefix(const char *buffer, int pos) {
+    if (!buffer || pos <= 0) {
+        return NULL;
+    }
+
+    /* Look backwards from current position to find the last directory path */
+    int end = pos;
+
+    /* Skip any trailing whitespace */
+    while (end > 0 && (buffer[end - 1] == ' ' || buffer[end - 1] == '\t')) {
+        end--;
+    }
+
+    /* If we don't end with a '/', there's no directory context */
+    if (end == 0 || buffer[end - 1] != '/') {
+        return NULL;
+    }
+
+    /* Find the start of the path (look for space or start of buffer) */
+    int start = end - 1;  /* Start from the '/' */
+    while (start > 0 && buffer[start - 1] != ' ' && buffer[start - 1] != '\t') {
+        start--;
+    }
+
+    /* Extract the directory path */
+    int path_len = end - start;
+    if (path_len <= 0) {
+        return NULL;
+    }
+
+    char *dir_path = malloc(path_len + 1);
+    if (!dir_path) {
+        return NULL;
+    }
+
+    strncpy(dir_path, buffer + start, path_len);
+    dir_path[path_len] = '\0';
+
+    return dir_path;
+}
+
+/**
+ * Check if we're completing for a cd command
+ */
+int is_cd_command(const char *buffer, int pos) {
+    if (!buffer || pos < 2) return 0;
+
+    /* Find the start of the current command */
+    int cmd_start = 0;
+    for (int i = 0; i < pos; i++) {
+        if (buffer[i] != ' ' && buffer[i] != '\t') {
+            cmd_start = i;
+            break;
+        }
+    }
+
+    /* Check if command starts with "cd" followed by whitespace or end */
+    if (cmd_start + 2 <= pos &&
+        buffer[cmd_start] == 'c' &&
+        buffer[cmd_start + 1] == 'd' &&
+        (cmd_start + 2 == pos || buffer[cmd_start + 2] == ' ' || buffer[cmd_start + 2] == '\t')) {
+        return 1;
+    }
+
+    return 0;
+}
+
+/**
  * Complete file/directory paths
  */
-char **complete_path(const char *text, int start, int end, int executables_only) {
+char **complete_path(const char *text, int start, int end, int executables_only, int directories_only) {
     (void)start; /* Suppress unused parameter warning */
     (void)end;   /* Suppress unused parameter warning */
+
+    /* Check for = expansion first */
+    if (text && text[0] == '=') {
+        return complete_equals_expansion(text);
+    }
 
     char **matches = NULL;
     int match_count = 0;
@@ -1368,23 +1810,52 @@ char **complete_path(const char *text, int start, int end, int executables_only)
             }
 
             if (full_match) {
-                /* Check if it's a directory and add trailing slash */
-                struct stat st;
-                if (stat(full_match, &st) == 0 && S_ISDIR(st.st_mode)) {
-                    char *dir_match = malloc(strlen(full_match) + 2);
-                    if (dir_match) {
-                        strcpy(dir_match, full_match);
-                        strcat(dir_match, "/");
-                        free(full_match);
-                        full_match = dir_match;
+                /* Build full path for stat() check */
+                char *stat_path;
+                if (strcmp(dir_path, "./") == 0) {
+                    stat_path = strdup(entry->d_name);
+                } else {
+                    int stat_len = strlen(dir_path) + strlen(entry->d_name) + 1;
+                    stat_path = malloc(stat_len);
+                    if (stat_path) {
+                        strcpy(stat_path, dir_path);
+                        strcat(stat_path, entry->d_name);
                     }
-                } else if (executables_only) {
-                    /* If filtering for executables only, check if file is executable */
-                    if (stat(full_match, &st) != 0 || !S_ISREG(st.st_mode) || !(st.st_mode & S_IXUSR)) {
-                        /* Not an executable file - skip this match */
+                }
+
+                if (stat_path) {
+                    struct stat st;
+                    if (stat(stat_path, &st) == 0) {
+                        if (S_ISDIR(st.st_mode)) {
+                            /* Add trailing slash for directories */
+                            char *dir_match = malloc(strlen(full_match) + 2);
+                            if (dir_match) {
+                                strcpy(dir_match, full_match);
+                                strcat(dir_match, "/");
+                                free(full_match);
+                                full_match = dir_match;
+                            }
+                        } else if (directories_only) {
+                            /* If filtering for directories only, skip non-directories */
+                            free(full_match);
+                            free(stat_path);
+                            continue;
+                        } else if (executables_only) {
+                            /* If filtering for executables only, check if file is executable */
+                            if (!S_ISREG(st.st_mode) || !(st.st_mode & S_IXUSR)) {
+                                /* Not an executable file - skip this match */
+                                free(full_match);
+                                free(stat_path);
+                                continue;
+                            }
+                        }
+                    } else if (directories_only || executables_only) {
+                        /* Can't stat file and we need specific type - skip */
                         free(full_match);
+                        free(stat_path);
                         continue;
                     }
+                    free(stat_path);
                 }
 
                 matches[match_count++] = full_match;
@@ -1395,6 +1866,17 @@ char **complete_path(const char *text, int start, int end, int executables_only)
     closedir(dir);
     free(dir_path);
     free(filename_prefix);
+
+    /* Sort matches alphabetically */
+    for (int i = 0; i < match_count - 1; i++) {
+        for (int j = i + 1; j < match_count; j++) {
+            if (strcmp(matches[i], matches[j]) > 0) {
+                char *temp = matches[i];
+                matches[i] = matches[j];
+                matches[j] = temp;
+            }
+        }
+    }
 
     /* Null-terminate the matches array */
     matches[match_count] = NULL;

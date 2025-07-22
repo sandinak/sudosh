@@ -233,6 +233,9 @@ int main_loop(void) {
     /* Clean up security */
     cleanup_security();
 
+    /* Clean up file locking system */
+    cleanup_file_locking();
+
     /* Clean up */
     free_user_info(user);
     free(username);
@@ -321,6 +324,12 @@ int main(int argc, char *argv[]) {
 
     /* Initialize security measures */
     init_security();
+
+    /* Initialize file locking system */
+    if (init_file_locking() != 0) {
+        fprintf(stderr, "sudosh: failed to initialize file locking system\n");
+        return EXIT_FAILURE;
+    }
 
     /* Run main program loop */
     exit_code = main_loop();

@@ -5,7 +5,32 @@ All notable changes to sudosh will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.5.0] - 2024-12-15
+## [1.5.0]
+
+### Added
+- **Ctrl-C Line Clearing**: Press Ctrl-C to cancel current line editing and start fresh, matching standard shell behavior
+- **File Locking System**: Prevents concurrent editing of the same file by multiple users with comprehensive conflict detection and automatic cleanup
+- **PATH Command**: New `path` built-in command displays PATH environment variable with minimal, clean output
+- **PATH Validator Tool**: Standalone `path-validator` utility to validate and clean PATH for security issues
+- **Enhanced CD Tab Completion**: Tab completion for `cd` command now shows only directories, improving usability
+- **Enhanced Tab Completion**: Tab completion now displays available options when no partial text is present
+  - Empty line tab completion shows all available commands (built-ins and PATH executables)
+  - Empty argument tab completion shows appropriate files/directories based on command context
+  - CD command shows directories only when completing with no partial text
+  - Clean, multi-column display format for completion lists
+  - Maintains existing tab completion behavior for partial text matching
+- **Fixed Directory Path Completion**: Corrected tab completion behavior for commands with directory paths
+  - **CRITICAL FIX**: `ls /etc/<Tab>` now displays all files in /etc/ instead of auto-completing to first entry
+  - `ls /etc/host<Tab>` still auto-completes to matching files (existing behavior preserved)
+  - Works with both absolute paths (/etc/) and relative paths (src/)
+  - Handles complex nested paths and edge cases (spaces, tabs)
+  - Added comprehensive regression tests to prevent future issues
+
+### Improved
+- **PATH Command Output**: Simplified to show only raw PATH value and inaccessible directories for clean, scriptable output
+
+### Fixed
+- **Secure Editor Regression**: Fixed issue where secure editors (vi, vim, nano, pico) were being blocked instead of running in constrained environment - 2024-12-15
 
 ### Major Security Release - Comprehensive Security Audit & Fixes
 

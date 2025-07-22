@@ -3,7 +3,7 @@
 **Author**: Branson Matheson <branson@sandsite.org>
 **Development**: This project was primarily developed using [Augment Code](https://www.augmentcode.com) AI assistance
 
-[![Version](https://img.shields.io/badge/version-1.8.0-blue.svg)](https://github.com/sandinak/sudosh)
+[![Version](https://img.shields.io/badge/version-1.9.0-blue.svg)](https://github.com/sandinak/sudosh)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Security](https://img.shields.io/badge/security-enhanced-red.svg)](docs/ENHANCED_SECURITY_FEATURES.md)
 
@@ -19,7 +19,12 @@ Sudosh is a comprehensive, secure interactive shell that provides elevated privi
 - **Enhanced security** - Shell blocking, dangerous command detection, system directory protection
 - **Comprehensive logging** - All commands logged to syslog and optional session files
 - **Command history** - Full history with arrow key navigation and `!{number}` recall
-- **Advanced tab completion** - Intelligent completion with clean column formatting
+- **Enhanced tab completion** - Comprehensive intelligent completion system
+  - **Empty line completion** - `<Tab>` on empty line shows all available commands
+  - **Context-aware completion** - Different behavior for commands vs arguments
+  - **Directory path completion** - `ls /etc/<Tab>` displays directory contents
+  - **CD command optimization** - Shows directories only for `cd` command
+  - **Clean column formatting** - Multi-column display for better readability
 - **Executable filtering** - Tab completion shows only executables in command position
 - **Package generation** - Professional RPM and DEB packages for easy distribution
 
@@ -194,7 +199,13 @@ Up/Down arrows          # Navigate through history
 Ctrl-A/E               # Beginning/end of line
 Ctrl-K/U               # Kill to end/kill entire line
 Ctrl-D                 # Exit gracefully
-Tab                    # Path completion
+
+# Enhanced tab completion
+Tab                    # Intelligent context-aware completion
+                       # - Empty line: shows all commands
+                       # - After command: shows files/directories
+                       # - After 'cd': shows directories only
+                       # - Directory paths: shows directory contents
 ```
 
 ## 🔐 **Security Model**
@@ -619,7 +630,45 @@ make security-tests
 
 ## 📋 **Changelog**
 
-### **Version 1.7.1** (Latest)
+### **Version 1.9.0** (Latest)
+#### Enhanced Tab Completion System and Directory Path Completion Fix
+
+**🆕 MAJOR FEATURES:**
+- **Enhanced Tab Completion System**: Comprehensive intelligent completion with context awareness
+  - **Empty line completion**: `<Tab>` on empty line displays all available commands (built-ins + PATH executables)
+  - **Empty argument completion**: Context-aware file/directory listings based on command type
+  - **CD command optimization**: `cd <Tab>` shows directories only for efficient navigation
+  - **Clean multi-column display**: Professional formatting for completion lists
+  - **Maintained compatibility**: All existing tab completion behavior preserved
+
+- **🚨 CRITICAL FIX - Directory Path Completion**: Permanently resolved tab completion issue
+  - **Fixed**: `ls /etc/<Tab>` now displays all files in /etc/ instead of auto-completing to first entry
+  - **Preserved**: `ls /etc/host<Tab>` still auto-completes to matching files (existing behavior)
+  - **Enhanced**: Works with absolute paths (/etc/) and relative paths (src/)
+  - **Robust**: Handles edge cases (spaces, tabs, complex nested paths)
+  - **Tested**: Comprehensive regression tests prevent future issues
+
+**🔧 TECHNICAL IMPROVEMENTS:**
+- **Directory end detection**: Smart algorithm detects when cursor is at end of directory path
+- **Context-aware logic**: Different completion behavior for commands vs arguments
+- **Memory optimization**: Efficient completion with proper cleanup
+- **Performance**: Minimal overhead for enhanced functionality
+
+**🧪 TESTING & QUALITY:**
+- **Comprehensive test coverage**: 18+ test suites with 100+ individual test cases
+- **Regression prevention**: Specific tests for directory completion fix
+- **Security validation**: All security tests passing
+- **Backward compatibility**: Zero breaking changes
+
+### **Version 1.8.0**
+#### File Locking System and Authentication Cache Enhancements
+
+**🆕 NEW FEATURES:**
+- **File locking system**: Prevents concurrent access to critical files
+- **Enhanced authentication cache**: Improved security and performance
+- **Color support improvements**: Better terminal compatibility
+
+### **Version 1.7.1**
 #### Critical Security Bugfix - Sudo Permission Enforcement + Enhanced User Experience
 
 **🚨 CRITICAL SECURITY FIX:**

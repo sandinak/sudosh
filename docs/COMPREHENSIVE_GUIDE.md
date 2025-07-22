@@ -7,8 +7,10 @@
 
 Sudosh is a secure, interactive sudo shell that provides elevated privileges with extensive logging, security protections, and audit capabilities. This comprehensive guide covers all aspects of sudosh including features, security enhancements, implementation details, and troubleshooting.
 
-## Key Features (v1.4.0)
+## Key Features (v1.9.0)
 
+- **Enhanced Tab Completion**: Comprehensive intelligent completion system with context awareness
+- **Directory Path Completion Fix**: Critical fix for `ls /etc/<Tab>` behavior
 - **Authentication Caching**: Secure credential caching similar to sudo (15-minute default)
 - **Color Support**: Automatic color inheritance from calling shell's PS1 environment
 - **Package Generation**: Comprehensive packaging for RPM and DEB based systems
@@ -69,11 +71,57 @@ Sudosh is a secure, interactive sudo shell that provides elevated privileges wit
 
 ## Interactive Enhancements
 
+### Enhanced Tab Completion System (v1.9.0)
+Sudosh features a comprehensive intelligent tab completion system with context awareness:
+
+#### **Empty Line Completion**
+- **Behavior**: Pressing `<Tab>` on an empty line displays all available commands
+- **Coverage**: Shows built-in commands and all executables in PATH
+- **Display**: Clean multi-column format for easy browsing
+- **Example**:
+  ```
+  sudosh:/home/user# <Tab>
+  cat       cd        commands  cp        echo      exit      find      grep
+  help      history   ls        mkdir     path      pwd       quit      rm
+  rules     sort      version   vi        wc
+  ```
+
+#### **Context-Aware Argument Completion**
+- **Command Arguments**: `ls <Tab>` shows files and directories in current directory
+- **CD Command**: `cd <Tab>` shows directories only for efficient navigation
+- **Smart Filtering**: Different completion behavior based on command context
+
+#### **Directory Path Completion Fix**
+- **Critical Fix**: `ls /etc/<Tab>` now displays all files in /etc/ instead of auto-completing to first entry
+- **Preserved Behavior**: `ls /etc/host<Tab>` still auto-completes to matching files
+- **Path Support**: Works with absolute paths (/etc/) and relative paths (src/)
+- **Edge Cases**: Handles spaces, tabs, and complex nested paths correctly
+
+#### **Completion Examples**
+```bash
+# Empty argument completion - shows files and directories
+sudosh:/home/user# ls <Tab>
+Documents/    Downloads/    Pictures/     file1.txt     file2.log
+
+# CD command completion - shows directories only
+sudosh:/home/user# cd <Tab>
+Documents/    Downloads/    Pictures/     Projects/
+
+# Directory path completion - shows directory contents
+sudosh:/home/user# ls /etc/<Tab>
+afpovertcp.cfg    aliases         aliases.db      apache2/
+apparmor/         apparmor.d/     apport/         apt/
+
+# Partial completion - auto-completes to matching files
+sudosh:/home/user# ls /etc/host<Tab>
+sudosh:/home/user# ls /etc/hosts
+```
+
 ### Line Editing and Navigation
 - **Arrow Key Navigation**: Up/Down arrows for command history
 - **Line Editing**: Ctrl-A/E (beginning/end), Ctrl-B/F (back/forward)
 - **Text Manipulation**: Ctrl-K (kill to end), Ctrl-U (kill line), Ctrl-D (delete/exit)
-- **Tab Completion**: Path completion for files and directories
+- **Enhanced Tab Completion**: Intelligent context-aware completion system
 
 ### Command History
 - **Immediate Availability**: Commands instantly available via up arrow

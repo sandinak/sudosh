@@ -18,6 +18,20 @@ Packaging and distribution guide covering:
 - Package customization and troubleshooting
 - Distribution-specific installation instructions
 
+### **[TESTING_GUIDE.md](TESTING_GUIDE.md)**
+Comprehensive testing documentation covering:
+- Test suite overview and execution
+- Security testing framework
+- Unit and integration tests
+- Performance and regression testing
+
+### **[SECURITY_TESTING_SUMMARY.md](SECURITY_TESTING_SUMMARY.md)**
+Security testing framework documentation covering:
+- CVE-specific test cases
+- Vulnerability assessment procedures
+- Security audit methodology
+- Compliance testing guidelines
+
 ## Quick Links
 
 - **[Main README](../README.md)** - Project overview and quick start

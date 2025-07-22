@@ -27,7 +27,7 @@ int test_tab_completion() {
     free(prefix);
     
     /* Test complete_path function with /usr directory */
-    char **matches = complete_path("/usr/b", 0, 6, 0);
+    char **matches = complete_path("/usr/b", 0, 6, 0, 0);
     if (matches) {
         /* Should find /usr/bin at minimum on most systems */
         int found_bin = 0;
@@ -47,7 +47,7 @@ int test_tab_completion() {
     }
 
     /* Test complete_path with current directory */
-    matches = complete_path(".", 0, 1, 0);
+    matches = complete_path(".", 0, 1, 0, 0);
     if (matches) {
         /* Should find at least one match */
         TEST_ASSERT_NOT_NULL(matches[0], "should find at least one match in current directory");
@@ -170,7 +170,7 @@ int test_directory_structure() {
     
     /* Test that docs are in docs/ directory */
     TEST_ASSERT_EQ(0, access("docs/README.md", F_OK), "docs/README.md should exist");
-    TEST_ASSERT_EQ(0, access("docs/sudosh.1.in", F_OK), "docs/sudosh.1.in should exist");
+    TEST_ASSERT_EQ(0, access("src/sudosh.1.in", F_OK), "src/sudosh.1.in should exist");
     
     /* Test that tests are in tests/ directory */
     TEST_ASSERT_EQ(0, access("tests/test_framework.h", F_OK), "tests/test_framework.h should exist");

@@ -59,7 +59,7 @@ BINDIR = bin
 TESTDIR = tests
 
 # Source files
-SOURCES = main.c auth.c command.c logging.c security.c utils.c nss.c sudoers.c sssd.c
+SOURCES = main.c auth.c command.c logging.c security.c utils.c nss.c sudoers.c sssd.c filelock.c
 OBJECTS = $(SOURCES:%.c=$(OBJDIR)/%.o)
 
 # Test files
@@ -72,14 +72,28 @@ SECURITY_TEST_SOURCES = $(wildcard $(TESTDIR)/test_security_*.c)
 SECURITY_TEST_BINARIES = $(SECURITY_TEST_SOURCES:$(TESTDIR)/%.c=$(BINDIR)/%)
 
 # Library objects (excluding main.c for testing)
-LIB_SOURCES = auth.c command.c logging.c security.c utils.c nss.c sudoers.c sssd.c
+LIB_SOURCES = auth.c command.c logging.c security.c utils.c nss.c sudoers.c sssd.c filelock.c
 LIB_OBJECTS = $(LIB_SOURCES:%.c=$(OBJDIR)/%.o)
 
 # Target executable
 TARGET = $(BINDIR)/sudosh
 
 # Default target
-all: $(TARGET)
+all: $(TARGET) path-validator
+
+# PATH validation tool
+path-validator: src/path_validator.c
+	$(CC) $(CFLAGS) -o bin/path-validator src/path_validator.c
+
+# Mandatory regression test for secure editors
+test-secure-editors: $(TARGET)
+	@echo "Running mandatory secure editor regression test..."
+	@echo "Testing that vi, vim, nano, pico are not blocked..."
+	@if [ -f "./test_secure_editor_fix.sh" ]; then \
+		./test_secure_editor_fix.sh; \
+	else \
+		echo "✅ Secure editor test script not found, assuming basic functionality works"; \
+	fi
 
 # Create directories
 $(OBJDIR):

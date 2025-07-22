@@ -63,8 +63,14 @@ extern int test_mode;
 #define MAX_COMMAND_LENGTH 4096
 #define MAX_USERNAME_LENGTH 256
 #define MAX_PASSWORD_LENGTH 256
-#define SUDOSH_VERSION "1.8.0"
+#define SUDOSH_VERSION "1.9.0"
 #define INACTIVITY_TIMEOUT 300  /* 300 seconds (5 minutes) */
+
+/* File locking constants */
+#define LOCK_DIR "/var/run/sudosh/locks"
+#define LOCK_TIMEOUT 1800  /* 30 minutes (1800 seconds) */
+#define MAX_LOCK_PATH_LENGTH 512
+#define LOCK_FILE_EXTENSION ".lock"
 
 /* Authentication cache constants */
 #define AUTH_CACHE_TIMEOUT 900  /* 15 minutes (900 seconds) - same as sudo default */
@@ -147,6 +153,15 @@ struct command_info {
     char **argv;
     int argc;
     char **envp;
+};
+
+/* Structure to hold file lock information */
+struct file_lock_info {
+    char *file_path;        /* Canonical path of the locked file */
+    char *username;         /* User who owns the lock */
+    pid_t pid;              /* Process ID of the editing session */
+    time_t timestamp;       /* When the lock was acquired */
+    char *lock_file_path;   /* Path to the lock file */
 };
 
 /* Structure to hold color configuration */
@@ -263,6 +278,7 @@ void list_available_commands(const char *username);
 int parse_command(const char *input, struct command_info *cmd);
 int execute_command(struct command_info *cmd, struct user_info *user);
 char *find_command_in_path(const char *command);
+char *expand_equals_expression(const char *arg);
 void free_command_info(struct command_info *cmd);
 
 /* Logging functions */
@@ -314,6 +330,8 @@ int is_shell_command(const char *command);
 int is_ssh_command(const char *command);
 int is_secure_pager(const char *command);
 void setup_secure_pager_environment(void);
+int is_secure_editor(const char *command);
+void setup_secure_editor_environment(void);
 int is_interactive_editor(const char *command);
 int is_safe_command(const char *command);
 int is_dangerous_command(const char *command);
@@ -331,11 +349,25 @@ int check_runas_permissions(const char *username, const char *target_user);
 int validate_target_user(const char *target_user);
 struct user_info *get_target_user_info(const char *target_user);
 
+/* File locking functions */
+int init_file_locking(void);
+void cleanup_file_locking(void);
+int acquire_file_lock(const char *file_path, const char *username, pid_t pid);
+int release_file_lock(const char *file_path, const char *username, pid_t pid);
+struct file_lock_info *check_file_lock(const char *file_path);
+void free_file_lock_info(struct file_lock_info *lock_info);
+char *resolve_canonical_path(const char *file_path);
+int cleanup_stale_locks(void);
+int is_editing_command(const char *command);
+char *extract_file_argument(const char *command);
+
 /* Utility functions */
 void print_banner(void);
 void print_help(void);
 void print_commands(void);
 void print_history(void);
+void print_path_info(void);
+int validate_path_security(const char *path_env);
 char *trim_whitespace(char *str);
 int is_empty_command(const char *command);
 char *read_command(void);
@@ -356,7 +388,10 @@ void preserve_color_environment(void);
 void cleanup_color_config(void);
 
 /* Tab completion functions */
-char **complete_path(const char *text, int start, int end, int executables_only);
+char *get_directory_context_for_empty_prefix(const char *buffer, int pos);
+int is_cd_command(const char *buffer, int pos);
+char **complete_path(const char *text, int start, int end, int executables_only, int directories_only);
+char **complete_equals_expansion(const char *text);
 char **complete_command(const char *text);
 int is_command_position(const char *buffer, int pos);
 char *find_completion_start(const char *buffer, int pos);

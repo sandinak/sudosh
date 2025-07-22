@@ -10,6 +10,57 @@
 #include "sudosh.h"
 
 /**
+ * Expand = expressions in command arguments (like zsh)
+ */
+char *expand_equals_expression(const char *arg) {
+    if (!arg || arg[0] != '=') {
+        return strdup(arg);  /* Return copy of original if not = expression */
+    }
+
+    /* Skip the = character */
+    const char *command_name = arg + 1;
+    if (strlen(command_name) == 0) {
+        return strdup(arg);  /* Return original if just = */
+    }
+
+    /* Get PATH environment variable */
+    char *path_env = getenv("PATH");
+    if (!path_env) {
+        return strdup(arg);  /* Return original if no PATH */
+    }
+
+    /* Make a copy of PATH for tokenization */
+    char *path_copy = strdup(path_env);
+    if (!path_copy) {
+        return strdup(arg);
+    }
+
+    char *dir, *saveptr;
+    char *result = NULL;
+
+    /* Search each directory in PATH */
+    dir = strtok_r(path_copy, ":", &saveptr);
+    while (dir != NULL) {
+        char full_path[PATH_MAX];
+        snprintf(full_path, sizeof(full_path), "%s/%s", dir, command_name);
+
+        struct stat st;
+        if (stat(full_path, &st) == 0 && S_ISREG(st.st_mode) && (st.st_mode & S_IXUSR)) {
+            /* Found executable - return full path */
+            result = strdup(full_path);
+            break;
+        }
+
+        dir = strtok_r(NULL, ":", &saveptr);
+    }
+
+    free(path_copy);
+
+    /* Return the expanded path or original if not found */
+    return result ? result : strdup(arg);
+}
+
+/**
  * Parse command line input into command structure
  */
 int parse_command(const char *input, struct command_info *cmd) {
@@ -52,8 +103,8 @@ int parse_command(const char *input, struct command_info *cmd) {
             cmd->argv = new_argv;
         }
 
-        /* Store the token */
-        cmd->argv[argc] = strdup(token);
+        /* Expand = expressions and store the token */
+        cmd->argv[argc] = expand_equals_expression(token);
         if (!cmd->argv[argc]) {
             free_command_info(cmd);
             free(input_copy);
@@ -124,6 +175,33 @@ int execute_command(struct command_info *cmd, struct user_info *user) {
         return EXIT_COMMAND_NOT_FOUND;
     }
 
+    /* Handle file locking for editing commands before forking */
+    char *file_to_edit = NULL;
+    int file_lock_acquired = 0;
+    if (is_editing_command(cmd->command)) {
+        file_to_edit = extract_file_argument(cmd->command);
+        if (file_to_edit) {
+            if (acquire_file_lock(file_to_edit, user->username, getpid()) == 0) {
+                file_lock_acquired = 1;
+            } else {
+                /* Lock acquisition failed - for secure editors, continue anyway */
+                /* This ensures secure editors work even if file locking has issues */
+                if (is_secure_editor(cmd->command)) {
+                    char log_msg[512];
+                    snprintf(log_msg, sizeof(log_msg),
+                            "file lock failed for secure editor, proceeding anyway: %s", cmd->command);
+                    log_security_violation(user->username, log_msg);
+                    /* Continue execution for secure editors */
+                } else {
+                    /* For non-secure editors, block execution on lock failure */
+                    free(file_to_edit);
+                    free(command_path);
+                    return -1;
+                }
+            }
+        }
+    }
+
     /* Fork and execute */
     pid = fork();
     if (pid == -1) {
@@ -165,6 +243,11 @@ int execute_command(struct command_info *cmd, struct user_info *user) {
         /* Set up secure environment for pagers */
         if (is_secure_pager(cmd->command)) {
             setup_secure_pager_environment();
+        }
+
+        /* Set up secure environment for editors */
+        if (is_secure_editor(cmd->command)) {
+            setup_secure_editor_environment();
         }
 
         /* Change to target user privileges */
@@ -253,7 +336,22 @@ int execute_command(struct command_info *cmd, struct user_info *user) {
             if (errno != ECHILD) {  /* Don't report error if child already reaped */
                 perror("waitpid");
             }
+            /* Clean up file lock if it was acquired */
+            if (file_lock_acquired && file_to_edit) {
+                release_file_lock(file_to_edit, user->username, pid);
+            }
+            if (file_to_edit) {
+                free(file_to_edit);
+            }
             return -1;
+        }
+
+        /* Clean up file lock if it was acquired */
+        if (file_lock_acquired && file_to_edit) {
+            release_file_lock(file_to_edit, user->username, pid);
+        }
+        if (file_to_edit) {
+            free(file_to_edit);
         }
 
         /* Return the exit status */

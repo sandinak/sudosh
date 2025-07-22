@@ -28,6 +28,8 @@ void signal_handler(int sig) {
         case SIGQUIT:
             /* Set interrupted flag for graceful exit */
             interrupted = 1;
+            /* Clean up file locks before exiting */
+            cleanup_file_locking();
             /* Don't exit immediately - let main loop handle cleanup */
             break;
         case SIGTSTP:
@@ -313,6 +315,85 @@ void setup_secure_pager_environment(void) {
 }
 
 /**
+ * Setup secure environment for editors to prevent shell escapes
+ */
+void setup_secure_editor_environment(void) {
+    /* Disable shell command execution */
+    setenv("SHELL", "/bin/false", 1);
+
+    /* Disable external command execution in vi/vim */
+    setenv("VISUAL", "/bin/false", 1);
+    setenv("EDITOR", "/bin/false", 1);
+
+    /* Disable dangerous vi/vim features */
+    unsetenv("VIMINIT");
+    unsetenv("VIMRC");
+    unsetenv("EXINIT");
+
+    /* Set secure vi options */
+    setenv("VIMINIT", "set nomodeline noexrc secure", 1);
+
+    /* Disable pager and other external programs */
+    setenv("PAGER", "/bin/false", 1);
+    setenv("MANPAGER", "/bin/false", 1);
+
+    /* Additional Shellshock protection */
+    unsetenv("BASH_ENV");
+    unsetenv("BASH_FUNC_*");
+    unsetenv("BASH_CMDS");
+    unsetenv("BASH_ALIASES");
+
+    /* Set restrictive umask */
+    umask(0077);
+}
+
+/**
+ * Check if command is a secure editor that can be run safely
+ */
+int is_secure_editor(const char *command) {
+    if (!command) return 0;
+
+    /* Create a copy for parsing */
+    char *cmd_copy = strdup(command);
+    if (!cmd_copy) return 0;
+
+    /* Get the first token (command name) */
+    char *cmd_name = strtok(cmd_copy, " \t");
+    if (!cmd_name) {
+        free(cmd_copy);
+        return 0;
+    }
+
+    /* List of editors that can be run securely with restrictions */
+    const char *secure_editors[] = {
+        "vi", "/bin/vi", "/usr/bin/vi", "/usr/local/bin/vi",
+        "vim", "/bin/vim", "/usr/bin/vim", "/usr/local/bin/vim",
+        "view", "/bin/view", "/usr/bin/view",
+        "nano", "/bin/nano", "/usr/bin/nano", "/usr/local/bin/nano",
+        "pico", "/bin/pico", "/usr/bin/pico", "/usr/local/bin/pico",
+        NULL
+    };
+
+    /* Check if it's a secure editor */
+    for (int i = 0; secure_editors[i]; i++) {
+        if (strcmp(cmd_name, secure_editors[i]) == 0) {
+            free(cmd_copy);
+            return 1;
+        }
+
+        /* Also check basename for absolute paths */
+        char *basename_editor = strrchr(secure_editors[i], '/');
+        if (basename_editor && strcmp(cmd_name, basename_editor + 1) == 0) {
+            free(cmd_copy);
+            return 1;
+        }
+    }
+
+    free(cmd_copy);
+    return 0;
+}
+
+/**
  * Check if command is an interactive editor that could allow shell escape
  */
 int is_interactive_editor(const char *command) {
@@ -331,21 +412,16 @@ int is_interactive_editor(const char *command) {
 
     /* List of interactive editors that can execute shell commands */
     const char *editors[] = {
-        "vi", "/bin/vi", "/usr/bin/vi", "/usr/local/bin/vi",
-        "vim", "/bin/vim", "/usr/bin/vim", "/usr/local/bin/vim",
         "nvim", "/bin/nvim", "/usr/bin/nvim", "/usr/local/bin/nvim",
         "emacs", "/bin/emacs", "/usr/bin/emacs", "/usr/local/bin/emacs",
-        "nano", "/bin/nano", "/usr/bin/nano", "/usr/local/bin/nano",
-        "pico", "/bin/pico", "/usr/bin/pico", "/usr/local/bin/pico",
         "joe", "/bin/joe", "/usr/bin/joe", "/usr/local/bin/joe",
         "mcedit", "/bin/mcedit", "/usr/bin/mcedit", "/usr/local/bin/mcedit",
         "ed", "/bin/ed", "/usr/bin/ed",
         "ex", "/bin/ex", "/usr/bin/ex",
-        "view", "/bin/view", "/usr/bin/view",
         NULL
     };
 
-    /* Check if it's an interactive editor */
+    /* Check if it's an interactive editor (excluding secure ones) */
     for (int i = 0; editors[i]; i++) {
         if (strcmp(cmd_name, editors[i]) == 0) {
             free(cmd_copy);
@@ -1114,11 +1190,19 @@ int validate_command(const char *command) {
         return 0;
     }
 
-    /* Block interactive editors that can execute shell commands */
-    if (is_interactive_editor(command)) {
+    /* Check for secure editors first */
+    if (is_secure_editor(command)) {
+        char audit_msg[256];
+        snprintf(audit_msg, sizeof(audit_msg), "secure editor execution: %s", command);
+        log_security_violation(current_username, audit_msg);
+        /* Allow secure editors to proceed */
+    }
+    /* Block other interactive editors that can execute shell commands */
+    else if (is_interactive_editor(command)) {
         log_security_violation(current_username, "interactive editor blocked");
         fprintf(stderr, "sudosh: interactive editors are not permitted (use sudoedit instead)\n");
-        fprintf(stderr, "sudosh: editors like vi/vim/emacs can execute shell commands and bypass security\n");
+        fprintf(stderr, "sudosh: editors like nvim/emacs/joe can execute shell commands and bypass security\n");
+        fprintf(stderr, "sudosh: vi/vim/nano are allowed with security restrictions\n");
         return 0;
     }
 

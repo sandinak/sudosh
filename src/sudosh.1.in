@@ -49,7 +49,7 @@ Run commands as the specified target user (requires sudoers permission).
 .SH USAGE
 .SH ENHANCED FEATURES
 .B sudosh
-version 1.5.0 introduces several enhanced features for improved security and usability:
+version 1.9.0 introduces several enhanced features for improved security and usability:
 
 .SS Permission Analysis
 The \fB\-l\fR option provides comprehensive sudo permission analysis with detailed source attribution. Unlike standard \fBsudo -l\fR, sudosh shows exactly which file grants each permission, making it easy to troubleshoot and audit sudo configurations.
@@ -59,6 +59,32 @@ All sudoers rules are tracked to their source files, providing transparency abou
 
 .SS Enhanced Security
 Comprehensive null pointer checking and memory management improvements ensure stable operation even with complex sudoers configurations.
+
+.SS Enhanced Tab Completion System
+Comprehensive intelligent tab completion with context awareness:
+.IP \(bu 2
+\fBEmpty line completion\fR: Pressing Tab on an empty line displays all available commands (built-ins and PATH executables)
+.IP \(bu 2
+\fBContext-aware completion\fR: Different behavior for commands vs arguments
+.IP \(bu 2
+\fBDirectory path completion\fR: \fBls /etc/<Tab>\fR displays all files in /etc/ instead of auto-completing to first entry
+.IP \(bu 2
+\fBCD command optimization\fR: \fBcd <Tab>\fR shows directories only for efficient navigation
+.IP \(bu 2
+\fBClean multi-column display\fR: Professional formatting for completion lists
+.IP \(bu 2
+\fBBackward compatibility\fR: All existing tab completion behavior preserved
+
+.SS Directory Path Completion Fix
+Critical fix for directory path completion behavior:
+.IP \(bu 2
+\fBFixed\fR: \fBls /etc/<Tab>\fR now displays all files in /etc/ instead of auto-completing to first entry
+.IP \(bu 2
+\fBPreserved\fR: \fBls /etc/host<Tab>\fR still auto-completes to matching files
+.IP \(bu 2
+\fBEnhanced\fR: Works with absolute paths (/etc/) and relative paths (src/)
+.IP \(bu 2
+\fBRobust\fR: Handles edge cases (spaces, tabs, complex nested paths)
 
 .SS Improved Compatibility
 Better handling of different sudoers file formats and locations, including support for macOS-specific paths like \fI/private/etc/sudoers.d\fR.
@@ -95,6 +121,9 @@ Change the current working directory. If no directory is specified, changes to t
 .TP
 .B pwd
 Print the current working directory.
+.TP
+.B path
+Display PATH environment variable. Shows the raw PATH value on the first line, followed by any directories that are not accessible (cannot be read). If all directories are accessible, only the PATH value is shown.
 .TP
 .BR exit ", " quit
 Exit the sudosh shell. Ctrl-D also exits gracefully.
@@ -148,6 +177,33 @@ Summary:
 ✓ User has privileges through group membership
 User is authorized to run sudo commands on hostname
 .fi
+.TP
+Enhanced tab completion examples:
+.nf
+# Empty line completion - shows all available commands
+sudosh:/home/user# <Tab>
+cat       cd        commands  cp        echo      exit      find      grep
+help      history   ls        mkdir     path      pwd       quit      rm
+rules     sort      version   vi        wc
+
+# Empty argument completion - shows files and directories
+sudosh:/home/user# ls <Tab>
+Documents/    Downloads/    Pictures/     file1.txt     file2.log
+
+# CD command completion - shows directories only
+sudosh:/home/user# cd <Tab>
+Documents/    Downloads/    Pictures/     Projects/
+
+# Directory path completion - shows directory contents
+sudosh:/home/user# ls /etc/<Tab>
+afpovertcp.cfg    aliases         aliases.db      apache2/
+apparmor/         apparmor.d/     apport/         apt/
+bash.bashrc       bash_completion bash_completion.d/ bind/
+
+# Partial completion - auto-completes to matching files
+sudosh:/home/user# ls /etc/host<Tab>
+sudosh:/home/user# ls /etc/hosts
+.fi
 
 .SH LINE EDITING AND HISTORY
 sudosh provides comprehensive line editing and history capabilities:
@@ -177,6 +233,9 @@ Delete the entire line.
 .TP
 .B Backspace
 Delete the character before the cursor.
+.TP
+.B Ctrl-C
+Cancel the current line and start fresh. Clears any typed text and resets the cursor to a new prompt, matching standard shell behavior.
 
 .SS History Navigation
 .TP
