@@ -66,7 +66,7 @@ else
 fi
 
 # Check CHANGELOG.md for v1.9.0
-if grep -q "Version 1.9.0" CHANGELOG.md; then
+if grep -q "\[1\.9\.0\]" CHANGELOG.md; then
     echo "✅ CHANGELOG.md: v1.9.0 entry present"
 else
     echo "❌ CHANGELOG.md: v1.9.0 entry missing"
