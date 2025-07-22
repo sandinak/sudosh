@@ -2352,26 +2352,42 @@ char **complete_path(const char *text, int start, int end, int executables_only,
 void insert_completion(char *buffer, int *pos, int *len, const char *completion, const char *prefix) {
     int prefix_len = strlen(prefix);
     int completion_len = strlen(completion);
-    int insert_len = completion_len - prefix_len;
 
-    if (insert_len <= 0) {
-        return; /* Nothing to insert */
+    /* Calculate the prefix start position */
+    int prefix_start = *pos - prefix_len;
+
+    /* Validate the prefix position */
+    if (prefix_start < 0 || prefix_start + prefix_len > *len) {
+        return; /* Invalid prefix position */
     }
 
+    /* Verify that the prefix actually matches what's in the buffer */
+    if (prefix_len > 0 && strncmp(&buffer[prefix_start], prefix, prefix_len) != 0) {
+        return; /* Prefix mismatch */
+    }
+
+    /* Calculate how much the buffer will change */
+    int size_change = completion_len - prefix_len;
+
     /* Check if there's enough space in buffer */
-    if (*len + insert_len >= 1023) { /* Leave room for null terminator */
+    if (*len + size_change >= 1023) { /* Leave room for null terminator */
         return;
     }
 
-    /* Move existing text to make room */
-    memmove(&buffer[*pos + insert_len], &buffer[*pos], *len - *pos);
+    /* Replace the prefix with the full completion */
+    if (size_change != 0) {
+        /* Move the text after the prefix */
+        memmove(&buffer[prefix_start + completion_len],
+                &buffer[prefix_start + prefix_len],
+                *len - (prefix_start + prefix_len));
+    }
 
-    /* Insert the new text */
-    memcpy(&buffer[*pos], completion + prefix_len, insert_len);
+    /* Copy the full completion */
+    memcpy(&buffer[prefix_start], completion, completion_len);
 
     /* Update position and length */
-    *pos += insert_len;
-    *len += insert_len;
+    *pos = prefix_start + completion_len;
+    *len += size_change;
     buffer[*len] = '\0';
 }
 
