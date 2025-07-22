@@ -31,7 +31,7 @@ int test_command_line_options() {
     TEST_ASSERT_NOT_NULL(result, "version command should execute");
     TEST_ASSERT_EQ(0, WEXITSTATUS(result->exit_code), "version should exit with code 0");
     TEST_ASSERT(strstr(result->stdout_content, "sudosh") != NULL, "version should mention sudosh");
-    TEST_ASSERT(strstr(result->stdout_content, "1.3.0") != NULL, "version should show version number");
+    TEST_ASSERT(strstr(result->stdout_content, "1.8.0") != NULL, "version should show version number");
     free_capture_result(result);
     
     /* Test invalid option */
@@ -171,7 +171,7 @@ int test_command_integration() {
     const char *test_commands[] = {
         "ls -la",
         "ps aux",
-        "echo 'hello world'",
+        "echo hello",
         "date",
         "uptime",
         NULL

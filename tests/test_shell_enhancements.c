@@ -27,7 +27,7 @@ int test_tab_completion() {
     free(prefix);
     
     /* Test complete_path function with /usr directory */
-    char **matches = complete_path("/usr/b", 0, 6);
+    char **matches = complete_path("/usr/b", 0, 6, 0);
     if (matches) {
         /* Should find /usr/bin at minimum on most systems */
         int found_bin = 0;
@@ -38,16 +38,16 @@ int test_tab_completion() {
             }
         }
         TEST_ASSERT_EQ(1, found_bin, "should find bin directory in /usr");
-        
+
         /* Free matches */
         for (int i = 0; matches[i]; i++) {
             free(matches[i]);
         }
         free(matches);
     }
-    
+
     /* Test complete_path with current directory */
-    matches = complete_path(".", 0, 1);
+    matches = complete_path(".", 0, 1, 0);
     if (matches) {
         /* Should find at least one match */
         TEST_ASSERT_NOT_NULL(matches[0], "should find at least one match in current directory");

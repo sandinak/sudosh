@@ -3,7 +3,7 @@
 **Author**: Branson Matheson <branson@sandsite.org>
 **Development**: This project was primarily developed using [Augment Code](https://www.augmentcode.com) AI assistance
 
-[![Version](https://img.shields.io/badge/version-1.7.1-blue.svg)](https://github.com/sandinak/sudosh)
+[![Version](https://img.shields.io/badge/version-1.8.0-blue.svg)](https://github.com/sandinak/sudosh)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Security](https://img.shields.io/badge/security-enhanced-red.svg)](docs/ENHANCED_SECURITY_FEATURES.md)
 
@@ -19,6 +19,8 @@ Sudosh is a comprehensive, secure interactive shell that provides elevated privi
 - **Enhanced security** - Shell blocking, dangerous command detection, system directory protection
 - **Comprehensive logging** - All commands logged to syslog and optional session files
 - **Command history** - Full history with arrow key navigation and `!{number}` recall
+- **Advanced tab completion** - Intelligent completion with clean column formatting
+- **Executable filtering** - Tab completion shows only executables in command position
 - **Package generation** - Professional RPM and DEB packages for easy distribution
 
 ### **Security Features**
