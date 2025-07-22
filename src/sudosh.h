@@ -53,8 +53,8 @@
 /* Include common utilities and error handling */
 #include "sudosh_common.h"
 
-/* External environment variable */
-extern char **environ;
+/* External environment variable - declared in unistd.h */
+/* extern char **environ; */
 
 /* Global verbose flag */
 extern int verbose_mode;
@@ -290,8 +290,8 @@ int check_sudoers_nopasswd(const char *username, const char *hostname, struct su
 int check_sssd_privileges(const char *username);
 struct user_info *get_user_info_sssd(const char *username);
 
-/* Enhanced privilege checking */
-int check_sudo_privileges_enhanced(const char *username);
+/* Enhanced privilege checking - already declared above */
+/* int check_sudo_privileges_enhanced(const char *username); */
 int check_command_permission(const char *username, const char *command);
 
 /* List available commands */
@@ -310,7 +310,7 @@ void log_command(const char *username, const char *command, int success);
 void log_authentication(const char *username, int success);
 void log_session_start(const char *username);
 void log_session_end(const char *username);
-void log_error(const char *message);
+/* void log_error(const char *message); */ /* Already declared in sudosh_common.h */
 void log_security_violation(const char *username, const char *violation);
 void close_logging(void);
 
