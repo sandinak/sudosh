@@ -112,7 +112,7 @@ extern int security_failures;
 static inline security_test_context_t *init_security_test_context(void) {
     security_test_context_t *ctx = malloc(sizeof(security_test_context_t));
     if (!ctx) return NULL;
-    
+
     ctx->test_binary_path = strdup("./bin/sudosh");
     ctx->temp_dir = strdup("/tmp/sudosh_security_test");
     ctx->log_file = strdup("/tmp/sudosh_security.log");
@@ -121,10 +121,13 @@ static inline security_test_context_t *init_security_test_context(void) {
     ctx->test_count = 0;
     ctx->vulnerabilities_found = 0;
     ctx->results = NULL;
-    
+
     /* Create temp directory */
     mkdir(ctx->temp_dir, 0755);
-    
+
+    /* Set test mode environment variable for non-interactive testing */
+    setenv("SUDOSH_TEST_MODE", "1", 1);
+
     return ctx;
 }
 
@@ -170,6 +173,14 @@ static inline char *create_malicious_file(const char *content, const char *filen
     return filepath;
 }
 
+/* Signal handler for timeout */
+static volatile sig_atomic_t timeout_occurred = 0;
+
+static void timeout_handler(int sig) {
+    (void)sig; /* Suppress unused parameter warning */
+    timeout_occurred = 1;
+}
+
 /**
  * Execute command and capture output with timeout
  */
@@ -177,45 +188,72 @@ static inline int execute_with_timeout(const char *command, int timeout_seconds,
     int pipefd[2];
     pid_t pid;
     int status;
-    
+    struct sigaction sa, old_sa;
+
     if (pipe(pipefd) == -1) return -1;
-    
+
+    /* Set up signal handler for timeout */
+    timeout_occurred = 0;
+    sa.sa_handler = timeout_handler;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+    sigaction(SIGALRM, &sa, &old_sa);
+
     pid = fork();
     if (pid == -1) {
         close(pipefd[0]);
         close(pipefd[1]);
+        sigaction(SIGALRM, &old_sa, NULL);
         return -1;
     }
-    
+
     if (pid == 0) {
         /* Child process */
         close(pipefd[0]);
         dup2(pipefd[1], STDOUT_FILENO);
         dup2(pipefd[1], STDERR_FILENO);
         close(pipefd[1]);
-        
+
+        /* Reset signal handler in child */
+        signal(SIGALRM, SIG_DFL);
+
         execl("/bin/sh", "sh", "-c", command, NULL);
         exit(127);
     } else {
         /* Parent process */
         close(pipefd[1]);
-        
+
         /* Set up timeout */
         alarm(timeout_seconds);
-        
-        /* Wait for child */
-        if (waitpid(pid, &status, 0) == -1) {
-            if (errno == EINTR) {
+
+        /* Wait for child with timeout handling */
+        pid_t wait_result = waitpid(pid, &status, 0);
+
+        /* Cancel alarm */
+        alarm(0);
+
+        /* Restore original signal handler */
+        sigaction(SIGALRM, &old_sa, NULL);
+
+        if (wait_result == -1) {
+            if (errno == EINTR && timeout_occurred) {
                 /* Timeout occurred */
+                printf("Test timed out after %d seconds, terminating...\n", timeout_seconds);
+                kill(pid, SIGTERM);
+                sleep(1);
                 kill(pid, SIGKILL);
-                waitpid(pid, NULL, 0);
+                waitpid(pid, NULL, WNOHANG);
                 close(pipefd[0]);
+                if (output) *output = strdup("TIMEOUT");
                 return -2; /* Timeout */
+            } else {
+                /* Other error */
+                close(pipefd[0]);
+                if (output) *output = strdup("ERROR");
+                return -1;
             }
         }
-        
-        alarm(0);
-        
+
         /* Read output */
         if (output) {
             char buffer[4096];
@@ -227,7 +265,7 @@ static inline int execute_with_timeout(const char *command, int timeout_seconds,
                 *output = strdup("");
             }
         }
-        
+
         close(pipefd[0]);
         return WEXITSTATUS(status);
     }

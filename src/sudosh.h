@@ -50,6 +50,9 @@
     #include <sys/sysctl.h>
 #endif
 
+/* Include common utilities and error handling */
+#include "sudosh_common.h"
+
 /* External environment variable */
 extern char **environ;
 
@@ -63,7 +66,7 @@ extern int test_mode;
 #define MAX_COMMAND_LENGTH 4096
 #define MAX_USERNAME_LENGTH 256
 #define MAX_PASSWORD_LENGTH 256
-#define SUDOSH_VERSION "1.9.0"
+#define SUDOSH_VERSION "1.9.1"
 #define INACTIVITY_TIMEOUT 300  /* 300 seconds (5 minutes) */
 
 /* File locking constants */
@@ -81,6 +84,13 @@ extern int test_mode;
 /* Color support constants */
 #define MAX_COLOR_CODE_LENGTH 32
 #define MAX_PS1_LENGTH 1024
+
+/* Shell enhancement constants */
+#define MAX_ALIAS_NAME_LENGTH 64
+#define MAX_ALIAS_VALUE_LENGTH 1024
+#define MAX_ALIASES 256
+#define ALIAS_FILE_NAME ".sudosh_aliases"
+#define MAX_DIR_STACK_DEPTH 32
 
 /* ANSI color codes */
 #define ANSI_RESET "\033[0m"
@@ -183,6 +193,19 @@ struct auth_cache {
     gid_t gid;
     char tty[64];
     char hostname[256];
+};
+
+/* Structure to hold alias information */
+struct alias_entry {
+    char *name;
+    char *value;
+    struct alias_entry *next;
+};
+
+/* Structure to hold directory stack for pushd/popd */
+struct dir_stack_entry {
+    char *path;
+    struct dir_stack_entry *next;
 };
 
 /* NSS source types */
@@ -326,6 +349,7 @@ void reset_sigint_flag(void);
 void cleanup_security(void);
 
 /* Enhanced command security functions */
+int is_sudoedit_command(const char *command);
 int is_shell_command(const char *command);
 int is_ssh_command(const char *command);
 int is_secure_pager(const char *command);
@@ -398,6 +422,39 @@ char *find_completion_start(const char *buffer, int pos);
 void insert_completion(char *buffer, int *pos, int *len, const char *completion, const char *prefix);
 int get_terminal_width(void);
 void display_matches_in_columns(char **matches);
+
+/* Shell enhancement functions */
+/* Alias management */
+int init_alias_system(void);
+void cleanup_alias_system(void);
+int add_alias(const char *name, const char *value);
+int remove_alias(const char *name);
+char *get_alias_value(const char *name);
+void print_aliases(void);
+int load_aliases_from_file(void);
+int save_aliases_to_file(void);
+char *expand_aliases(const char *command);
+int validate_alias_name(const char *name);
+int validate_alias_value(const char *value);
+
+/* Directory stack management */
+int init_directory_stack(void);
+void cleanup_directory_stack(void);
+int pushd(const char *dir);
+int popd(void);
+void print_dirs(void);
+
+/* Environment variable management */
+int handle_export_command(const char *command);
+int handle_unset_command(const char *command);
+void print_environment(void);
+int validate_env_var_name(const char *name);
+int is_safe_env_var(const char *name);
+
+/* Command information helpers */
+int handle_which_command(const char *command);
+int handle_type_command(const char *command);
+char *find_command_type(const char *command);
 
 /* Main program functions */
 int main_loop(void);

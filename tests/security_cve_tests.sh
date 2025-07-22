@@ -73,6 +73,19 @@ run_test "Parameter expansion overflow" "echo \${x:0:999999999}" "BLOCKED"
 run_test "Malformed parameter transformation" "echo \${x//\$(printf \"%*s\" 1000 \"\")/y}" "BLOCKED"
 run_test "Unicode escape overflow" "echo \$'\\u{41414141}'" "BLOCKED"
 
+# CVE-2023-22809 (Sudoedit Privilege Escalation) Tests
+echo "=== CVE-2023-22809 (Sudoedit Privilege Escalation) Tests ==="
+run_test "Sudoedit bypass attempt" "sudoedit /etc/passwd" "BLOCKED"
+run_test "Sudoedit with EDITOR manipulation" "EDITOR='sh -c \"id; sh\"' sudoedit /tmp/test" "BLOCKED"
+run_test "Sudoedit with VISUAL manipulation" "VISUAL='sh -c \"id; sh\"' sudoedit /tmp/test" "BLOCKED"
+run_test "Sudoedit environment injection" "env EDITOR='/bin/sh -c id' sudoedit /tmp/test" "BLOCKED"
+
+# CVE-2024 Environment Variable Injection Tests
+echo "=== CVE-2024 Environment Variable Injection Tests ==="
+run_test "SUDO_EDITOR injection" "SUDO_EDITOR='sh -c \"id; sh\"' sudo -e /tmp/test" "BLOCKED"
+run_test "Complex environment bypass" "env -i EDITOR='sh -c id' sudoedit /tmp/test" "BLOCKED"
+run_test "PATH manipulation with sudoedit" "PATH=/tmp:\$PATH EDITOR=malicious sudoedit /tmp/test" "BLOCKED"
+
 # Additional Security Tests
 echo "=== Additional Security Tests ==="
 run_test "Command injection via semicolon" "ls; cat /etc/passwd" "BLOCKED"

@@ -109,6 +109,19 @@ int main_loop(void) {
         }
     }
 
+    /* Initialize shell enhancement systems */
+    if (!init_alias_system()) {
+        if (verbose_mode) {
+            fprintf(stderr, "Warning: Could not initialize alias system\n");
+        }
+    }
+
+    if (!init_directory_stack()) {
+        if (verbose_mode) {
+            fprintf(stderr, "Warning: Could not initialize directory stack\n");
+        }
+    }
+
     /* Log session start */
     log_session_start(username);
 
@@ -142,6 +155,17 @@ int main_loop(void) {
             /* Silent expansion per Unix philosophy - expansion is logged but not displayed */
             free(command_line);
             command_line = expanded_command;
+        }
+
+        /* Expand aliases */
+        char *alias_expanded = expand_aliases(command_line);
+        if (alias_expanded && strcmp(alias_expanded, command_line) != 0) {
+            /* Alias was expanded */
+            free(command_line);
+            command_line = alias_expanded;
+        } else if (alias_expanded) {
+            /* No expansion occurred, free the duplicate */
+            free(alias_expanded);
         }
 
         /* Log command to history */
@@ -226,6 +250,10 @@ int main_loop(void) {
 
     /* Free history buffer */
     free_history_buffer();
+
+    /* Clean up shell enhancement systems */
+    cleanup_alias_system();
+    cleanup_directory_stack();
 
     /* Clean up authentication cache */
     cleanup_auth_cache();

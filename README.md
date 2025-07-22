@@ -3,7 +3,7 @@
 **Author**: Branson Matheson <branson@sandsite.org>
 **Development**: This project was primarily developed using [Augment Code](https://www.augmentcode.com) AI assistance
 
-[![Version](https://img.shields.io/badge/version-1.9.0-blue.svg)](https://github.com/sandinak/sudosh)
+[![Version](https://img.shields.io/badge/version-1.9.1-blue.svg)](https://github.com/sandinak/sudosh)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Security](https://img.shields.io/badge/security-enhanced-red.svg)](docs/ENHANCED_SECURITY_FEATURES.md)
 
@@ -38,7 +38,14 @@ Sudosh is a comprehensive, secure interactive shell that provides elevated privi
 - 🔐 **Sudoers integration** - Full compatibility with existing sudo rules
 - 🎯 **Privilege-aware warnings** - Users with ALL commands skip warnings but maintain logging
 - 🛡️ **CVE vulnerability protection** - Audited against major bash CVEs (2014-2024)
+  - **CVE-2023-22809**: Sudoedit privilege escalation protection
+  - **CVE-2022-3715**: Bash heap buffer overflow mitigation
+  - **CVE-2019-9924**: Restricted shell bypass prevention
+  - **Shellshock variants**: CVE-2014-6271, CVE-2014-7169, and related vulnerabilities
 - 🔐 **Environment hardening** - Comprehensive sanitization against injection attacks
+  - Enhanced editor variable sanitization (EDITOR, VISUAL, SUDO_EDITOR)
+  - Library injection protection (LD_PRELOAD, PYTHONPATH, etc.)
+  - Null byte injection detection and blocking
 - 🧪 **Security testing** - Automated CVE-specific regression tests
 
 ### **User Experience**
@@ -48,6 +55,14 @@ Sudosh is a comprehensive, secure interactive shell that provides elevated privi
 - **Command history** - Persistent history with timestamps
 - **Line editing** - Full readline-style editing capabilities
 - **Session logging** - Optional complete session recording
+
+### **Shell Enhancements**
+- 🔗 **Alias management** - Create and manage command aliases with security validation
+- 🌍 **Environment variables** - Secure modification of whitelisted environment variables
+- 📁 **Directory stack** - pushd/popd/dirs commands for directory navigation
+- 🔍 **Command information** - which/type commands for command introspection
+- 💾 **Persistent storage** - Aliases automatically saved and restored between sessions
+- 🛡️ **Security validation** - All enhancements include comprehensive security checks
 
 ### **Color Support**
 Sudosh automatically inherits and applies colors from your shell's environment:
@@ -206,6 +221,18 @@ Tab                    # Intelligent context-aware completion
                        # - After command: shows files/directories
                        # - After 'cd': shows directories only
                        # - Directory paths: shows directory contents
+
+# Shell enhancements (bash/zsh-like features)
+alias ll='ls -la'      # Create command aliases
+unalias ll             # Remove aliases
+export EDITOR=vim      # Set environment variables (safe ones only)
+unset EDITOR           # Remove environment variables
+env                    # Show all environment variables
+which ls               # Show command location
+type ll                # Show command type (builtin, alias, file)
+pushd /tmp             # Push directory onto stack and change to it
+popd                   # Pop directory from stack and change to it
+dirs                   # Show directory stack
 ```
 
 ## 🔐 **Security Model**
@@ -630,7 +657,7 @@ make security-tests
 
 ## 📋 **Changelog**
 
-### **Version 1.9.0** (Latest)
+### **Version 1.9.1** (Latest)
 #### Enhanced Tab Completion System and Directory Path Completion Fix
 
 **🆕 MAJOR FEATURES:**

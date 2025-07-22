@@ -132,6 +132,16 @@ void print_help(void) {
     printf("  cd <dir>      - Change current directory\n");
     printf("  pwd           - Print current working directory\n");
     printf("  path          - Show PATH environment variable and inaccessible directories\n");
+    printf("  alias [name[=value]] - Create or show aliases\n");
+    printf("  unalias <name> - Remove alias\n");
+    printf("  export [var[=value]] - Set or show environment variables\n");
+    printf("  unset <var>   - Remove environment variable\n");
+    printf("  env           - Show environment variables\n");
+    printf("  which <cmd>   - Show command location\n");
+    printf("  type <cmd>    - Show command type\n");
+    printf("  pushd <dir>   - Push directory onto stack and change to it\n");
+    printf("  popd          - Pop directory from stack and change to it\n");
+    printf("  dirs          - Show directory stack\n");
     printf("  exit, quit    - Exit sudosh\n");
     printf("  <command>     - Execute command as root\n\n");
     printf("Examples:\n");
@@ -139,7 +149,9 @@ void print_help(void) {
     printf("  systemctl status nginx\n");
     printf("  apt update\n");
     printf("  cd /var/log\n");
-    printf("  pwd\n\n");
+    printf("  alias ll='ls -la'\n");
+    printf("  export EDITOR=vim\n");
+    printf("  pushd /tmp\n\n");
     printf("All commands are logged to syslog.\n");
 }
 
@@ -159,14 +171,26 @@ void print_commands(void) {
 
     /* Print built-in commands first */
     printf("Built-in commands:\n");
+    printf("  alias         - Create or show aliases\n");
     printf("  cd            - Change current directory\n");
     printf("  commands      - List all available commands\n");
+    printf("  dirs          - Show directory stack\n");
+    printf("  env           - Show environment variables\n");
     printf("  exit          - Exit sudosh\n");
+    printf("  export        - Set or show environment variables\n");
     printf("  help, ?       - Show help message\n");
+    printf("  history       - Show command history\n");
     printf("  path          - Show PATH environment variable and inaccessible directories\n");
+    printf("  popd          - Pop directory from stack\n");
+    printf("  pushd         - Push directory onto stack\n");
     printf("  pwd           - Print current working directory\n");
     printf("  quit          - Exit sudosh\n");
     printf("  rules         - Show sudo rules and their sources\n");
+    printf("  type          - Show command type\n");
+    printf("  unalias       - Remove alias\n");
+    printf("  unset         - Remove environment variable\n");
+    printf("  version       - Show version information\n");
+    printf("  which         - Show command location\n");
     printf("\n");
 
     /* Allocate array for system commands */
@@ -332,6 +356,83 @@ void print_history(void) {
     } else {
         printf("\nTotal: %d commands\n", line_number - 1);
         printf("Use !<number> to execute a command from history\n");
+    }
+}
+
+/**
+ * Expand tilde (~) in directory paths
+ * Supports:
+ * - ~ (current user's home)
+ * - ~username (specified user's home)
+ * Returns allocated string that must be freed, or NULL on error
+ */
+static char *expand_tilde_path(const char *path) {
+    if (!path || path[0] != '~') {
+        /* No tilde expansion needed */
+        return strdup(path);
+    }
+
+    if (path[1] == '\0' || path[1] == '/') {
+        /* ~ or ~/... - expand to current user's home */
+        struct passwd *pwd = getpwuid(getuid());
+        if (!pwd || !pwd->pw_dir) {
+            return NULL;
+        }
+
+        if (path[1] == '\0') {
+            /* Just ~ */
+            return strdup(pwd->pw_dir);
+        } else {
+            /* ~/subpath */
+            char *result = malloc(strlen(pwd->pw_dir) + strlen(path));
+            if (result) {
+                sprintf(result, "%s%s", pwd->pw_dir, path + 1);
+            }
+            return result;
+        }
+    } else {
+        /* ~username or ~username/... - expand to specified user's home */
+        const char *slash = strchr(path + 1, '/');
+        char *username;
+
+        if (slash) {
+            /* ~username/subpath */
+            size_t username_len = slash - (path + 1);
+            username = malloc(username_len + 1);
+            if (!username) {
+                return NULL;
+            }
+            strncpy(username, path + 1, username_len);
+            username[username_len] = '\0';
+        } else {
+            /* ~username */
+            username = strdup(path + 1);
+            if (!username) {
+                return NULL;
+            }
+        }
+
+        /* Look up the user */
+        struct passwd *pwd = getpwnam(username);
+        if (!pwd || !pwd->pw_dir) {
+            free(username);
+            return NULL;
+        }
+
+        char *result;
+        if (slash) {
+            /* ~username/subpath */
+            result = malloc(strlen(pwd->pw_dir) + strlen(slash) + 1);
+            if (result) {
+                sprintf(result, "%s%s", pwd->pw_dir, slash);
+            }
+        } else {
+            /* ~username */
+            result = strdup(pwd->pw_dir);
+        }
+
+        free(username);
+        return result;
     }
 }
 
@@ -837,11 +938,11 @@ char *read_command(void) {
                     }
 
                     /* Determine if we're completing a command or a path */
-                    if (is_command_position(buffer, pos) && completion_text[0] != '/') {
-                        /* Complete command names (but not if it's an absolute path) */
+                    if (is_command_position(buffer, pos) && completion_text[0] != '/' && completion_text[0] != '.') {
+                        /* Complete command names (but not if it's an absolute or relative path) */
                         matches = complete_command(completion_text);
-                    } else if (is_command_position(buffer, pos) && completion_text[0] == '/') {
-                        /* Complete absolute paths to executables only in command position */
+                    } else if (is_command_position(buffer, pos) && (completion_text[0] == '/' || strncmp(completion_text, "./", 2) == 0)) {
+                        /* Complete paths to executables only in command position for absolute or relative paths */
                         matches = complete_path(completion_text, 0, strlen(completion_text), 1, 0);
                     } else if (is_cd_command(buffer, pos)) {
                         /* Complete directories only for cd command */
@@ -888,7 +989,7 @@ char *read_command(void) {
                             free(matches[0]);
                             free(matches);
                         } else {
-                            /* Multiple matches with partial prefix - set up for cycling */
+                            /* Multiple matches - set up for cycling through all matches */
                             tab_matches = matches;
                             tab_original_prefix = strdup(prefix);
                             tab_prefix_start = prefix_start;
@@ -1133,21 +1234,130 @@ int handle_builtin_command(const char *command) {
         handled = 1;
     } else if (strcmp(token, "cd") == 0) {
         char *dir = strtok_r(NULL, " \t", &saveptr);
+        char *expanded_dir = NULL;
+
         if (!dir) {
             /* No argument, change to home directory */
             struct passwd *pwd = getpwuid(getuid());
             if (pwd && pwd->pw_dir) {
-                dir = pwd->pw_dir;
+                expanded_dir = strdup(pwd->pw_dir);
             } else {
-                dir = "/";
+                expanded_dir = strdup("/");
+            }
+        } else {
+            /* Expand tilde in the provided directory path */
+            expanded_dir = expand_tilde_path(dir);
+            if (!expanded_dir) {
+                if (dir[0] == '~') {
+                    /* Tilde expansion failed */
+                    char *username_end = strchr(dir + 1, '/');
+                    if (username_end) {
+                        *username_end = '\0';
+                        fprintf(stderr, "cd: %s: No such user\n", dir + 1);
+                        *username_end = '/';
+                    } else {
+                        fprintf(stderr, "cd: %s: No such user\n", dir + 1);
+                    }
+                } else {
+                    fprintf(stderr, "cd: %s: Memory allocation failed\n", dir);
+                }
+                handled = 1;
+                goto cd_cleanup;
             }
         }
 
-        if (chdir(dir) == 0) {
+        if (chdir(expanded_dir) == 0) {
             /* Successfully changed directory - silent operation per Unix philosophy */
         } else {
-            fprintf(stderr, "cd: %s: %s\n", dir, strerror(errno));
+            fprintf(stderr, "cd: %s: %s\n", expanded_dir, strerror(errno));
         }
+
+cd_cleanup:
+        if (expanded_dir) {
+            free(expanded_dir);
+        }
+        handled = 1;
+    } else if (strcmp(token, "alias") == 0) {
+        char *args = strtok_r(NULL, "", &saveptr);
+        if (!args || strlen(trim_whitespace(args)) == 0) {
+            /* No arguments, print all aliases */
+            print_aliases();
+        } else {
+            /* Parse alias definition */
+            char *equals = strchr(args, '=');
+            if (equals) {
+                *equals = '\0';
+                char *name = trim_whitespace(args);
+                char *value = trim_whitespace(equals + 1);
+
+                /* Remove quotes from value if present */
+                if ((value[0] == '"' && value[strlen(value)-1] == '"') ||
+                    (value[0] == '\'' && value[strlen(value)-1] == '\'')) {
+                    value[strlen(value)-1] = '\0';
+                    value++;
+                }
+
+                if (add_alias(name, value)) {
+                    printf("alias %s='%s'\n", name, value);
+                } else {
+                    fprintf(stderr, "alias: invalid alias name or value\n");
+                }
+            } else {
+                /* Show specific alias */
+                char *name = trim_whitespace(args);
+                char *value = get_alias_value(name);
+                if (value) {
+                    printf("alias %s='%s'\n", name, value);
+                } else {
+                    fprintf(stderr, "alias: %s: not found\n", name);
+                }
+            }
+        }
+        handled = 1;
+    } else if (strcmp(token, "unalias") == 0) {
+        char *name = strtok_r(NULL, " \t", &saveptr);
+        if (!name) {
+            fprintf(stderr, "unalias: usage: unalias name\n");
+        } else {
+            if (remove_alias(name)) {
+                /* Silent success per Unix philosophy */
+            } else {
+                fprintf(stderr, "unalias: %s: not found\n", name);
+            }
+        }
+        handled = 1;
+    } else if (strcmp(token, "export") == 0) {
+        handled = handle_export_command(command);
+    } else if (strcmp(token, "unset") == 0) {
+        handled = handle_unset_command(command);
+    } else if (strcmp(token, "env") == 0) {
+        print_environment();
+        handled = 1;
+    } else if (strcmp(token, "which") == 0) {
+        handled = handle_which_command(command);
+    } else if (strcmp(token, "type") == 0) {
+        handled = handle_type_command(command);
+    } else if (strcmp(token, "pushd") == 0) {
+        char *dir = strtok_r(NULL, " \t", &saveptr);
+        if (!dir) {
+            fprintf(stderr, "pushd: usage: pushd directory\n");
+        } else {
+            char *expanded_dir = expand_tilde_path(dir);
+            if (expanded_dir) {
+                if (!pushd(expanded_dir)) {
+                    fprintf(stderr, "pushd: %s: %s\n", expanded_dir, strerror(errno));
+                }
+                free(expanded_dir);
+            } else {
+                fprintf(stderr, "pushd: %s: No such user\n", dir);
+            }
+        }
+        handled = 1;
+    } else if (strcmp(token, "popd") == 0) {
+        popd();
+        handled = 1;
+    } else if (strcmp(token, "dirs") == 0) {
+        print_dirs();
         handled = 1;
     } else if (strcmp(token, "exit") == 0 || strcmp(token, "quit") == 0) {
         /* Silent exit per Unix philosophy */
@@ -1420,7 +1630,9 @@ char **complete_command(const char *text) {
     free(path_copy);
 
     /* Add built-in commands that match */
-    const char *builtins[] = {"help", "commands", "history", "pwd", "path", "cd", "exit", "quit", NULL};
+    const char *builtins[] = {"help", "commands", "history", "pwd", "path", "cd", "exit", "quit",
+                              "alias", "unalias", "export", "unset", "env", "which", "type",
+                              "pushd", "popd", "dirs", "version", "rules", NULL};
     for (int i = 0; builtins[i]; i++) {
         if (strncmp(builtins[i], text, text_len) == 0) {
             /* Check if we already have this command */
@@ -1704,6 +1916,144 @@ int is_cd_command(const char *buffer, int pos) {
 }
 
 /**
+ * Complete usernames for tilde expansion
+ */
+static char **complete_usernames(const char *text) {
+    char **matches = NULL;
+    int match_count = 0;
+    int match_capacity = 16;
+
+    /* Allocate initial matches array */
+    matches = malloc(match_capacity * sizeof(char *));
+    if (!matches) {
+        return NULL;
+    }
+
+    /* Extract username prefix (skip the ~) */
+    const char *username_prefix = text + 1;
+    int prefix_len = strlen(username_prefix);
+
+    /* First, try to get users from getpwent() (local users) */
+    struct passwd *pwd;
+    setpwent();
+
+    while ((pwd = getpwent()) != NULL) {
+        /* For empty prefix (~), show regular users (UID >= 1000) and common system users */
+        if (prefix_len == 0) {
+            /* Show regular users and some common system users */
+            if (pwd->pw_uid >= 1000 ||
+                strcmp(pwd->pw_name, "root") == 0 ||
+                strcmp(pwd->pw_name, "nobody") == 0 ||
+                strcmp(pwd->pw_name, "www-data") == 0 ||
+                strcmp(pwd->pw_name, "nginx") == 0 ||
+                strcmp(pwd->pw_name, "apache") == 0) {
+                /* Include this user */
+            } else {
+                continue;
+            }
+        } else {
+            /* For partial usernames, check if username matches prefix */
+            if (strncmp(pwd->pw_name, username_prefix, prefix_len) != 0) {
+                continue;
+            }
+        }
+
+        /* Expand matches array if needed */
+        if (match_count >= match_capacity - 1) {
+            match_capacity *= 2;
+            char **new_matches = realloc(matches, match_capacity * sizeof(char *));
+            if (!new_matches) {
+                /* Clean up on failure */
+                for (int i = 0; i < match_count; i++) {
+                    free(matches[i]);
+                }
+                free(matches);
+                endpwent();
+                return NULL;
+            }
+            matches = new_matches;
+        }
+
+        /* Create the completion match with ~ prefix */
+        /* Add trailing slash for single matches to indicate it's a directory */
+        char *match;
+        if (prefix_len > 0 && strlen(pwd->pw_name) > (size_t)prefix_len) {
+            /* Partial match - add trailing slash to indicate directory */
+            match = malloc(strlen(pwd->pw_name) + 3);
+            if (match) {
+                sprintf(match, "~%s/", pwd->pw_name);
+            }
+        } else {
+            /* Exact match or empty prefix - no trailing slash yet */
+            match = malloc(strlen(pwd->pw_name) + 2);
+            if (match) {
+                sprintf(match, "~%s", pwd->pw_name);
+            }
+        }
+
+        if (match) {
+            matches[match_count++] = match;
+        }
+    }
+
+    endpwent();
+
+    /* If we have a specific prefix and found no matches, try to check if the
+     * current user matches the prefix (for external user databases) */
+    if (prefix_len > 0 && match_count == 0) {
+        struct passwd *current_user = getpwuid(getuid());
+        if (current_user && strncmp(current_user->pw_name, username_prefix, prefix_len) == 0) {
+            /* Current user matches the prefix - add it as a completion */
+            char *match;
+            if (strlen(current_user->pw_name) > (size_t)prefix_len) {
+                match = malloc(strlen(current_user->pw_name) + 3);
+                if (match) {
+                    sprintf(match, "~%s/", current_user->pw_name);
+                }
+            } else {
+                match = malloc(strlen(current_user->pw_name) + 2);
+                if (match) {
+                    sprintf(match, "~%s", current_user->pw_name);
+                }
+            }
+
+            if (match) {
+                matches[match_count++] = match;
+            }
+        }
+
+        /* Also try to check if the exact prefix is a valid user */
+        if (match_count == 0) {
+            struct passwd *prefix_user = getpwnam(username_prefix);
+            if (prefix_user) {
+                /* The prefix itself is a valid username */
+                char *match = malloc(strlen(username_prefix) + 2);
+                if (match) {
+                    sprintf(match, "~%s", username_prefix);
+                    matches[match_count++] = match;
+                }
+            }
+        }
+    }
+
+    /* Sort matches alphabetically */
+    for (int i = 0; i < match_count - 1; i++) {
+        for (int j = i + 1; j < match_count; j++) {
+            if (strcmp(matches[i], matches[j]) > 0) {
+                char *temp = matches[i];
+                matches[i] = matches[j];
+                matches[j] = temp;
+            }
+        }
+    }
+
+    /* Null-terminate the matches array */
+    matches[match_count] = NULL;
+
+    return matches;
+}
+
+/**
  * Complete file/directory paths
  */
 char **complete_path(const char *text, int start, int end, int executables_only, int directories_only) {
@@ -1725,31 +2075,77 @@ char **complete_path(const char *text, int start, int end, int executables_only,
         return NULL;
     }
 
+    /* Handle tilde expansion for path completion */
+    char *expanded_text = NULL;
+    const char *working_text = text;
+
+    if (text && text[0] == '~') {
+        /* Handle tilde expansion */
+        char *last_slash = strrchr(text, '/');
+
+        if (!last_slash) {
+            /* Just ~username - complete usernames */
+            /* This handles both ~ and ~partial_username cases */
+            return complete_usernames(text);
+        } else {
+            /* ~username/path - expand the tilde part and complete the path */
+            char *tilde_part = malloc(last_slash - text + 1);
+            if (!tilde_part) {
+                free(matches);
+                return NULL;
+            }
+            strncpy(tilde_part, text, last_slash - text);
+            tilde_part[last_slash - text] = '\0';
+
+            char *expanded_tilde = expand_tilde_path(tilde_part);
+            free(tilde_part);
+
+            if (!expanded_tilde) {
+                /* Tilde expansion failed - try username completion for the tilde part */
+                free(matches);
+                return complete_usernames(text);
+            }
+
+            /* Create the expanded text for completion */
+            expanded_text = malloc(strlen(expanded_tilde) + strlen(last_slash) + 1);
+            if (!expanded_text) {
+                free(expanded_tilde);
+                free(matches);
+                return NULL;
+            }
+            sprintf(expanded_text, "%s%s", expanded_tilde, last_slash);
+            free(expanded_tilde);
+            working_text = expanded_text;
+        }
+    }
+
     /* Extract directory and filename parts */
     char *dir_path = NULL;
     char *filename_prefix = NULL;
 
-    char *last_slash = strrchr(text, '/');
+    char *last_slash = strrchr(working_text, '/');
     if (last_slash) {
         /* Path contains directory separator */
-        int dir_len = last_slash - text + 1;
+        int dir_len = last_slash - working_text + 1;
         dir_path = malloc(dir_len + 1);
         if (!dir_path) {
+            if (expanded_text) free(expanded_text);
             free(matches);
             return NULL;
         }
-        strncpy(dir_path, text, dir_len);
+        strncpy(dir_path, working_text, dir_len);
         dir_path[dir_len] = '\0';
 
         filename_prefix = strdup(last_slash + 1);
     } else {
         /* No directory separator - complete in current directory */
         dir_path = strdup("./");
-        filename_prefix = strdup(text);
+        filename_prefix = strdup(working_text);
     }
 
     if (!filename_prefix) {
         free(dir_path);
+        if (expanded_text) free(expanded_text);
         free(matches);
         return NULL;
     }
@@ -1759,6 +2155,7 @@ char **complete_path(const char *text, int start, int end, int executables_only,
     if (!dir) {
         free(dir_path);
         free(filename_prefix);
+        if (expanded_text) free(expanded_text);
         free(matches);
         return NULL;
     }
@@ -1787,6 +2184,7 @@ char **complete_path(const char *text, int start, int end, int executables_only,
                     free(matches);
                     free(dir_path);
                     free(filename_prefix);
+                    if (expanded_text) free(expanded_text);
                     closedir(dir);
                     return NULL;
                 }
@@ -1795,11 +2193,25 @@ char **complete_path(const char *text, int start, int end, int executables_only,
 
             /* Create the completion match */
             char *full_match;
-            if (strcmp(dir_path, "./") == 0) {
-                /* Current directory - just use the filename */
-                full_match = strdup(entry->d_name);
+
+            if (expanded_text && text[0] == '~') {
+                /* For tilde expansion, show the original tilde format */
+                char *last_slash = strrchr(text, '/');
+                if (last_slash) {
+                    /* ~username/path format */
+                    int tilde_len = last_slash - text + 1;
+                    full_match = malloc(tilde_len + strlen(entry->d_name) + 1);
+                    if (full_match) {
+                        strncpy(full_match, text, tilde_len);
+                        full_match[tilde_len] = '\0';
+                        strcat(full_match, entry->d_name);
+                    }
+                } else {
+                    /* This shouldn't happen in this context, but handle it */
+                    full_match = strdup(entry->d_name);
+                }
             } else {
-                /* Include the directory path */
+                /* Normal path completion */
                 int full_len = strlen(dir_path) + strlen(entry->d_name) + 1;
                 full_match = malloc(full_len);
                 if (full_match) {
@@ -1866,6 +2278,7 @@ char **complete_path(const char *text, int start, int end, int executables_only,
     closedir(dir);
     free(dir_path);
     free(filename_prefix);
+    if (expanded_text) free(expanded_text);
 
     /* Sort matches alphabetically */
     for (int i = 0; i < match_count - 1; i++) {

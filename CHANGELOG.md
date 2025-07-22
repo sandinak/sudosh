@@ -5,6 +5,58 @@ All notable changes to sudosh will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.1] - 2024-12-22
+
+### Added
+- **CVE-2023-22809 Protection**: Added comprehensive protection against sudoedit privilege escalation attacks
+  - Sudoedit commands are now blocked with informative error messages
+  - Enhanced environment variable sanitization for EDITOR, VISUAL, and SUDO_EDITOR
+  - New security test suite for CVE-2023-22809 validation
+- **Enhanced Environment Sanitization**: Expanded dangerous environment variable removal
+  - Added protection against library injection (LD_PRELOAD, PYTHONPATH, PERL5LIB, RUBYLIB, etc.)
+  - Enhanced editor-related variable sanitization (FCEDIT, LESSSECURE, LESSOPEN, etc.)
+  - Added protection against man page and groff command injection
+  - Improved Java and scripting language security (JAVA_TOOL_OPTIONS, CLASSPATH, etc.)
+- **Null Byte Injection Protection**: Advanced detection and blocking of embedded null byte attacks
+  - New `validate_command_with_length()` function for proper null byte detection
+  - Enhanced security testing for null byte injection scenarios
+- **Refactored Error Handling Framework**: New centralized error handling system
+  - Added `sudosh_common.h` with standardized error codes and macros
+  - Implemented safe memory management utilities with RAII-style cleanup
+  - Added comprehensive input validation utilities
+  - Centralized logging functions with consistent formatting
+- **Configuration Management System**: New centralized configuration framework
+  - Added `config.c` with support for file-based configuration
+  - Configurable timeouts, command length limits, and security settings
+  - Runtime configuration validation and error reporting
+- **Enhanced Security Testing**: Comprehensive test suite for recent CVE vulnerabilities
+  - New `test_security_cve_2023_fixes.c` with 15+ security tests
+  - Automated testing for environment sanitization
+  - Library injection protection validation
+  - Command validation and null byte injection tests
+
+### Security
+- **CVE-2023-22809**: Fixed sudoedit privilege escalation vulnerability
+- **Enhanced Command Validation**: Improved detection of command injection attempts
+- **Environment Hardening**: Comprehensive sanitization against injection attacks
+- **Memory Safety**: Enhanced memory management with bounds checking
+- **Input Validation**: Strengthened validation against malformed input
+
+### Changed
+- **Version**: Updated to 1.9.1 across all documentation and build files
+- **Man Page**: Enhanced documentation with comprehensive CVE protection details
+- **README**: Updated with latest security features and CVE protection information
+- **Build System**: Added new source files to Makefile for refactored components
+- **Error Handling**: Migrated to centralized error handling framework
+- **Function Declarations**: Fixed function declaration conflicts in header files
+
+### Improved
+- **Code Organization**: Reduced code duplication through centralized utilities
+- **Memory Management**: Safer allocation and cleanup patterns
+- **Security Logging**: Enhanced logging with function-specific context
+- **Documentation**: Updated inline documentation for all new features
+- **Test Coverage**: Expanded security test coverage for recent vulnerabilities
+
 ## [1.9.0] - 2024-12-XX
 
 ### Added

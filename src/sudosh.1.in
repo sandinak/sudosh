@@ -1,6 +1,6 @@
 .TH SUDOSH 1 "December 2024" "sudosh @VERSION@" "User Commands"
 .SH NAME
-sudosh \- interactive sudo shell with comprehensive logging
+sudosh \- secure interactive sudo shell with comprehensive logging and CVE protection
 .SH SYNOPSIS
 .B sudosh
 [\fIOPTION\fR]...
@@ -9,9 +9,12 @@ sudosh \- interactive sudo shell with comprehensive logging
 [\fB\-L\fR \fIFILE\fR] [\fB\-h\fR] [\fB\-v\fR] [\fB\-l\fR]
 .SH DESCRIPTION
 .B sudosh
-is an interactive sudo shell that provides a command prompt for executing privileged commands with comprehensive logging to syslog. It uses PAM (Pluggable Authentication Modules) for secure user authentication and logs all commands in the same format as sudo.
+is a secure interactive sudo shell that provides a command prompt for executing privileged commands with comprehensive logging to syslog. It uses PAM (Pluggable Authentication Modules) for secure user authentication and logs all commands in the same format as sudo.
 
-Unlike traditional sudo which executes single commands, sudosh provides an interactive shell session where multiple commands can be executed with elevated privileges while maintaining full audit trails.
+Unlike traditional sudo which executes single commands, sudosh provides an interactive shell session where multiple commands can be executed with elevated privileges while maintaining full audit trails and advanced security protections.
+
+.B sudosh
+includes protection against recent CVE vulnerabilities including CVE-2023-22809 (sudoedit privilege escalation), CVE-2022-3715 (bash heap buffer overflow), and various Shellshock variants. It features enhanced environment sanitization, null byte injection detection, and comprehensive command validation to prevent security exploits.
 
 .SH OPTIONS
 .TP
@@ -49,7 +52,7 @@ Run commands as the specified target user (requires sudoers permission).
 .SH USAGE
 .SH ENHANCED FEATURES
 .B sudosh
-version 1.9.0 introduces several enhanced features for improved security and usability:
+version 1.9.1 introduces several enhanced features for improved security and usability:
 
 .SS Permission Analysis
 The \fB\-l\fR option provides comprehensive sudo permission analysis with detailed source attribution. Unlike standard \fBsudo -l\fR, sudosh shows exactly which file grants each permission, making it easy to troubleshoot and audit sudo configurations.
@@ -125,6 +128,36 @@ Print the current working directory.
 .B path
 Display PATH environment variable. Shows the raw PATH value on the first line, followed by any directories that are not accessible (cannot be read). If all directories are accessible, only the PATH value is shown.
 .TP
+.B alias \fI[name[=value]]\fR
+Create or display command aliases. With no arguments, displays all defined aliases. With just a name, displays that specific alias. With name=value, creates or updates an alias. Aliases are automatically saved and restored between sessions.
+.TP
+.B unalias \fIname\fR
+Remove the specified alias.
+.TP
+.B export \fI[var[=value]]\fR
+Set or display environment variables. With no arguments, displays all exported variables. With just a variable name, displays that variable. With var=value, sets the variable. Only safe environment variables can be modified.
+.TP
+.B unset \fIvar\fR
+Remove the specified environment variable. Only safe environment variables can be removed.
+.TP
+.B env
+Display all environment variables.
+.TP
+.B which \fIcommand\fR
+Show the location of the specified command or indicate if it's a built-in.
+.TP
+.B type \fIcommand\fR
+Show detailed information about the specified command including its type (built-in, alias, or file path).
+.TP
+.B pushd \fIdirectory\fR
+Push the current directory onto the directory stack and change to the specified directory.
+.TP
+.B popd
+Pop the top directory from the directory stack and change to it.
+.TP
+.B dirs
+Display the directory stack, showing the current directory first followed by stacked directories.
+.TP
 .BR exit ", " quit
 Exit the sudosh shell. Ctrl-D also exits gracefully.
 .TP
@@ -147,6 +180,19 @@ sudosh:/var/log# commands
 sudosh:/var/log# rules
 sudosh:/var/log# help
 sudosh:/var/log# exit
+.fi
+.TP
+Use shell enhancement features:
+.nf
+sudosh:/home/user# alias ll='ls -la'
+sudosh:/home/user# alias grep='grep --color=always'
+sudosh:/home/user# ll /etc
+sudosh:/home/user# export EDITOR=vim
+sudosh:/home/user# pushd /var/log
+sudosh:/var/log# popd
+sudosh:/home/user# which ls
+sudosh:/home/user# type ll
+sudosh:/home/user# dirs
 .fi
 .TP
 Start sudosh with session logging:
@@ -293,6 +339,30 @@ Shell command blocking (bash, sh, zsh, etc.)
 .IP \(bu 4
 Dangerous command detection with user confirmation prompts
 
+.SS Shell Enhancement Security
+sudosh provides bash/zsh-like shell enhancements with comprehensive security validation:
+.IP \(bu 4
+.B Alias Security
+- Alias names must be valid identifiers (alphanumeric and underscore only)
+- Alias values are validated to prevent command injection, variable substitution, and shell metacharacters
+- Built-in command names cannot be aliased to prevent hijacking
+- Aliases are stored securely in the user's home directory
+.IP \(bu 4
+.B Environment Variable Security
+- Only whitelisted environment variables can be modified (EDITOR, PAGER, LANG, etc.)
+- Critical variables like PATH, LD_PRELOAD, SHELL are protected from modification
+- All sudo-related variables (SUDO_USER, SUDO_UID, etc.) are read-only
+.IP \(bu 4
+.B Directory Stack Security
+- Directory changes are validated using standard system calls
+- No special path traversal protections needed as chdir() handles validation
+- Stack depth is limited to prevent memory exhaustion
+.IP \(bu 4
+.B Command Information Security
+- which and type commands use secure PATH resolution
+- No execution of external programs for command lookup
+- Built-in commands and aliases are identified safely
+
 .SS Intelligent Gut Check Commands
 sudosh implements intelligent "gut check" warnings that distinguish between safe and dangerous operations. The system now intelligently analyzes commands to reduce false positives while maintaining security:
 
@@ -396,15 +466,19 @@ All pager usage is logged for security auditing
 .B CVE Vulnerability Protection:
 Sudosh has been audited against major bash CVE vulnerabilities and implements specific protections:
 .IP \(bu 4
+\fBCVE-2023-22809 (Sudoedit privilege escalation)\fR: Sudoedit commands are blocked and dangerous editor environment variables are sanitized
+.IP \(bu 4
+\fBCVE-2022-3715 (Heap overflow)\fR: Enhanced parameter validation and null byte injection detection implemented
+.IP \(bu 4
+\fBCVE-2019-9924 (rbash bypass)\fR: Not applicable - custom security model used
+.IP \(bu 4
 \fBCVE-2014-6271 (Shellshock)\fR: Protected via environment sanitization and input validation
 .IP \(bu 4
 \fBCVE-2014-7169 (Shellshock variant)\fR: Mitigated through controlled execution model
 .IP \(bu 4
 \fBCVE-2014-7186/7187 (Memory corruption)\fR: Prevented by input length limits and validation
 .IP \(bu 4
-\fBCVE-2019-9924 (rbash bypass)\fR: Not applicable - custom security model used
-.IP \(bu 4
-\fBCVE-2022-3715 (Heap overflow)\fR: Enhanced parameter validation implemented
+Enhanced environment sanitization removes dangerous variables including EDITOR, VISUAL, SUDO_EDITOR, LD_PRELOAD, PYTHONPATH, and other library injection vectors
 .IP \(bu 4
 Complete vulnerability analysis available in SECURITY_AUDIT.md
 

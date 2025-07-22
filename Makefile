@@ -59,7 +59,7 @@ BINDIR = bin
 TESTDIR = tests
 
 # Source files
-SOURCES = main.c auth.c command.c logging.c security.c utils.c nss.c sudoers.c sssd.c filelock.c
+SOURCES = main.c auth.c command.c logging.c security.c utils.c nss.c sudoers.c sssd.c filelock.c shell_enhancements.c shell_env.c config.c
 OBJECTS = $(SOURCES:%.c=$(OBJDIR)/%.o)
 
 # Test files
@@ -72,7 +72,7 @@ SECURITY_TEST_SOURCES = $(wildcard $(TESTDIR)/test_security_*.c)
 SECURITY_TEST_BINARIES = $(SECURITY_TEST_SOURCES:$(TESTDIR)/%.c=$(BINDIR)/%)
 
 # Library objects (excluding main.c for testing)
-LIB_SOURCES = auth.c command.c logging.c security.c utils.c nss.c sudoers.c sssd.c filelock.c
+LIB_SOURCES = auth.c command.c logging.c security.c utils.c nss.c sudoers.c sssd.c filelock.c shell_enhancements.c shell_env.c
 LIB_OBJECTS = $(LIB_SOURCES:%.c=$(OBJDIR)/%.o)
 
 # Target executable
@@ -203,10 +203,13 @@ install: $(TARGET) sudosh.1
 	fi
 	install -d $(BINDIR_INSTALL)
 	install -d $(MANDIR)
+	install -d /var/run/sudosh
+	install -d /var/run/sudosh/locks
 	install -m 4755 $(TARGET) $(BINDIR_INSTALL)/sudosh
 	install -m 644 sudosh.1 $(MANDIR)/sudosh.1
 	@echo "sudosh installed to $(BINDIR_INSTALL)/sudosh"
 	@echo "Manual page installed to $(MANDIR)/sudosh.1"
+	@echo "Runtime directories created: /var/run/sudosh/locks"
 	@echo "Note: The binary has been installed with setuid root permissions"
 
 # Uninstall target
@@ -218,8 +221,10 @@ uninstall:
 	fi
 	rm -f $(BINDIR_INSTALL)/sudosh
 	rm -f $(MANDIR)/sudosh.1
+	rm -rf /var/run/sudosh
 	@echo "sudosh removed from $(BINDIR_INSTALL)"
 	@echo "Manual page removed from $(MANDIR)"
+	@echo "Runtime directories removed: /var/run/sudosh"
 
 # Clean build files
 clean:

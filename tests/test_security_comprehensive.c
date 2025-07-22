@@ -50,7 +50,7 @@ int run_security_test(const char *test_binary, const char *category) {
     snprintf(command, sizeof(command), "./%s", test_binary);
     
     char *output = NULL;
-    int result = execute_with_timeout(command, 30, &output);
+    int result = execute_with_timeout(command, 15, &output);
     
     /* Parse output to extract test results */
     if (output) {

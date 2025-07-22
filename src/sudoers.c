@@ -676,8 +676,53 @@ void list_available_commands(const char *username) {
         }
     }
 
+    /* Show LDAP/SSSD-based rules from sudo -l output */
+    printf("LDAP/SSSD-Based Rules (from sudo -l):\n");
+    fp = popen(command, "r");
+    if (fp) {
+        char buffer[1024];
+        int in_commands = 0;
+        int found_ldap_rules = 0;
+
+        while (fgets(buffer, sizeof(buffer), fp)) {
+            /* Check if we're in the commands section */
+            if (strstr(buffer, "may run the following commands")) {
+                in_commands = 1;
+                continue;
+            }
+
+            /* Parse command entries */
+            if (in_commands) {
+                char *trimmed = buffer;
+                while (*trimmed && isspace(*trimmed)) trimmed++;
+
+                if (*trimmed == '(' && strchr(trimmed, ')')) {
+                    /* This is a sudo rule entry */
+                    found_ldap_rules = 1;
+                    found_any_rules = 1;
+
+                    /* Remove newline */
+                    size_t len = strlen(buffer);
+                    if (len > 0 && buffer[len-1] == '\n') {
+                        buffer[len-1] = '\0';
+                    }
+
+                    printf("    %s  [Source: LDAP/SSSD]\n", trimmed);
+                }
+            }
+        }
+        pclose(fp);
+
+        if (!found_ldap_rules) {
+            printf("    No LDAP/SSSD-based rules found\n");
+        }
+    } else {
+        printf("    Could not query LDAP/SSSD rules\n");
+    }
+    printf("\n");
+
     /* Show direct sudoers rules */
-    printf("Direct Sudoers Rules:\n");
+    printf("Direct Sudoers Rules (from /etc/sudoers):\n");
     sudoers_config = parse_sudoers_file(NULL);
     if (sudoers_config) {
         struct sudoers_userspec *spec = sudoers_config->userspecs;

@@ -110,10 +110,27 @@ void sanitize_environment(void) {
         "TMPDIR",
         "TMP",
         "TEMP",
-        "EDITOR",
-        "VISUAL",
+        "EDITOR",           /* CVE-2023-22809 protection */
+        "VISUAL",           /* CVE-2023-22809 protection */
+        "SUDO_EDITOR",      /* CVE-2023-22809 protection */
         "PAGER",
         "BROWSER",
+        "FCEDIT",           /* Additional editor variable */
+        "LESSSECURE",       /* Prevent less security bypass */
+        "LESSOPEN",         /* Prevent less command execution */
+        "LESSCLOSE",        /* Prevent less command execution */
+        "MANPAGER",         /* Prevent man page command execution */
+        "MANOPT",           /* Prevent man option injection */
+        "GROFF_COMMAND",    /* Prevent groff command injection */
+        "TROFF_COMMAND",    /* Prevent troff command injection */
+        "NROFF_COMMAND",    /* Prevent nroff command injection */
+        "PERL5LIB",         /* Prevent Perl library injection */
+        "PERLLIB",          /* Prevent Perl library injection */
+        "PYTHONPATH",       /* Prevent Python path injection */
+        "RUBYLIB",          /* Prevent Ruby library injection */
+        "TCLLIBPATH",       /* Prevent TCL library injection */
+        "JAVA_TOOL_OPTIONS", /* Prevent Java tool injection */
+        "CLASSPATH",        /* Prevent Java classpath injection */
         NULL
     };
 
@@ -193,9 +210,12 @@ void secure_terminal(void) {
     setrlimit(RLIMIT_CORE, &rlim);
 
     /* Close all file descriptors except stdin, stdout, stderr */
-    int max_fd = sysconf(_SC_OPEN_MAX);
-    if (max_fd == -1) {
+    long max_fd_long = sysconf(_SC_OPEN_MAX);
+    int max_fd;
+    if (max_fd_long == -1 || max_fd_long > INT_MAX) {
         max_fd = 1024; /* fallback value */
+    } else {
+        max_fd = (int)max_fd_long;
     }
 
     for (int fd = 3; fd < max_fd; fd++) {
@@ -516,6 +536,49 @@ int is_ssh_command(const char *command) {
 
     free(cmd_copy);
     return 0;
+}
+
+/**
+ * Check if command is sudoedit or related editor bypass attempt (CVE-2023-22809)
+ */
+int is_sudoedit_command(const char *command) {
+    if (!command) return 0;
+
+    /* Extract the command name (first word) */
+    char *cmd_copy = strdup(command);
+    if (!cmd_copy) return 0;
+
+    char *cmd_name = strtok(cmd_copy, " \t\n");
+    if (!cmd_name) {
+        free(cmd_copy);
+        return 0;
+    }
+
+    /* List of sudoedit and related commands to block */
+    const char *sudoedit_commands[] = {
+        "sudoedit",
+        "/usr/bin/sudoedit",
+        "/usr/local/bin/sudoedit",
+        "sudo -e",
+        "sudo --edit",
+        NULL
+    };
+
+    int result = 0;
+    for (int i = 0; sudoedit_commands[i]; i++) {
+        if (strcmp(cmd_name, sudoedit_commands[i]) == 0) {
+            result = 1;
+            break;
+        }
+    }
+
+    /* Also check for sudo -e pattern in the full command */
+    if (!result && strstr(command, "sudo") && strstr(command, "-e")) {
+        result = 1;
+    }
+
+    free(cmd_copy);
+    return result;
 }
 
 /**
@@ -1001,194 +1064,11 @@ int prompt_user_confirmation(const char *command, const char *warning) {
  * Enhanced command validation with comprehensive injection protection
  */
 int validate_command(const char *command) {
-    if (!command) {
-        return 0;
-    }
+    return validate_command_with_length(command, command ? strlen(command) + 1 : 0);
 
-    /* Basic security checks first */
+    /* This function now delegates to validate_command_with_length for all validation */
 
-    /* Check for null bytes (potential injection) */
-    size_t cmd_len = strlen(command);
-    for (size_t i = 0; i < cmd_len; i++) {
-        if (command[i] == '\0') {
-            log_security_violation(current_username, "null byte in command");
-            return 0;
-        }
-    }
-
-    /* Check for extremely long commands (CVE-2022-3715 mitigation) */
-    if (cmd_len > MAX_COMMAND_LENGTH) {
-        log_security_violation(current_username, "command too long");
-        return 0;
-    }
-
-    /* Enhanced parameter validation to prevent heap buffer overflow (CVE-2022-3715) */
-    const char *dangerous_patterns[] = {
-        "${", "$(", "`", "\\x", "\\u", "\\U", "\\N", NULL
-    };
-    for (int i = 0; dangerous_patterns[i]; i++) {
-        if (strstr(command, dangerous_patterns[i])) {
-            char violation_msg[256];
-            snprintf(violation_msg, sizeof(violation_msg),
-                    "dangerous parameter pattern '%s' detected (CVE-2022-3715 protection)", dangerous_patterns[i]);
-            log_security_violation(current_username, violation_msg);
-            return 0;
-        }
-    }
-
-    /* Enhanced path traversal detection */
-    if (strstr(command, "../") || strstr(command, "..\\") ||
-        strstr(command, "/.../") || strstr(command, "\\.../")) {
-        log_security_violation(current_username, "path traversal attempt");
-        return 0;
-    }
-
-    /* Check for pipes specifically with helpful message */
-    if (strchr(command, '|')) {
-        log_security_violation(current_username, "pipe character detected in command");
-        fprintf(stderr, "sudosh: pipes (|) are blocked for security reasons\n");
-        fprintf(stderr, "sudosh: pipes can be used to:\n");
-        fprintf(stderr, "sudosh:   - chain commands and bypass security controls\n");
-        fprintf(stderr, "sudosh:   - pass sensitive data to unauthorized commands\n");
-        fprintf(stderr, "sudosh:   - create complex command injection attacks\n");
-        fprintf(stderr, "sudosh: run commands individually instead of chaining them\n");
-        return 0;
-    }
-
-    /* Check for I/O redirection first (before general metacharacter check) */
-    if (strstr(command, " > ") || strstr(command, " >> ") ||
-        strstr(command, " < ") || strstr(command, " 2> ") ||
-        strstr(command, " 2>> ") || strstr(command, " &> ") ||
-        strstr(command, " &>> ")) {
-        log_security_violation(current_username, "I/O redirection attempt");
-        fprintf(stderr, "sudosh: I/O redirection is blocked for security reasons\n");
-        fprintf(stderr, "sudosh: redirection operators (>, >>, <, 2>, &>) can be used to:\n");
-        fprintf(stderr, "sudosh:   - overwrite critical system files\n");
-        fprintf(stderr, "sudosh:   - bypass file permissions and access controls\n");
-        fprintf(stderr, "sudosh:   - create privilege escalation vectors\n");
-        fprintf(stderr, "sudosh: use individual commands without redirection instead\n");
-        return 0;
-    }
-
-    /* Check for other shell metacharacters that enable command injection */
-    const char *dangerous_chars = ";&`$(){}[]<>*?~";
-    for (const char *p = dangerous_chars; *p; p++) {
-        if (strchr(command, *p)) {
-            char violation_msg[256];
-            snprintf(violation_msg, sizeof(violation_msg),
-                    "shell metacharacter '%c' detected in command", *p);
-            log_security_violation(current_username, violation_msg);
-            return 0;
-        }
-    }
-
-    /* Check for command substitution patterns */
-    if (strstr(command, "$(") || strstr(command, "`") ||
-        strstr(command, "${") || strstr(command, "$[")) {
-        log_security_violation(current_username, "command substitution attempt");
-        return 0;
-    }
-
-
-
-    /* Check for environment variable injection */
-    if (strstr(command, "$HOME") || strstr(command, "$PATH") ||
-        strstr(command, "$USER") || strstr(command, "$SHELL") ||
-        strstr(command, "$PWD") || strstr(command, "$OLDPWD")) {
-        log_security_violation(current_username, "environment variable injection attempt");
-        return 0;
-    }
-
-    /* Check for format string vulnerabilities */
-    if (strstr(command, "%s") || strstr(command, "%d") ||
-        strstr(command, "%x") || strstr(command, "%n") ||
-        strstr(command, "%p")) {
-        log_security_violation(current_username, "format string injection attempt");
-        return 0;
-    }
-
-    /* Check for Unicode and encoding attacks */
-    for (size_t i = 0; i < cmd_len; i++) {
-        unsigned char c = (unsigned char)command[i];
-        /* Block all non-printable characters except space */
-        if (c < 32 && c != ' ') {
-            char violation_msg[256];
-            snprintf(violation_msg, sizeof(violation_msg),
-                    "non-printable character 0x%02x in command", c);
-            log_security_violation(current_username, violation_msg);
-            return 0;
-        }
-        /* Block high-bit characters that could be encoding attacks */
-        if (c > 126) {
-            char violation_msg[256];
-            snprintf(violation_msg, sizeof(violation_msg),
-                    "high-bit character 0x%02x encoding attack", c);
-            log_security_violation(current_username, violation_msg);
-            return 0;
-        }
-    }
-
-    /* Check for URL encoding attacks (case insensitive) */
-    if (strstr(command, "%00") || strstr(command, "%0a") || strstr(command, "%0A") ||
-        strstr(command, "%0d") || strstr(command, "%0D") || strstr(command, "%09") ||
-        strstr(command, "%2e%2e") || strstr(command, "%2E%2E") ||
-        strstr(command, "%2f") || strstr(command, "%2F")) {
-        log_security_violation(current_username, "URL encoding attack detected");
-        return 0;
-    }
-
-    /* Check for Unicode escape sequences */
-    if (strstr(command, "\\u0000") || strstr(command, "\\x00") ||
-        strstr(command, "\\n") || strstr(command, "\\r") ||
-        strstr(command, "\\t")) {
-        log_security_violation(current_username, "Unicode escape sequence attack");
-        return 0;
-    }
-
-    /* Check for additional dangerous patterns */
-    if (strstr(command, "export ") || strstr(command, "unset ") ||
-        strstr(command, "alias ") || strstr(command, "function ")) {
-        log_security_violation(current_username, "shell environment manipulation attempt");
-        return 0;
-    }
-
-    /* Check for environment disclosure commands */
-    if (strcmp(command, "env") == 0 || strcmp(command, "printenv") == 0 ||
-        strncmp(command, "env ", 4) == 0 || strncmp(command, "printenv ", 9) == 0) {
-        log_security_violation(current_username, "environment disclosure command blocked");
-        return 0;
-    }
-
-    /* Check for variable assignment patterns */
-    if (strstr(command, "HOME=") || strstr(command, "PATH=") ||
-        strstr(command, "LD_PRELOAD=") || strstr(command, "SHELL=")) {
-        log_security_violation(current_username, "environment variable assignment attempt");
-        return 0;
-    }
-
-    /* Check for quotes that could be used for injection */
-    if (strchr(command, '\'') || strchr(command, '"') || strchr(command, '\\')) {
-        log_security_violation(current_username, "quote character injection attempt");
-        return 0;
-    }
-
-
-
-    /* Enhanced security checks */
-
-    /* Block shell commands */
-    if (is_shell_command(command)) {
-        log_security_violation(current_username, "shell command blocked");
-        fprintf(stderr, "sudosh: shell commands are not permitted\n");
-        return 0;
-    }
-
-    /* Block SSH commands */
-    if (is_ssh_command(command)) {
-        log_security_violation(current_username, "SSH command blocked");
-        fprintf(stderr, "sudosh: you should only ssh as your user, not root\n");
-        return 0;
-    }
+    /* Enhanced security checks - keep the advanced validation logic */
 
     /* Check for secure editors first */
     if (is_secure_editor(command)) {
@@ -1280,8 +1160,57 @@ int validate_command_with_length(const char *command, size_t buffer_len) {
         return 0;
     }
 
-    /* Use the regular validation for other checks */
-    return validate_command(command);
+    /* Check for extremely long commands (CVE-2022-3715 mitigation) */
+    if (cmd_len > MAX_COMMAND_LENGTH) {
+        log_security_violation(current_username, "command too long");
+        return 0;
+    }
+
+    /* Check for path traversal attempts */
+    if (strstr(command, "../") || strstr(command, "..\\")) {
+        log_security_violation(current_username, "path traversal attempt");
+        return 0;
+    }
+
+    /* Check for command injection patterns */
+    if (strchr(command, ';') || strchr(command, '|') || strchr(command, '&') ||
+        strstr(command, "&&") || strstr(command, "||") || strchr(command, '`') ||
+        strstr(command, "$(")) {
+        log_security_violation(current_username, "command injection attempt");
+        return 0;
+    }
+
+    /* Check for redirection operators */
+    if (strchr(command, '>') || strchr(command, '<')) {
+        log_security_violation(current_username, "file redirection blocked for security reasons");
+        return 0;
+    }
+
+    /* Enhanced security checks */
+
+    /* Block sudoedit commands (CVE-2023-22809 protection) */
+    if (is_sudoedit_command(command)) {
+        log_security_violation(current_username, "sudoedit command blocked (CVE-2023-22809)");
+        fprintf(stderr, "sudosh: sudoedit commands are not permitted for security reasons\n");
+        fprintf(stderr, "sudosh: use regular editors like vi, vim, nano instead\n");
+        return 0;
+    }
+
+    /* Block shell commands */
+    if (is_shell_command(command)) {
+        log_security_violation(current_username, "shell command blocked");
+        fprintf(stderr, "sudosh: shell commands are not permitted\n");
+        return 0;
+    }
+
+    /* Block SSH commands */
+    if (is_ssh_command(command)) {
+        log_security_violation(current_username, "SSH command blocked");
+        fprintf(stderr, "sudosh: you should only ssh as your user, not root\n");
+        return 0;
+    }
+
+    return 1;
 }
 
 /**

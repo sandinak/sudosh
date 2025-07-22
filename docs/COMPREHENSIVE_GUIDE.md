@@ -36,6 +36,15 @@ Sudosh is a secure, interactive sudo shell that provides elevated privileges wit
 - **Session Management**: Complete session logging and audit trails
 - **Command History**: Persistent history with timestamps in `~/.sudosh_history`
 - **Built-in Commands**: `help`, `history`, `commands`, `cd`, `pwd`, `exit`
+- **Shell Enhancements**: Bash/zsh-like features with security validation
+
+### Shell Enhancement Features
+- **Alias Management**: Create, modify, and remove command aliases
+- **Environment Variables**: Secure modification of whitelisted environment variables
+- **Directory Stack**: pushd/popd/dirs commands for advanced directory navigation
+- **Command Information**: which/type commands for command introspection
+- **Persistent Storage**: Aliases automatically saved and restored between sessions
+- **Security Validation**: All enhancements include comprehensive security checks
 
 ### Authentication and Authorization
 - **PAM Integration**: Secure authentication using system PAM modules
@@ -331,6 +340,96 @@ make debug
 # Run with verbose output
 sudo ./bin/sudosh -v
 ```
+
+## Shell Enhancement Features
+
+### Alias Management
+Sudosh provides secure alias functionality similar to bash/zsh:
+
+```bash
+# Create aliases
+alias ll='ls -la'
+alias grep='grep --color=always'
+alias ..='cd ..'
+
+# View aliases
+alias                    # Show all aliases
+alias ll                 # Show specific alias
+
+# Remove aliases
+unalias ll
+```
+
+**Security Features:**
+- Alias names must be valid identifiers (alphanumeric and underscore only)
+- Alias values are validated to prevent command injection and shell metacharacters
+- Built-in command names cannot be aliased to prevent hijacking
+- Aliases are stored securely in `~/.sudosh_aliases` in the user's home directory
+
+### Environment Variable Management
+Secure environment variable modification with whitelist-based validation:
+
+```bash
+# Set environment variables
+export EDITOR=vim
+export PAGER=less
+export LANG=en_US.UTF-8
+
+# View environment variables
+env                      # Show all variables
+export                   # Show exported variables
+export EDITOR            # Show specific variable
+
+# Remove environment variables
+unset EDITOR
+```
+
+**Security Features:**
+- Only whitelisted environment variables can be modified (EDITOR, PAGER, LANG, etc.)
+- Critical variables like PATH, LD_PRELOAD, SHELL are protected from modification
+- All sudo-related variables (SUDO_USER, SUDO_UID, etc.) are read-only
+- Language and runtime library paths (PYTHONPATH, PERL5LIB, etc.) are protected
+
+### Directory Stack Management
+Advanced directory navigation with pushd/popd/dirs commands:
+
+```bash
+# Push directories onto stack
+pushd /var/log           # Change to /var/log and push current dir
+pushd /etc               # Change to /etc and push /var/log
+
+# View directory stack
+dirs                     # Show current directory and stack
+
+# Pop directories from stack
+popd                     # Return to previous directory (/var/log)
+popd                     # Return to original directory
+```
+
+**Security Features:**
+- Directory changes use standard system calls with built-in validation
+- Stack depth is limited to prevent memory exhaustion
+- All directory operations are logged for audit purposes
+
+### Command Information Helpers
+Safe command introspection without external program execution:
+
+```bash
+# Show command location
+which ls                 # /usr/bin/ls
+which ll                 # alias ll='ls -la'
+which help               # help is a shell builtin
+
+# Show detailed command type
+type ls                  # ls is /usr/bin/ls
+type ll                  # ll is aliased to 'ls -la'
+type help                # help is a shell builtin
+```
+
+**Security Features:**
+- Uses secure PATH resolution without executing external programs
+- Built-in commands and aliases are identified safely
+- No risk of command injection or privilege escalation
 
 ## Development and Contributing
 

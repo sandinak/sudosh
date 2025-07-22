@@ -252,7 +252,10 @@ int test_auth_logging_bypass() {
 
 int main() {
     printf("=== Security Tests - Authentication Bypass ===\n");
-    
+
+    /* Set test mode for non-interactive authentication */
+    setenv("SUDOSH_TEST_MODE", "1", 1);
+
     /* Initialize security test counters */
     security_count = 0;
     security_passes = 0;
