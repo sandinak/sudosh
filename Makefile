@@ -194,21 +194,21 @@ integration-test: tests
 sudosh.1: $(SRCDIR)/sudosh.1.in
 	sed 's/@VERSION@/$(shell grep SUDOSH_VERSION $(SRCDIR)/sudosh.h | cut -d'"' -f2)/g' $(SRCDIR)/sudosh.1.in > sudosh.1
 
-# Install target (requires root privileges)
+# Install target (requires root privileges unless DESTDIR is set for packaging)
 install: $(TARGET) sudosh.1
 	@echo "Installing sudosh..."
-	@if [ "$(shell id -u)" != "0" ]; then \
+	@if [ "$(shell id -u)" != "0" ] && [ -z "$(DESTDIR)" ]; then \
 		echo "Error: Installation requires root privileges. Run with sudo."; \
 		exit 1; \
 	fi
-	install -d $(BINDIR_INSTALL)
-	install -d $(MANDIR)
-	install -d /var/run/sudosh
-	install -d /var/run/sudosh/locks
-	install -m 4755 $(TARGET) $(BINDIR_INSTALL)/sudosh
-	install -m 644 sudosh.1 $(MANDIR)/sudosh.1
-	@echo "sudosh installed to $(BINDIR_INSTALL)/sudosh"
-	@echo "Manual page installed to $(MANDIR)/sudosh.1"
+	install -d $(DESTDIR)$(BINDIR_INSTALL)
+	install -d $(DESTDIR)$(MANDIR)
+	install -d $(DESTDIR)/var/run/sudosh
+	install -d $(DESTDIR)/var/run/sudosh/locks
+	install -m 4755 $(TARGET) $(DESTDIR)$(BINDIR_INSTALL)/sudosh
+	install -m 644 sudosh.1 $(DESTDIR)$(MANDIR)/sudosh.1
+	@echo "sudosh installed to $(DESTDIR)$(BINDIR_INSTALL)/sudosh"
+	@echo "Manual page installed to $(DESTDIR)$(MANDIR)/sudosh.1"
 	@echo "Runtime directories created: /var/run/sudosh/locks"
 	@echo "Note: The binary has been installed with setuid root permissions"
 
@@ -334,7 +334,7 @@ $(RPM_BUILD_DIR)/SPECS/$(PACKAGE_NAME).spec: $(RPM_BUILD_DIR)
 	@echo "Creating RPM spec file..."
 	@sed -e 's/@VERSION@/$(PACKAGE_VERSION)/g' \
 	     -e 's/@MAINTAINER@/$(PACKAGE_MAINTAINER)/g' \
-	     -e 's/@DATE@/$(shell date +"%%a %%b %%d %%Y")/g' \
+	     -e 's/@DATE@/$(shell date +"%a %b %d %Y")/g' \
 	     packaging/$(PACKAGE_NAME).spec.in > $@
 
 # Create Debian control files
