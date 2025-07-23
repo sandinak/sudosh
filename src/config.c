@@ -33,6 +33,12 @@ sudosh_config_t *sudosh_config_init(void) {
     config->max_command_length = DEFAULT_MAX_COMMAND_LENGTH;
     config->verbose_mode = 0;
     config->test_mode = 0;
+
+    /* Ansible detection defaults */
+    config->ansible_detection_enabled = 1;
+    config->ansible_detection_force = 0;
+    config->ansible_detection_verbose = 0;
+    config->ansible_detection_confidence_threshold = 70;
     
     config->log_facility = sudosh_safe_strdup(DEFAULT_LOG_FACILITY);
     config->cache_directory = sudosh_safe_strdup(DEFAULT_CACHE_DIRECTORY);
@@ -110,6 +116,22 @@ static sudosh_error_t parse_config_line(sudosh_config_t *config, const char *lin
         config->lock_directory = sudosh_safe_strdup(value);
         if (!config->lock_directory) {
             return SUDOSH_ERROR_MEMORY_ALLOCATION;
+        }
+    } else if (strcmp(key, "ansible_detection_enabled") == 0) {
+        config->ansible_detection_enabled = (strcmp(value, "true") == 0 || strcmp(value, "1") == 0);
+    } else if (strcmp(key, "ansible_detection_force") == 0) {
+        config->ansible_detection_force = (strcmp(value, "true") == 0 || strcmp(value, "1") == 0);
+    } else if (strcmp(key, "ansible_detection_verbose") == 0) {
+        config->ansible_detection_verbose = (strcmp(value, "true") == 0 || strcmp(value, "1") == 0);
+    } else if (strcmp(key, "ansible_detection_confidence_threshold") == 0) {
+        int threshold = atoi(value);
+        if (threshold >= 0 && threshold <= 100) {
+            config->ansible_detection_confidence_threshold = threshold;
+        } else {
+            char warning_msg[512];
+            snprintf(warning_msg, sizeof(warning_msg),
+                    "Invalid ansible_detection_confidence_threshold: %s (must be 0-100)", value);
+            SUDOSH_LOG_WARNING(warning_msg);
         }
     } else {
         /* Unknown configuration option - log warning but continue */

@@ -48,6 +48,18 @@ Log the entire session (input and output) to the specified file. This creates a 
 .TP
 .BR \-u " \fIUSER\fR, " \-\-user " \fIUSER\fR"
 Run commands as the specified target user (requires sudoers permission).
+.TP
+.BR \-\-ansible\-detect
+Enable Ansible session detection (default). When enabled, sudosh automatically detects if it's being called from an Ansible automation session and adjusts logging and behavior accordingly.
+.TP
+.BR \-\-no\-ansible\-detect
+Disable Ansible session detection. This prevents sudosh from attempting to detect Ansible sessions and treats all sessions as regular interactive sessions.
+.TP
+.BR \-\-ansible\-force
+Force Ansible session mode regardless of detection results. This option enables Ansible detection and forces sudosh to treat the session as an Ansible automation session.
+.TP
+.BR \-\-ansible\-verbose
+Enable verbose output for Ansible detection. This provides detailed information about the detection process, including confidence levels and detection methods used.
 
 .SH USAGE
 .SH ENHANCED FEATURES
@@ -104,6 +116,43 @@ Provides an interactive shell prompt with color support: \fBuser@hostname:/curre
 Logs all commands and authentication attempts to syslog
 .IP 5. 4
 Automatically logs command history to ~/.sudosh_history with timestamps
+
+.SH ANSIBLE DETECTION
+.B sudosh
+includes intelligent detection of Ansible automation sessions to provide appropriate logging and behavior for automated environments.
+
+.SS Detection Methods
+Ansible sessions are detected using multiple methods with confidence scoring:
+.IP \(bu 2
+\fBEnvironment Variables\fR: Checks for ANSIBLE_* environment variables such as ANSIBLE_HOST_KEY_CHECKING, ANSIBLE_PYTHON_INTERPRETER, and others
+.IP \(bu 2
+\fBParent Process Analysis\fR: Examines the process tree to identify ansible-playbook, ansible-runner, or related processes
+.IP \(bu 2
+\fBExecution Context\fR: Analyzes terminal type, SSH connection indicators, and working directory patterns
+.IP \(bu 2
+\fBHeuristic Analysis\fR: Combines multiple weak indicators for improved detection accuracy
+
+.SS Ansible-Specific Behavior
+When an Ansible session is detected, sudosh adjusts its behavior:
+.IP \(bu 2
+\fBSuppressed Lecture\fR: Skips the sudo lecture message to avoid cluttering automation logs
+.IP \(bu 2
+\fBEnhanced Logging\fR: Adds Ansible context to syslog entries including detection method, confidence level, and parent process information
+.IP \(bu 2
+\fBEnvironment Logging\fR: Records detected Ansible environment variables for audit purposes
+.IP \(bu 2
+\fBSession Tracking\fR: Logs session start/end with Ansible-specific metadata
+
+.SS Configuration
+Ansible detection can be controlled via command-line options or configuration file:
+.IP \(bu 2
+\fBansible_detection_enabled\fR: Enable/disable detection (default: true)
+.IP \(bu 2
+\fBansible_detection_force\fR: Force Ansible mode regardless of detection
+.IP \(bu 2
+\fBansible_detection_verbose\fR: Enable verbose detection output
+.IP \(bu 2
+\fBansible_detection_confidence_threshold\fR: Minimum confidence level (0-100, default: 70)
 
 .SH BUILT-IN COMMANDS
 .TP
@@ -249,6 +298,26 @@ bash.bashrc       bash_completion bash_completion.d/ bind/
 # Partial completion - auto-completes to matching files
 sudosh:/home/user# ls /etc/host<Tab>
 sudosh:/home/user# ls /etc/hosts
+.fi
+.TP
+Ansible detection examples:
+.nf
+# Enable verbose Ansible detection
+sudo sudosh --ansible-verbose
+
+# Force Ansible mode for testing
+sudo sudosh --ansible-force
+
+# Disable Ansible detection
+sudo sudosh --no-ansible-detect
+
+# Example Ansible session detection output (with --ansible-verbose)
+sudosh: Ansible session detected (Found 3 Ansible environment variables, confidence: 95%)
+
+# Example log entries for Ansible sessions
+Dec 15 10:30:15 hostname sudosh: user : ANSIBLE_SESSION_START: detected_env_vars=3 parent_process=ansible-playbook details=Found 3 Ansible environment variables
+Dec 15 10:30:15 hostname sudosh: user : ANSIBLE_ENV_VARS: ANSIBLE_HOST_KEY_CHECKING, ANSIBLE_PYTHON_INTERPRETER, ANSIBLE_CONFIG
+Dec 15 10:30:16 hostname sudosh: user : COMMAND=/bin/systemctl status nginx ; ANSIBLE_CONTEXT: method=env_vars confidence=95% parent_pid=12345 parent_process=ansible-playbook
 .fi
 
 .SH LINE EDITING AND HISTORY

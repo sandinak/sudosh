@@ -19,10 +19,22 @@
  */
 int init_file_locking(void) {
     struct stat st;
-    
+    const char *lock_dir;
+    char test_lock_dir[256];
+
+    /* Check if we're running in test mode */
+    char *test_env = getenv("SUDOSH_TEST_MODE");
+    if (test_env && strcmp(test_env, "1") == 0) {
+        /* Test mode: use temporary directory */
+        snprintf(test_lock_dir, sizeof(test_lock_dir), "/tmp/sudosh_test_locks_%d", getpid());
+        lock_dir = test_lock_dir;
+    } else {
+        lock_dir = LOCK_DIR;
+    }
+
     /* Create lock directory if it doesn't exist */
-    if (stat(LOCK_DIR, &st) != 0) {
-        if (mkdir(LOCK_DIR, 0755) != 0) {
+    if (stat(lock_dir, &st) != 0) {
+        if (mkdir(lock_dir, 0755) != 0) {
             if (errno != EEXIST) {
                 log_error("Failed to create lock directory");
                 return -1;
@@ -32,16 +44,16 @@ int init_file_locking(void) {
         log_error("Lock path exists but is not a directory");
         return -1;
     }
-    
+
     /* Ensure proper permissions on lock directory */
-    if (chmod(LOCK_DIR, 0755) != 0) {
+    if (chmod(lock_dir, 0755) != 0) {
         log_error("Failed to set permissions on lock directory");
         return -1;
     }
-    
+
     /* Clean up any stale locks from previous runs */
     cleanup_stale_locks();
-    
+
     return 0;
 }
 

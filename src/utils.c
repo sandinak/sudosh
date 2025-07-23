@@ -9,8 +9,6 @@
 
 #include "sudosh.h"
 
-/* Global test mode flag */
-int test_mode = 0;
 #include <ctype.h>
 
 /* Global target user for -u option */
@@ -594,6 +592,9 @@ char *read_command(void) {
     int c;
     struct termios old_termios, new_termios;
     static int history_index = -1;  /* -1 means not navigating history */
+
+    /* Save terminal state globally for cleanup on exit */
+    save_terminal_state();
 
     /* Get current terminal settings */
     if (tcgetattr(STDIN_FILENO, &old_termios) != 0) {
@@ -1515,10 +1516,52 @@ char *safe_strdup(const char *str) {
     return copy;
 }
 
+/* Global terminal state for restoration */
+static struct termios *saved_terminal_state = NULL;
+static int terminal_state_saved = 0;
+
+/**
+ * Save current terminal state for later restoration
+ */
+void save_terminal_state(void) {
+    if (!terminal_state_saved && isatty(STDIN_FILENO)) {
+        saved_terminal_state = malloc(sizeof(struct termios));
+        if (saved_terminal_state && tcgetattr(STDIN_FILENO, saved_terminal_state) == 0) {
+            terminal_state_saved = 1;
+        } else {
+            if (saved_terminal_state) {
+                free(saved_terminal_state);
+                saved_terminal_state = NULL;
+            }
+        }
+    }
+}
+
+/**
+ * Restore terminal state if it was saved
+ */
+void restore_terminal_state(void) {
+    if (terminal_state_saved && saved_terminal_state && isatty(STDIN_FILENO)) {
+        tcsetattr(STDIN_FILENO, TCSANOW, saved_terminal_state);
+        terminal_state_saved = 0;
+        free(saved_terminal_state);
+        saved_terminal_state = NULL;
+    }
+}
+
 /**
  * Cleanup and exit
  */
 void cleanup_and_exit(int exit_code) {
+    /* Restore terminal state if needed */
+    restore_terminal_state();
+
+    /* Clean up Ansible detection info */
+    if (global_ansible_info) {
+        free_ansible_detection_info(global_ansible_info);
+        global_ansible_info = NULL;
+    }
+
     cleanup_color_config();
     cleanup_security();
     close_logging();

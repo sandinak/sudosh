@@ -70,14 +70,25 @@ void log_command(const char *username, const char *command, int success) {
         pwd = strdup("unknown");
     }
 
+    /* Get session type indicator */
+    extern struct ansible_detection_info *global_ansible_info;
+    extern struct ai_detection_info *global_ai_info;
+    const char *session_type = "INTERACTIVE_SESSION";
+
+    if (global_ai_info && global_ai_info->should_block) {
+        session_type = "AI_BLOCKED";
+    } else if (global_ansible_info && global_ansible_info->is_ansible_session) {
+        session_type = "ANSIBLE_SESSION";
+    }
+
     if (success) {
-        syslog(LOG_COMMAND, 
-               "%s : TTY=%s ; PWD=%s ; USER=root ; COMMAND=%s",
-               username, tty, pwd, command);
+        syslog(LOG_COMMAND,
+               "%s : %s: TTY=%s ; PWD=%s ; USER=root ; COMMAND=%s",
+               username, session_type, tty, pwd, command);
     } else {
         syslog(LOG_ERROR,
-               "%s : TTY=%s ; PWD=%s ; USER=root ; COMMAND=%s (FAILED)",
-               username, tty, pwd, command);
+               "%s : %s: TTY=%s ; PWD=%s ; USER=root ; COMMAND=%s (FAILED)",
+               username, session_type, tty, pwd, command);
     }
 
     if (pwd) {
@@ -229,9 +240,20 @@ void log_security_violation(const char *username, const char *violation) {
         }
     }
 
+    /* Get session type indicator */
+    extern struct ansible_detection_info *global_ansible_info;
+    extern struct ai_detection_info *global_ai_info;
+    const char *session_type = "INTERACTIVE_SESSION";
+
+    if (global_ai_info && global_ai_info->should_block) {
+        session_type = "AI_BLOCKED";
+    } else if (global_ansible_info && global_ansible_info->is_ansible_session) {
+        session_type = "ANSIBLE_SESSION";
+    }
+
     syslog(LOG_WARNING,
-           "%s : TTY=%s ; SECURITY VIOLATION: %s",
-           username, tty, violation);
+           "%s : %s: TTY=%s ; SECURITY VIOLATION: %s",
+           username, session_type, tty, violation);
 }
 
 /**
@@ -661,4 +683,95 @@ char *expand_history(const char *command) {
     }
 
     return result;
+}
+
+/**
+ * Log command execution with Ansible context
+ */
+void log_command_with_ansible_context(const char *username, const char *command, int exit_status) {
+    if (!logging_initialized) {
+        init_logging();
+    }
+
+    /* Standard command logging */
+    log_command(username, command, exit_status);
+
+    /* Add automation context if detected */
+    if (global_ansible_info && global_ansible_info->is_ansible_session) {
+        char automation_log_msg[1024];
+        snprintf(automation_log_msg, sizeof(automation_log_msg),
+                "ANSIBLE_CONTEXT: method=%s confidence=%d%% parent_pid=%d parent_process=%s automation_type=%s",
+                (global_ansible_info->method == ANSIBLE_DETECTED_ENV_VAR) ? "env_vars" :
+                (global_ansible_info->method == ANSIBLE_DETECTED_PARENT_PROCESS) ? "parent_process" :
+                (global_ansible_info->method == ANSIBLE_DETECTED_CONTEXT) ? "execution_context" : "unknown",
+                global_ansible_info->confidence_level,
+                global_ansible_info->parent_pid,
+                global_ansible_info->parent_process_name,
+                global_ansible_info->automation_type);
+
+        syslog(LOG_INFO, "%s : %s", username, automation_log_msg);
+    }
+}
+
+/**
+ * Log authentication with Ansible context
+ */
+void log_authentication_with_ansible_context(const char *username, int success) {
+    if (!logging_initialized) {
+        init_logging();
+    }
+
+    /* Standard authentication logging */
+    log_authentication(username, success);
+
+    /* Add automation context for successful authentications */
+    if (success && global_ansible_info && global_ansible_info->is_ansible_session) {
+        char automation_auth_msg[1024];
+        snprintf(automation_auth_msg, sizeof(automation_auth_msg),
+                "ANSIBLE_AUTH: session detected via %s (confidence: %d%%)",
+                global_ansible_info->detection_details,
+                global_ansible_info->confidence_level);
+
+        syslog(LOG_INFO, "%s : %s", username, automation_auth_msg);
+    }
+}
+
+/**
+ * Log session start with Ansible context
+ */
+void log_session_start_with_ansible_context(const char *username) {
+    if (!logging_initialized) {
+        init_logging();
+    }
+
+    /* Standard session start logging */
+    log_session_start(username);
+
+    /* Add automation session information */
+    if (global_ansible_info && global_ansible_info->is_ansible_session) {
+        char automation_session_msg[1024];
+        snprintf(automation_session_msg, sizeof(automation_session_msg),
+                "ANSIBLE_SESSION_START: detected_env_vars=%d parent_process=%s details=%s automation_type=%s",
+                global_ansible_info->env_var_count,
+                global_ansible_info->parent_process_name,
+                global_ansible_info->detection_details,
+                global_ansible_info->automation_type);
+
+        syslog(LOG_INFO, "%s : %s", username, automation_session_msg);
+
+        /* Log detected environment variables for audit purposes */
+        if (global_ansible_info->env_var_count > 0) {
+            char env_vars_msg[512];
+            snprintf(env_vars_msg, sizeof(env_vars_msg), "ANSIBLE_ENV_VARS: ");
+            for (int i = 0; i < global_ansible_info->env_var_count && i < 5; i++) {
+                if (i > 0) strcat(env_vars_msg, ", ");
+                strncat(env_vars_msg, global_ansible_info->detected_env_vars[i],
+                       sizeof(env_vars_msg) - strlen(env_vars_msg) - 1);
+            }
+            if (global_ansible_info->env_var_count > 5) {
+                strcat(env_vars_msg, ", ...");
+            }
+            syslog(LOG_INFO, "%s : %s", username, env_vars_msg);
+        }
+    }
 }

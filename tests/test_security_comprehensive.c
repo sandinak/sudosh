@@ -1,7 +1,7 @@
 #include "test_security_framework.h"
 
 /* Global verbose flag for testing */
-int verbose_mode = 0;
+/* Global verbose flag is now defined in test_globals.c */
 
 /* Global security test counters */
 int security_count = 0;

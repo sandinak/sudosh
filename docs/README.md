@@ -1,36 +1,71 @@
 # Sudosh Documentation
 
-This directory contains comprehensive documentation for Sudosh.
+This directory contains comprehensive documentation for sudosh, covering installation, usage, deployment, and integration.
 
-## Documentation Files
+## 📚 Documentation Index
 
-### **[COMPREHENSIVE_GUIDE.md](COMPREHENSIVE_GUIDE.md)**
-Complete feature documentation covering:
-- Core functionality and security features
-- Installation and configuration
-- Usage examples and best practices
-- Troubleshooting and development information
+### 🚀 Getting Started
+- **[COMPREHENSIVE_GUIDE.md](COMPREHENSIVE_GUIDE.md)** - Complete feature overview and usage guide
+- **[DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md)** - Production deployment and CI/CD integration ⭐ NEW
+- **[TESTING_GUIDE.md](TESTING_GUIDE.md)** - Comprehensive testing procedures and validation
 
-### **[PACKAGING.md](PACKAGING.md)**
-Packaging and distribution guide covering:
-- Building RPM packages for DNF-based systems
-- Building DEB packages for APT-based systems
-- Package customization and troubleshooting
-- Distribution-specific installation instructions
+### 🔧 Integration Guides
+- **[ANSIBLE_INTEGRATION.md](ANSIBLE_INTEGRATION.md)** - Complete Ansible integration with plugins ⭐ NEW
+- **[ANSIBLE_BECOME_METHOD.md](ANSIBLE_BECOME_METHOD.md)** - Ansible become method integration (legacy)
 
-### **[TESTING_GUIDE.md](TESTING_GUIDE.md)**
-Comprehensive testing documentation covering:
-- Test suite overview and execution
-- Security testing framework
-- Unit and integration tests
-- Performance and regression testing
+### 📦 Distribution & Packaging
+- **[PACKAGING.md](PACKAGING.md)** - Package creation and distribution guide
 
-### **[SECURITY_TESTING_SUMMARY.md](SECURITY_TESTING_SUMMARY.md)**
-Security testing framework documentation covering:
-- CVE-specific test cases
-- Vulnerability assessment procedures
-- Security audit methodology
-- Compliance testing guidelines
+### 🔒 Security Documentation
+- **[SECURITY_TESTING_SUMMARY.md](SECURITY_TESTING_SUMMARY.md)** - Security testing results and analysis
+
+### 📋 Release Information
+- **[RELEASE_HISTORY.md](RELEASE_HISTORY.md)** - Version history and changelog
+
+## 🎯 Quick Start Guide
+
+### For New Users
+1. **[COMPREHENSIVE_GUIDE.md](COMPREHENSIVE_GUIDE.md)** - Start here for overview and basic usage
+2. **[TESTING_GUIDE.md](TESTING_GUIDE.md)** - Validate your installation works correctly
+3. **[DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md)** - Deploy in production environments
+
+### For Ansible Users
+1. **[ANSIBLE_INTEGRATION.md](ANSIBLE_INTEGRATION.md)** - Complete integration guide with plugins
+2. **[DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md)** - CI/CD integration examples
+
+### For Developers
+1. **[TESTING_GUIDE.md](TESTING_GUIDE.md)** - Run comprehensive test suites
+2. **[PACKAGING.md](PACKAGING.md)** - Create distribution packages
+3. **[SECURITY_TESTING_SUMMARY.md](SECURITY_TESTING_SUMMARY.md)** - Security validation
+
+## 🌟 Key Features Covered
+
+### Command-Line Execution ⭐ NEW
+- **Drop-in sudo replacement** - Use `sudosh command args` like `sudo command args`
+- **Enhanced security** - All AI detection and security features apply
+- **Comprehensive logging** - Every command execution logged with context
+- **CI/CD friendly** - Non-interactive mode perfect for automation
+
+### Security & AI Protection
+- **Multi-AI detection** - Blocks Augment, GitHub Copilot, ChatGPT automatically
+- **Command validation** - Advanced security checks and dangerous command detection
+- **Privilege protection** - Comprehensive safeguards against privilege abuse
+- **Audit logging** - Detailed audit trails for compliance
+
+### Enterprise Features
+- **Ansible integration** - Smart detection and specialized handling
+- **Unattended testing** - Full test mode for CI/CD integration
+- **Package distribution** - Professional RPM and DEB packages
+- **Production ready** - Battle-tested security and reliability
+
+## 📖 Documentation Structure
+
+Each guide is self-contained but cross-references related topics:
+
+- **Comprehensive guides** provide complete coverage of major topics
+- **Integration guides** focus on specific use cases and workflows
+- **Reference documentation** covers technical details and APIs
+- **Examples and tutorials** provide practical implementation guidance
 
 ### **[RELEASE_HISTORY.md](RELEASE_HISTORY.md)**
 Complete release history and notes covering:

@@ -9,6 +9,13 @@ This comprehensive guide covers all aspects of testing sudosh, from basic functi
 # Build and run complete test suite
 make test
 
+# Run comprehensive test suite (recommended)
+./tests/run_all_tests.sh
+
+# Run with test mode for unattended execution
+export SUDOSH_TEST_MODE=1
+./tests/run_all_tests.sh
+
 # Run only security tests
 make security-tests
 
@@ -18,7 +25,35 @@ make clean && make test
 
 ## Test Categories
 
-### 1. Security Tests
+### 1. Command-Line Execution Tests ⭐ NEW
+**Purpose**: Validate the new sudo-like command execution functionality.
+
+```bash
+# Comprehensive command-line execution tests
+./tests/test_command_line_execution.sh
+
+# Test basic command execution
+SUDOSH_TEST_MODE=1 ./bin/sudosh echo "Hello World"
+
+# Test user specification
+SUDOSH_TEST_MODE=1 ./bin/sudosh -u $(whoami) whoami
+
+# Test command mode
+SUDOSH_TEST_MODE=1 ./bin/sudosh -c "echo 'test'"
+
+# Test AI blocking in command mode
+AUGMENT_SESSION_ID=test ./bin/sudosh echo "blocked"
+```
+
+**Coverage**: 18 individual tests including:
+- Basic command execution
+- User specification with `-u` option
+- Command mode with `-c` option
+- AI detection in command mode
+- Error condition handling
+- File operations
+
+### 2. Security Tests
 **Purpose**: Validate protection against security vulnerabilities and attack vectors.
 
 ```bash
@@ -79,6 +114,55 @@ make security-tests
 
 # Build specific test category
 make bin/test_security_command_injection
+```
+
+## Test Mode Configuration ⭐ NEW
+
+### Unattended Testing
+Sudosh includes a comprehensive test mode for CI/CD and automated testing:
+
+```bash
+# Enable test mode (bypasses authentication and privileges)
+export SUDOSH_TEST_MODE=1
+
+# Run tests without user interaction
+./tests/run_all_tests.sh
+
+# Test individual components
+SUDOSH_TEST_MODE=1 bin/test_unit_security
+SUDOSH_TEST_MODE=1 bin/test_ai_detection
+SUDOSH_TEST_MODE=1 bin/test_ansible_detection
+```
+
+### Test Mode Features
+When `SUDOSH_TEST_MODE=1` is set:
+
+1. **Authentication bypass** - No password prompts
+2. **Privilege bypass** - No setuid requirements
+3. **File system isolation** - Uses temporary directories
+4. **Non-interactive execution** - Perfect for CI/CD
+5. **Enhanced logging** - Detailed test output
+
+### CI/CD Integration
+```bash
+# GitHub Actions example
+- name: Test sudosh
+  run: |
+    export SUDOSH_TEST_MODE=1
+    make test
+    ./tests/run_all_tests.sh
+
+# Jenkins example
+environment {
+    SUDOSH_TEST_MODE = '1'
+}
+stages {
+    stage('Test') {
+        steps {
+            sh './tests/run_all_tests.sh'
+        }
+    }
+}
 ```
 
 ## Understanding Test Results

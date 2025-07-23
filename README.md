@@ -26,6 +26,7 @@ Sudosh is a comprehensive, secure interactive shell that provides elevated privi
   - **CD command optimization** - Shows directories only for `cd` command
   - **Clean column formatting** - Multi-column display for better readability
 - **Executable filtering** - Tab completion shows only executables in command position
+- **Ansible detection** - Intelligent detection of Ansible automation sessions with specialized logging
 - **Package generation** - Professional RPM and DEB packages for easy distribution
 
 ### **Security Features**
@@ -37,6 +38,12 @@ Sudosh is a comprehensive, secure interactive shell that provides elevated privi
 - 📝 **Comprehensive audit trail** - All actions logged with context regardless of warnings
 - 🔐 **Sudoers integration** - Full compatibility with existing sudo rules
 - 🎯 **Privilege-aware warnings** - Users with ALL commands skip warnings but maintain logging
+- 🤖 **AI Safety Controls** - Comprehensive AI tool detection and blocking system
+  - **Multi-AI Detection**: Detects and blocks Augment, GitHub Copilot, ChatGPT/OpenAI, and other AI tools
+  - **Modular Architecture**: Separate detection systems for different AI tools with independent confidence scoring
+  - **Session Type Logging**: All logs include session type indicators (INTERACTIVE_SESSION, ANSIBLE_SESSION, AI_BLOCKED)
+  - **Fail-Safe Design**: Defaults to blocking when AI automation detection is uncertain
+  - **Environment-Based Detection**: Identifies AI tools through environment variables and execution context
 - 🛡️ **CVE vulnerability protection** - Audited against major bash CVEs (2014-2024)
   - **CVE-2023-22809**: Sudoedit privilege escalation protection
   - **CVE-2022-3715**: Bash heap buffer overflow mitigation
@@ -79,6 +86,28 @@ Sudosh implements secure authentication caching similar to sudo:
 - **Session isolation** - Separate cache files per user and TTY for security
 - **Automatic cleanup** - Expired cache files are automatically removed
 - **Cache invalidation** - Failed authentications clear existing cache entries
+
+### **AI Detection Architecture**
+
+The AI detection system uses a modular approach to identify and control different AI tools:
+
+- **Dedicated Detection Modules**: Separate detection logic for each AI tool type in `src/ai_detection.c`
+- **Environment Variable Analysis**: Comprehensive scanning for AI-specific environment variables
+- **Confidence Scoring**: Each detection method provides a confidence level (0-100%)
+- **Priority-Based Blocking**: Higher-priority AI tools (like Augment) are checked first
+- **Independent Operation**: AI detection operates separately from Ansible automation detection
+- **Early Detection**: AI blocking occurs before command-line parsing to prevent any operations
+
+**Supported AI Tools:**
+- **Augment**: Environment variables like `AUGMENT_SESSION_ID`, `CLAUDE_API_KEY`, `ANTHROPIC_API_KEY`
+- **GitHub Copilot**: Variables like `GITHUB_COPILOT_TOKEN`, `COPILOT_SESSION_ID`, `GITHUB_TOKEN`
+- **ChatGPT/OpenAI**: Variables like `OPENAI_API_KEY`, `CHATGPT_SESSION_ID`
+- **Extensible**: Easy to add detection for new AI tools by extending the detection modules
+
+**Detection Methods:**
+- **Environment Variables**: Primary detection method with high confidence
+- **Process Context**: Secondary validation through parent process analysis (future enhancement)
+- **Execution Context**: Tertiary validation through runtime environment analysis (future enhancement)
 
 ## 📦 **Installation**
 
@@ -127,7 +156,7 @@ For detailed packaging instructions, see [docs/PACKAGING.md](docs/PACKAGING.md).
 
 ## 🎯 **Usage**
 
-### **Basic Usage**
+### **Interactive Shell Mode**
 ```bash
 # Start interactive sudo shell
 sudo sudosh
@@ -136,7 +165,7 @@ sudo sudosh
 sudo sudosh -u www-data
 
 # Enable session logging
-sudo sudosh -l /var/log/sudosh-session.log
+sudo sudosh -L /var/log/sudosh-session.log
 
 # Verbose mode
 sudo sudosh -v
@@ -145,9 +174,44 @@ sudo sudosh -v
 sudo sudosh -l
 ```
 
+### **Command-Line Execution Mode** ⭐ NEW
+sudosh now supports direct command execution like sudo, making it a complete sudo replacement:
+
+```bash
+# Execute single command (like sudo)
+sudosh echo "Hello World"
+
+# Execute command with arguments
+sudosh ls -la /etc
+
+# Execute command as specific user
+sudosh -u apache systemctl status httpd
+
+# Execute command with explicit -c option
+sudosh -c "systemctl restart nginx"
+
+# Complex command execution
+sudosh -u postgres psql -c "SELECT version();"
+
+# Combine with other options
+sudosh -v -u www-data ls /var/www
+
+# Use in scripts and automation
+sudosh -u mysql mysqldump --all-databases > backup.sql
+```
+
+**Key Benefits of Command-Line Mode:**
+- **Drop-in sudo replacement** - Use existing sudo commands by replacing `sudo` with `sudosh`
+- **Enhanced security** - All AI detection and security features apply to command-line mode
+- **Comprehensive logging** - Every command execution is logged with full context
+- **Ansible integration** - Automatic detection and handling of Ansible automation
+- **CI/CD friendly** - Non-interactive mode perfect for automation and testing
+
 ### **Command Line Options**
 ```text
-Usage: sudosh [options]
+Usage: sudosh [options] [command [args...]]
+
+sudosh - Interactive sudo shell and command executor
 
 Options:
   -h, --help              Show help message
@@ -156,6 +220,17 @@ Options:
   -l, --list              List available commands showing each permission source separately
   -L, --log-session FILE  Log entire session to FILE
   -u, --user USER         Run commands as target USER
+  -c, --command COMMAND   Execute COMMAND and exit (like sudo -c)
+      --ansible-detect    Enable Ansible session detection (default)
+      --no-ansible-detect Disable Ansible session detection
+      --ansible-force     Force Ansible session mode
+      --ansible-verbose   Enable verbose Ansible detection output
+
+Command Execution:
+  sudosh                  Start interactive shell (default)
+  sudosh command          Execute command and exit
+  sudosh -c "command"     Execute command and exit (explicit)
+  sudosh -u user command  Execute command as specific user
 ```
 
 ### **Permission Listing (-l option)**
@@ -269,6 +344,71 @@ Continue? (y/N):
 # Users with ALL commands in sudoers skip warnings (but commands are still logged)
 sudosh:/home/admin## rm -rf /tmp/test
 # No warning for users with unrestricted access, but logged to syslog
+```
+
+## 🤖 **Ansible Detection**
+
+Sudosh includes intelligent detection of Ansible automation sessions to provide appropriate logging and behavior for automated environments.
+
+### **Detection Methods**
+Ansible sessions are automatically detected using multiple methods:
+
+1. **Environment Variables** - Checks for `ANSIBLE_*` environment variables:
+   - `ANSIBLE_HOST_KEY_CHECKING`
+   - `ANSIBLE_PYTHON_INTERPRETER`
+   - `ANSIBLE_CONFIG`
+   - `ANSIBLE_INVENTORY`
+   - And many others
+
+2. **Parent Process Analysis** - Examines the process tree for:
+   - `ansible-playbook`
+   - `ansible-runner`
+   - `ansible`
+   - Python processes running Ansible modules
+
+3. **Execution Context** - Analyzes:
+   - Terminal type (non-interactive sessions)
+   - SSH connection indicators
+   - Working directory patterns
+   - Python environment variables
+
+### **Ansible-Specific Behavior**
+When an Ansible session is detected, sudosh automatically adjusts:
+
+- **Suppressed Lecture** - Skips the sudo lecture message to avoid cluttering automation logs
+- **Enhanced Logging** - Adds Ansible context to syslog entries:
+  ```
+  Dec 15 10:30:15 hostname sudosh: user : ANSIBLE_SESSION_START: detected_env_vars=3 parent_process=ansible-playbook
+  Dec 15 10:30:16 hostname sudosh: user : COMMAND=/bin/systemctl status nginx ; ANSIBLE_CONTEXT: method=env_vars confidence=95%
+  ```
+- **Environment Logging** - Records detected Ansible environment variables for audit purposes
+- **Session Tracking** - Logs session start/end with Ansible-specific metadata
+
+### **Configuration Options**
+```bash
+# Enable verbose Ansible detection
+sudo sudosh --ansible-verbose
+
+# Force Ansible mode for testing
+sudo sudosh --ansible-force
+
+# Disable Ansible detection
+sudo sudosh --no-ansible-detect
+```
+
+**Configuration File Options** (`/etc/sudosh.conf`):
+```ini
+# Enable/disable Ansible detection (default: true)
+ansible_detection_enabled = true
+
+# Force Ansible mode regardless of detection
+ansible_detection_force = false
+
+# Enable verbose detection output
+ansible_detection_verbose = false
+
+# Minimum confidence level for detection (0-100, default: 70)
+ansible_detection_confidence_threshold = 70
 ```
 
 ## 📝 **Configuration**

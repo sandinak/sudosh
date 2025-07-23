@@ -12,8 +12,7 @@
 #include "sudosh.h"
 #include "test_framework.h"
 
-/* Global verbose flag for testing */
-int verbose_mode = 0;
+/* Global verbose flag is now defined in test_globals.c */
 
 /* Test color detection */
 void test_detect_terminal_colors(void) {

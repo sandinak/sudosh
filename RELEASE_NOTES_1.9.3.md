@@ -1,12 +1,14 @@
 # Sudosh 1.9.3 Release Notes
 
-**Release Date**: July 22, 2025  
-**Release Type**: Critical Bugfix Release  
-**Previous Version**: 1.9.2  
+**Release Date**: July 23, 2025
+**Release Type**: Critical Bugfix Release
+**Previous Version**: 1.9.2
 
-## 🚨 **Critical Fix - Tab Completion Bug**
+## 🚨 **Critical Fixes**
 
-This release addresses a critical tab completion bug that was causing incorrect command expansion, potentially leading to unintended file operations.
+This release addresses two critical issues:
+1. **Tab Completion Bug** - Incorrect command expansion potentially leading to unintended file operations
+2. **Terminal State Management** - Terminal settings not properly restored after interruptions
 
 ### 🐛 **Bug Description**
 
@@ -141,8 +143,42 @@ Sudosh 1.9.3 fixes a critical tab completion bug that was causing prefix duplica
 - ✅ **Maintains Compatibility**: All existing features preserved
 - ✅ **Improves Reliability**: More robust error handling
 
+## 🖥️ **Critical Fix - Terminal State Management**
+
+### 🐛 **Bug Description**
+
+**Issue**: Terminal settings not properly restored when command execution is interrupted
+- **Example**: After Ctrl+C or unexpected exit, terminal may remain in raw mode
+- **Impact**: Terminal becomes unresponsive or behaves incorrectly
+- **Severity**: High - affects terminal usability
+
+### ✅ **Fix Implemented**
+
+#### **Global Terminal State Management**
+- **Root Cause**: Terminal settings were only restored locally within functions
+- **Solution**: Added global terminal state management with proper cleanup
+- **Safety**: Enhanced signal handlers to restore terminal state on interruption
+
+#### **Technical Details**
+```c
+/* Global terminal state for restoration */
+static struct termios *saved_terminal_state = NULL;
+static int terminal_state_saved = 0;
+
+/* Save terminal state globally */
+void save_terminal_state(void);
+
+/* Restore terminal state on exit/interruption */
+void restore_terminal_state(void);
+```
+
+#### **Enhanced Signal Handling**
+- **SIGTERM/SIGQUIT**: Now properly restore terminal state before cleanup
+- **Exit Functions**: All exit paths now restore terminal state
+- **Interrupt Safety**: Terminal remains functional after any interruption
+
 ### **Upgrade Priority: HIGH**
-This is a critical bugfix that affects daily usage. Immediate upgrade is recommended for all users.
+These are critical bugfixes that affect daily usage. Immediate upgrade is recommended for all users.
 
 ---
 

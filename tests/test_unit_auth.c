@@ -4,7 +4,7 @@
 #include <grp.h>
 
 /* Global verbose flag for testing */
-int verbose_mode = 0;
+/* Global verbose flag is now defined in test_globals.c */
 
 /* Global test counters */
 int test_count = 0;

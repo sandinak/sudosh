@@ -2,7 +2,7 @@
 
 This document contains the complete release history for Sudosh with detailed release notes for each version.
 
-## Version 1.9.3 (Latest) - July 22, 2025
+## Version 1.9.3 (Latest) - July 23, 2025
 
 ### 🚨 Critical Bugfix Release
 
@@ -11,12 +11,19 @@ This document contains the complete release history for Sudosh with detailed rel
 - **Fix**: Complete rewrite of `insert_completion()` function to properly replace prefixes
 - **Impact**: Prevents accidental file operations due to incorrect completions
 
+**Fixed Terminal State Management**
+- **Issue**: Terminal settings not properly restored when command execution is interrupted
+- **Fix**: Added global terminal state management with proper cleanup on exit
+- **Impact**: Ensures terminal remains functional after interruptions or unexpected exits
+
 **Technical Improvements**
 - Enhanced position validation and prefix verification
 - Improved buffer safety and bounds checking
 - More robust error handling for edge cases
+- Enhanced signal handling to restore terminal state on SIGTERM/SIGQUIT
+- Added global terminal state management functions
 
-**Upgrade Priority**: **HIGH** - Critical functionality fix
+**Upgrade Priority**: **HIGH** - Critical functionality fixes
 
 ---
 

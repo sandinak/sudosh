@@ -28,6 +28,7 @@
 #include <sys/stat.h>
 #include <limits.h>
 #include <time.h>
+#include "ai_detection.h"
 #include <sys/select.h>
 #include <dirent.h>
 #include <sys/file.h>
@@ -62,6 +63,15 @@ extern int verbose_mode;
 /* Global test mode flag */
 extern int test_mode;
 
+/* Global detection system results */
+extern struct ansible_detection_info *global_ansible_info;
+extern struct ai_detection_info *global_ai_info;
+
+/* Global Ansible detection configuration */
+extern int ansible_detection_enabled;
+extern int ansible_detection_force;
+extern int ansible_detection_verbose;
+
 /* Configuration constants */
 #define MAX_COMMAND_LENGTH 4096
 #define MAX_USERNAME_LENGTH 256
@@ -88,6 +98,11 @@ extern int test_mode;
 /* Shell enhancement constants */
 #define MAX_ALIAS_NAME_LENGTH 64
 #define MAX_ALIAS_VALUE_LENGTH 1024
+
+/* Ansible detection constants */
+#define MAX_PROCESS_NAME_LENGTH 256
+#define MAX_PROCESS_TREE_DEPTH 10
+#define ANSIBLE_ENV_VAR_COUNT 20
 #define MAX_ALIASES 256
 #define ALIAS_FILE_NAME ".sudosh_aliases"
 #define MAX_DIR_STACK_DEPTH 32
@@ -165,6 +180,21 @@ struct command_info {
     char **envp;
 };
 
+/* Structure to hold pipeline information */
+struct pipeline_command {
+    struct command_info cmd;
+    int input_fd;   /* File descriptor for input */
+    int output_fd;  /* File descriptor for output */
+    pid_t pid;      /* Process ID when running */
+};
+
+struct pipeline_info {
+    struct pipeline_command *commands;
+    int num_commands;
+    int *pipe_fds;  /* Array of pipe file descriptors */
+    int num_pipes;  /* Number of pipes (num_commands - 1) */
+};
+
 /* Structure to hold file lock information */
 struct file_lock_info {
     char *file_path;        /* Canonical path of the locked file */
@@ -227,6 +257,30 @@ struct nss_source {
 struct nss_config {
     struct nss_source *passwd_sources;
     struct nss_source *sudoers_sources;
+};
+
+/* Ansible detection result types */
+enum ansible_detection_method {
+    ANSIBLE_NOT_DETECTED = 0,
+    ANSIBLE_DETECTED_ENV_VAR,
+    ANSIBLE_DETECTED_PARENT_PROCESS,
+    ANSIBLE_DETECTED_CONTEXT,
+    ANSIBLE_DETECTED_HEURISTIC,
+    ANSIBLE_DETECTION_FORCED
+};
+
+/* Ansible detection information */
+struct ansible_detection_info {
+    enum ansible_detection_method method;
+    int confidence_level;           /* 0-100, higher = more confident */
+    char detected_env_vars[ANSIBLE_ENV_VAR_COUNT][64];
+    int env_var_count;
+    char parent_process_name[MAX_PROCESS_NAME_LENGTH];
+    pid_t parent_pid;
+    char detection_details[512];    /* Human-readable detection details */
+    time_t detection_time;
+    int is_ansible_session;         /* Final boolean result */
+    char automation_type[32];       /* "ansible" or "unknown" */
 };
 
 /* Sudoers user specification */
@@ -294,6 +348,10 @@ struct user_info *get_user_info_sssd(const char *username);
 /* int check_sudo_privileges_enhanced(const char *username); */
 int check_command_permission(const char *username, const char *command);
 
+/* Enhanced authentication functions for editor environments */
+int should_require_authentication(const char *username, const char *command);
+int check_nopasswd_privileges_with_command(const char *username, const char *command);
+
 /* List available commands */
 void list_available_commands(const char *username);
 
@@ -303,6 +361,18 @@ int execute_command(struct command_info *cmd, struct user_info *user);
 char *find_command_in_path(const char *command);
 char *expand_equals_expression(const char *arg);
 void free_command_info(struct command_info *cmd);
+int validate_ansible_command(const char *command, const char *username);
+int check_sudo_command_allowed(const char *username, const char *command);
+
+/* Pipeline execution functions */
+int is_pipeline_command(const char *input);
+int parse_pipeline(const char *input, struct pipeline_info *pipeline);
+int execute_pipeline(struct pipeline_info *pipeline, struct user_info *user);
+void free_pipeline_info(struct pipeline_info *pipeline);
+int is_whitelisted_pipe_command(const char *command);
+int is_secure_pager_command(const char *command);
+void setup_secure_pager_environment(void);
+int validate_pipeline_security(struct pipeline_info *pipeline);
 
 /* Logging functions */
 void init_logging(void);
@@ -312,6 +382,11 @@ void log_session_start(const char *username);
 void log_session_end(const char *username);
 /* void log_error(const char *message); */ /* Already declared in sudosh_common.h */
 void log_security_violation(const char *username, const char *violation);
+
+/* Ansible-aware logging functions */
+void log_command_with_ansible_context(const char *username, const char *command, int exit_status);
+void log_authentication_with_ansible_context(const char *username, int success);
+void log_session_start_with_ansible_context(const char *username);
 void close_logging(void);
 
 /* Session logging functions */
@@ -456,8 +531,25 @@ int handle_which_command(const char *command);
 int handle_type_command(const char *command);
 char *find_command_type(const char *command);
 
+/* Ansible detection functions */
+struct ansible_detection_info *detect_ansible_session(void);
+void free_ansible_detection_info(struct ansible_detection_info *info);
+int is_ansible_environment_variable(const char *var_name);
+int check_ansible_environment_variables(struct ansible_detection_info *info);
+int check_ansible_become_method(struct ansible_detection_info *info);
+int check_ansible_parent_process(struct ansible_detection_info *info);
+int check_ansible_execution_context(struct ansible_detection_info *info);
+char *get_parent_process_name(pid_t pid);
+pid_t get_parent_process_id(void);
+int walk_process_tree_for_ansible(pid_t start_pid, int max_depth);
+void log_ansible_detection(const struct ansible_detection_info *info);
+
 /* Main program functions */
 int main_loop(void);
 void cleanup_and_exit(int exit_code);
+
+/* Terminal state management */
+void save_terminal_state(void);
+void restore_terminal_state(void);
 
 #endif /* SUDOSH_H */

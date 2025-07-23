@@ -121,11 +121,14 @@ int test_validate_command_security() {
     TEST_ASSERT_EQ(0, validate_command("/usr/bin/ssh user@host"), "absolute ssh path should be blocked");
     TEST_ASSERT_EQ(0, validate_command("ssh"), "bare ssh command should be blocked");
 
-    /* Test interactive editor detection (these should be blocked) */
-    TEST_ASSERT_EQ(0, validate_command("vi /etc/passwd"), "vi command should be blocked");
-    TEST_ASSERT_EQ(0, validate_command("vim file.txt"), "vim command should be blocked");
-    TEST_ASSERT_EQ(0, validate_command("/usr/bin/emacs file.txt"), "absolute emacs path should be blocked");
-    TEST_ASSERT_EQ(0, validate_command("nano"), "bare nano command should be blocked");
+    /* Test secure editors (these should be allowed) */
+    TEST_ASSERT_EQ(1, validate_command("vi /etc/passwd"), "vi command should be allowed (secure editor)");
+    TEST_ASSERT_EQ(1, validate_command("vim file.txt"), "vim command should be allowed (secure editor)");
+    TEST_ASSERT_EQ(1, validate_command("nano"), "nano command should be allowed (secure editor)");
+
+    /* Test dangerous interactive editors (these should be blocked) */
+    TEST_ASSERT_EQ(0, validate_command("/usr/bin/emacs file.txt"), "emacs should be blocked (interactive editor)");
+    TEST_ASSERT_EQ(0, validate_command("nvim file.txt"), "nvim should be blocked (interactive editor)");
 
     return 1;
 }
@@ -148,9 +151,16 @@ int test_dangerous_command_detection() {
     TEST_ASSERT_EQ(0, check_dangerous_flags("find . -name test"), "find should not have dangerous flags");
 
     /* Test system directory access detection */
-    TEST_ASSERT_EQ(1, check_system_directory_access("ls /dev"), "/dev access should be detected");
-    TEST_ASSERT_EQ(1, check_system_directory_access("cat /proc/version"), "/proc access should be detected");
-    TEST_ASSERT_EQ(1, check_system_directory_access("ls /sys"), "/sys access should be detected");
+    /* Safe read-only commands to system directories should NOT trigger warnings */
+    TEST_ASSERT_EQ(0, check_system_directory_access("ls /dev"), "safe ls /dev should not trigger warning");
+    TEST_ASSERT_EQ(0, check_system_directory_access("cat /proc/version"), "safe cat /proc should not trigger warning");
+    TEST_ASSERT_EQ(0, check_system_directory_access("ls /sys"), "safe ls /sys should not trigger warning");
+
+    /* Dangerous operations to system directories SHOULD trigger warnings */
+    TEST_ASSERT_EQ(1, check_system_directory_access("rm /dev/null"), "rm in /dev should trigger warning");
+    TEST_ASSERT_EQ(1, check_system_directory_access("echo test > /dev/sda"), "redirection to /dev should trigger warning");
+
+    /* Non-system directories should not trigger warnings */
     TEST_ASSERT_EQ(0, check_system_directory_access("ls /home"), "/home access should be allowed");
     TEST_ASSERT_EQ(0, check_system_directory_access("ls /tmp"), "/tmp access should be allowed");
 
@@ -180,26 +190,29 @@ int test_ssh_command_detection() {
 
 /* Test interactive editor detection functions directly */
 int test_interactive_editor_detection() {
-    /* Test interactive editor detection */
-    TEST_ASSERT_EQ(1, is_interactive_editor("vi"), "vi should be detected as interactive editor");
-    TEST_ASSERT_EQ(1, is_interactive_editor("vi /etc/passwd"), "vi with file should be detected");
-    TEST_ASSERT_EQ(1, is_interactive_editor("/usr/bin/vi"), "absolute vi path should be detected");
-    TEST_ASSERT_EQ(1, is_interactive_editor("/bin/vi"), "bin vi path should be detected");
-    TEST_ASSERT_EQ(1, is_interactive_editor("vim"), "vim should be detected as interactive editor");
-    TEST_ASSERT_EQ(1, is_interactive_editor("vim file.txt"), "vim with file should be detected");
-    TEST_ASSERT_EQ(1, is_interactive_editor("/usr/bin/vim"), "absolute vim path should be detected");
+    /* Test that secure editors are NOT detected as interactive editors */
+    TEST_ASSERT_EQ(0, is_interactive_editor("vi"), "vi should NOT be detected as interactive editor (it's secure)");
+    TEST_ASSERT_EQ(0, is_interactive_editor("vi /etc/passwd"), "vi with file should NOT be detected");
+    TEST_ASSERT_EQ(0, is_interactive_editor("/usr/bin/vi"), "absolute vi path should NOT be detected");
+    TEST_ASSERT_EQ(0, is_interactive_editor("/bin/vi"), "bin vi path should NOT be detected");
+    TEST_ASSERT_EQ(0, is_interactive_editor("vim"), "vim should NOT be detected as interactive editor (it's secure)");
+    TEST_ASSERT_EQ(0, is_interactive_editor("vim file.txt"), "vim with file should NOT be detected");
+    TEST_ASSERT_EQ(0, is_interactive_editor("/usr/bin/vim"), "absolute vim path should NOT be detected");
+    /* Test actual interactive editors that should be blocked */
     TEST_ASSERT_EQ(1, is_interactive_editor("nvim"), "nvim should be detected as interactive editor");
     TEST_ASSERT_EQ(1, is_interactive_editor("emacs"), "emacs should be detected as interactive editor");
     TEST_ASSERT_EQ(1, is_interactive_editor("emacs -nw file.txt"), "emacs with args should be detected");
     TEST_ASSERT_EQ(1, is_interactive_editor("/usr/bin/emacs"), "absolute emacs path should be detected");
-    TEST_ASSERT_EQ(1, is_interactive_editor("nano"), "nano should be detected as interactive editor");
-    TEST_ASSERT_EQ(1, is_interactive_editor("nano file.txt"), "nano with file should be detected");
-    TEST_ASSERT_EQ(1, is_interactive_editor("pico"), "pico should be detected as interactive editor");
     TEST_ASSERT_EQ(1, is_interactive_editor("joe"), "joe should be detected as interactive editor");
     TEST_ASSERT_EQ(1, is_interactive_editor("mcedit"), "mcedit should be detected as interactive editor");
     TEST_ASSERT_EQ(1, is_interactive_editor("ed"), "ed should be detected as interactive editor");
     TEST_ASSERT_EQ(1, is_interactive_editor("ex"), "ex should be detected as interactive editor");
-    TEST_ASSERT_EQ(1, is_interactive_editor("view"), "view should be detected as interactive editor");
+
+    /* Test that secure editors are NOT detected as interactive */
+    TEST_ASSERT_EQ(0, is_interactive_editor("nano"), "nano should NOT be detected as interactive editor (it's secure)");
+    TEST_ASSERT_EQ(0, is_interactive_editor("nano file.txt"), "nano with file should NOT be detected");
+    TEST_ASSERT_EQ(0, is_interactive_editor("pico"), "pico should NOT be detected as interactive editor (it's secure)");
+    TEST_ASSERT_EQ(0, is_interactive_editor("view"), "view should NOT be detected as interactive editor (it's secure)");
 
     /* Test non-editor commands */
     TEST_ASSERT_EQ(0, is_interactive_editor("ls"), "ls should not be detected as editor");

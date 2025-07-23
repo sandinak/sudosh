@@ -277,6 +277,12 @@ typedef struct {
     char *log_facility;
     char *cache_directory;
     char *lock_directory;
+
+    /* Ansible detection configuration */
+    int ansible_detection_enabled;
+    int ansible_detection_force;
+    int ansible_detection_verbose;
+    int ansible_detection_confidence_threshold;
 } sudosh_config_t;
 
 /* Configuration management functions */

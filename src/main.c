@@ -8,9 +8,111 @@
  */
 
 #include "sudosh.h"
+#include "dangerous_commands.h"
+#include "editor_detection.h"
 
 /* Global verbose flag */
 int verbose_mode = 0;
+
+/* Global Ansible detection configuration */
+int ansible_detection_enabled = 1;  /* Enabled by default */
+int ansible_detection_force = 0;    /* Force detection result */
+int ansible_detection_verbose = 0;  /* Verbose Ansible detection output */
+
+/* Global detection system variables */
+struct ansible_detection_info *global_ansible_info = NULL;
+struct ai_detection_info *global_ai_info = NULL;
+
+/**
+ * Execute a single command and exit (like sudo)
+ */
+static int execute_single_command(const char *command_str, const char *target_user) {
+    struct user_info *user;
+    struct command_info cmd;
+    int result;
+    char *username;
+
+    /* Initialize logging */
+    init_logging();
+
+    /* Initialize security measures */
+    init_security();
+
+    /* Initialize file locking system */
+    if (init_file_locking() != 0) {
+        fprintf(stderr, "sudosh: failed to initialize file locking system\n");
+        return EXIT_FAILURE;
+    }
+
+    /* Get current username using getpwuid for reliability */
+    struct passwd *pwd = getpwuid(getuid());
+    if (!pwd) {
+        fprintf(stderr, "sudosh: failed to determine current user\n");
+        return EXIT_FAILURE;
+    }
+    username = strdup(pwd->pw_name);
+    if (!username) {
+        fprintf(stderr, "sudosh: failed to allocate memory for username\n");
+        return EXIT_FAILURE;
+    }
+
+    /* Determine effective user - in test mode, use current user; otherwise use target_user or root */
+    char *effective_user;
+    char *test_env = getenv("SUDOSH_TEST_MODE");
+    if (test_env && strcmp(test_env, "1") == 0) {
+        /* Test mode: use current user for both authentication and execution */
+        effective_user = username;
+    } else {
+        /* Normal mode: use target_user or default to root */
+        effective_user = target_user ? target_user : "root";
+    }
+
+    /* Check if user has NOPASSWD privileges, considering command danger and environment */
+    int has_nopasswd = check_nopasswd_privileges_with_command(username, command_str);
+
+    if (!has_nopasswd) {
+        /* Authenticate user - authenticate as current user, but may execute as effective_user */
+        if (authenticate_user(username) != 1) {
+            fprintf(stderr, "sudosh: authentication failed\n");
+            free(username);
+            return EXIT_FAILURE;
+        }
+    } else {
+        /* User has NOPASSWD privileges, skip authentication */
+        if (verbose_mode) {
+            printf("sudosh: NOPASSWD privileges detected, skipping authentication\n");
+        }
+        log_authentication_with_ansible_context(username, 1);  /* Log successful authentication */
+    }
+
+    user = get_user_info(effective_user);
+    if (!user) {
+        fprintf(stderr, "sudosh: failed to get user information\n");
+        free(username);
+        return EXIT_FAILURE;
+    }
+
+    /* Parse the command */
+    if (parse_command(command_str, &cmd) != 0) {
+        fprintf(stderr, "sudosh: failed to parse command: %s\n", command_str);
+        free_user_info(user);
+        free(username);
+        return EXIT_FAILURE;
+    }
+
+    /* Log command execution */
+    log_command_with_ansible_context(username, command_str, 0);
+
+    /* Execute the command */
+    result = execute_command(&cmd, user);
+
+    /* Clean up */
+    free_command_info(&cmd);
+    free_user_info(user);
+    free(username);
+
+    return result;
+}
 
 /**
  * Main program loop - interactive shell
@@ -32,6 +134,37 @@ int main_loop(void) {
 
     /* Set username for signal handler */
     set_current_username(username);
+
+    /* Detect if this is an Ansible session */
+    if (ansible_detection_enabled) {
+        global_ansible_info = detect_ansible_session();
+
+        /* Handle forced Ansible detection */
+        if (ansible_detection_force && global_ansible_info) {
+            global_ansible_info->is_ansible_session = 1;
+            global_ansible_info->method = ANSIBLE_DETECTION_FORCED;
+            global_ansible_info->confidence_level = 100;
+            strncpy(global_ansible_info->detection_details, "forced via command line",
+                   sizeof(global_ansible_info->detection_details) - 1);
+        }
+
+        if (global_ansible_info) {
+            log_ansible_detection(global_ansible_info);
+
+            if ((verbose_mode || ansible_detection_verbose) && global_ansible_info->is_ansible_session) {
+                printf("sudosh: Ansible session detected (%s, confidence: %d%%)\n",
+                       global_ansible_info->detection_details,
+                       global_ansible_info->confidence_level);
+            } else if (ansible_detection_verbose) {
+                printf("sudosh: Ansible session not detected (confidence: %d%%)\n",
+                       global_ansible_info->confidence_level);
+            }
+        }
+    } else {
+        if (ansible_detection_verbose) {
+            printf("sudosh: Ansible detection disabled\n");
+        }
+    }
 
     /* Check if user has sudo privileges using enhanced checking */
     int has_sudo_privileges = check_sudo_privileges_enhanced(username);
@@ -66,12 +199,16 @@ int main_loop(void) {
     if (!has_nopasswd) {
         /* Check authentication cache first, then authenticate if needed */
         if (!check_auth_cache(username)) {
-            /* Cache miss or expired, show lecture and authenticate */
-            printf("We trust you have received the usual lecture from the local System\n");
-            printf("Administrator. It usually boils down to these three things:\n\n");
-            printf("    #1) Respect the privacy of others.\n");
-            printf("    #2) Think before you type.\n");
-            printf("    #3) With great power comes great responsibility.\n\n");
+            /* For automation sessions (Ansible) or AI sessions, skip the lecture to avoid cluttering logs */
+            if ((!global_ansible_info || !global_ansible_info->is_ansible_session) &&
+                (!global_ai_info || !global_ai_info->should_block)) {
+                /* Cache miss or expired, show lecture for interactive sessions */
+                printf("We trust you have received the usual lecture from the local System\n");
+                printf("Administrator. It usually boils down to these three things:\n\n");
+                printf("    #1) Respect the privacy of others.\n");
+                printf("    #2) Think before you type.\n");
+                printf("    #3) With great power comes great responsibility.\n\n");
+            }
         }
 
         if (!authenticate_user_cached(username)) {
@@ -84,7 +221,7 @@ int main_loop(void) {
         if (verbose_mode) {
             printf("sudosh: NOPASSWD privileges detected, skipping authentication\n");
         }
-        log_authentication(username, 1);  /* Log successful authentication */
+        log_authentication_with_ansible_context(username, 1);  /* Log successful authentication */
     }
 
     /* Get user information */
@@ -122,8 +259,8 @@ int main_loop(void) {
         }
     }
 
-    /* Log session start */
-    log_session_start(username);
+    /* Log session start with Ansible context */
+    log_session_start_with_ansible_context(username);
 
     /* Print banner */
     print_banner();
@@ -210,27 +347,71 @@ int main_loop(void) {
             continue;
         }
 
-        /* Parse command */
-        if (parse_command(command_line, &cmd) != 0) {
-            fprintf(stderr, "sudosh: failed to parse command\n");
-            free(command_line);
-            continue;
-        }
+        /* Check if this is a pipeline command */
+        if (is_pipeline_command(command_line)) {
+            /* Handle pipeline execution */
+            struct pipeline_info pipeline;
 
-        /* Execute command */
-        result = execute_command(&cmd, user);
+            if (parse_pipeline(command_line, &pipeline) != 0) {
+                fprintf(stderr, "sudosh: failed to parse pipeline\n");
+                free(command_line);
+                continue;
+            }
 
-        /* Log command execution with target user info */
-        if (target_user) {
-            char log_message[1024];
-            snprintf(log_message, sizeof(log_message), "%s (as %s)", command_line, target_user);
-            log_command(username, log_message, (result == 0));
+            /* Execute pipeline */
+            result = execute_pipeline(&pipeline, user);
+
+            /* Log pipeline execution */
+            if (target_user) {
+                char log_message[1024];
+                snprintf(log_message, sizeof(log_message), "pipeline: %s (as %s)", command_line, target_user);
+                log_command(username, log_message, (result == 0));
+            } else {
+                char log_message[1024];
+                snprintf(log_message, sizeof(log_message), "pipeline: %s", command_line);
+                log_command_with_ansible_context(username, log_message, result);
+            }
+
+            /* Clean up pipeline structure */
+            free_pipeline_info(&pipeline);
         } else {
-            log_command(username, command_line, (result == 0));
+            /* Handle regular command execution */
+
+            /* Parse command */
+            if (parse_command(command_line, &cmd) != 0) {
+                fprintf(stderr, "sudosh: failed to parse command\n");
+                free(command_line);
+                continue;
+            }
+
+            /* Check if this command requires authentication despite NOPASSWD */
+            if (should_require_authentication(username, command_line)) {
+                /* This command requires authentication in the current environment */
+                if (!authenticate_user_cached(username)) {
+                    fprintf(stderr, "sudosh: authentication required for command '%s' in editor environment\n", command_line);
+                    fprintf(stderr, "sudosh: reason: %s\n", get_danger_explanation(command_line));
+                    free_command_info(&cmd);
+                    free(command_line);
+                    continue;
+                }
+            }
+
+            /* Execute command */
+            result = execute_command(&cmd, user);
+
+            /* Log command execution with target user info and Ansible context */
+            if (target_user) {
+                char log_message[1024];
+                snprintf(log_message, sizeof(log_message), "%s (as %s)", command_line, target_user);
+                log_command_with_ansible_context(username, log_message, result);
+            } else {
+                log_command_with_ansible_context(username, command_line, result);
+            }
+
+            /* Clean up command structure */
+            free_command_info(&cmd);
         }
 
-        /* Clean up command structure */
-        free_command_info(&cmd);
         free(command_line);
     }
 
@@ -279,19 +460,59 @@ int main(int argc, char *argv[]) {
     char *session_logfile = NULL;
     int i;
 
+    /* Early AI detection and blocking - must happen before any other processing */
+    struct ai_detection_info *ai_info = detect_ai_session();
+    if (ai_info && should_block_ai_session(ai_info)) {
+        fprintf(stderr, "\n");
+        fprintf(stderr, "=== SECURITY RESTRICTION ===\n");
+        fprintf(stderr, "ERROR: %s AI session detected and blocked.\n", ai_info->tool_name);
+        fprintf(stderr, "\n");
+        fprintf(stderr, "%s is not authorized to perform privileged operations.\n", ai_info->tool_name);
+        fprintf(stderr, "This restriction is in place for security reasons.\n");
+        fprintf(stderr, "\n");
+        fprintf(stderr, "If you need to perform administrative tasks:\n");
+        fprintf(stderr, "1. Exit the %s session\n", ai_info->tool_name);
+        fprintf(stderr, "2. Use sudosh directly from your terminal\n");
+        fprintf(stderr, "3. Or use standard sudo for specific commands\n");
+        fprintf(stderr, "\n");
+        fprintf(stderr, "Session details: %s\n", ai_info->detection_details);
+        fprintf(stderr, "============================\n");
+
+        /* Log the blocking attempt */
+        openlog("sudosh", LOG_PID, LOG_AUTHPRIV);
+        log_ai_detection(ai_info);
+        closelog();
+
+        free_ai_detection_info(ai_info);
+        exit(EXIT_FAILURE);
+    }
+
+    /* Store AI detection info for later use */
+    global_ai_info = ai_info;
+
     /* Parse command line arguments */
     for (i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
-            printf("Usage: %s [options]\n\n", argv[0]);
-            printf("sudosh - Interactive sudo shell\n\n");
+            printf("Usage: %s [options] [command [args...]]\n\n", argv[0]);
+            printf("sudosh - Interactive sudo shell and command executor\n\n");
             printf("Options:\n");
             printf("  -h, --help              Show this help message\n");
             printf("      --version           Show version information\n");
             printf("  -v, --verbose           Enable verbose output\n");
             printf("  -l, --list              List available commands showing each permission source\n");
             printf("  -L, --log-session FILE  Log entire session to FILE\n");
-            printf("  -u, --user USER         Run commands as target USER\n\n");
-            printf("sudosh provides an interactive shell with sudo privileges.\n");
+            printf("  -u, --user USER         Run commands as target USER\n");
+            printf("  -c, --command COMMAND   Execute COMMAND and exit (like sudo -c)\n");
+            printf("      --ansible-detect    Enable Ansible session detection (default)\n");
+            printf("      --no-ansible-detect Disable Ansible session detection\n");
+            printf("      --ansible-force     Force Ansible session mode\n");
+            printf("      --ansible-verbose   Enable verbose Ansible detection output\n\n");
+            printf("Command Execution:\n");
+            printf("  sudosh                  Start interactive shell (default)\n");
+            printf("  sudosh command          Execute command and exit\n");
+            printf("  sudosh -c \"command\"      Execute command and exit (explicit)\n");
+            printf("  sudosh -u user command  Execute command as specific user\n\n");
+            printf("sudosh provides both an interactive shell and direct command execution.\n");
             printf("All commands are authenticated and logged to syslog.\n");
             printf("Use -l to list available commands showing each permission source separately.\n");
             printf("Use -L to also log the complete session to a file.\n");
@@ -331,6 +552,34 @@ int main(int argc, char *argv[]) {
                 return EXIT_FAILURE;
             }
             target_user = argv[++i];
+        } else if (strcmp(argv[i], "--ansible-detect") == 0) {
+            ansible_detection_enabled = 1;
+        } else if (strcmp(argv[i], "--no-ansible-detect") == 0) {
+            ansible_detection_enabled = 0;
+        } else if (strcmp(argv[i], "--ansible-force") == 0) {
+            ansible_detection_force = 1;
+            ansible_detection_enabled = 1;  /* Force implies enabled */
+        } else if (strcmp(argv[i], "--ansible-verbose") == 0) {
+            ansible_detection_verbose = 1;
+        } else if (strcmp(argv[i], "-c") == 0) {
+            /* -c command: execute command and exit (like sudo -c) */
+            if (i + 1 >= argc) {
+                fprintf(stderr, "sudosh: option '%s' requires an argument\n", argv[i]);
+                fprintf(stderr, "Try '%s --help' for more information.\n", argv[0]);
+                return EXIT_FAILURE;
+            }
+            /* Execute the command directly and exit */
+            return execute_single_command(argv[++i], target_user);
+        } else if (argv[i][0] != '-') {
+            /* Non-option argument: treat as command to execute */
+            /* Build command from remaining arguments */
+            char command_buffer[4096] = {0};
+            for (int j = i; j < argc; j++) {
+                if (j > i) strcat(command_buffer, " ");
+                strncat(command_buffer, argv[j], sizeof(command_buffer) - strlen(command_buffer) - 1);
+            }
+            /* Execute the command directly and exit */
+            return execute_single_command(command_buffer, target_user);
         } else {
             fprintf(stderr, "sudosh: unknown option '%s'\n", argv[i]);
             fprintf(stderr, "Try '%s --help' for more information.\n", argv[0]);

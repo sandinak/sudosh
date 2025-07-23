@@ -59,7 +59,7 @@ BINDIR = bin
 TESTDIR = tests
 
 # Source files
-SOURCES = main.c auth.c command.c logging.c security.c utils.c nss.c sudoers.c sssd.c filelock.c shell_enhancements.c shell_env.c config.c
+SOURCES = main.c auth.c command.c logging.c security.c utils.c nss.c sudoers.c sssd.c filelock.c shell_enhancements.c shell_env.c config.c pipeline.c ansible_detection.c ai_detection.c dangerous_commands.c editor_detection.c
 OBJECTS = $(SOURCES:%.c=$(OBJDIR)/%.o)
 
 # Test files
@@ -67,12 +67,15 @@ TEST_SOURCES = $(wildcard $(TESTDIR)/test_*.c)
 TEST_OBJECTS = $(TEST_SOURCES:$(TESTDIR)/%.c=$(OBJDIR)/$(TESTDIR)/%.o)
 TEST_TARGETS = $(TEST_SOURCES:$(TESTDIR)/test_%.c=$(BINDIR)/test_%)
 
+# Pipeline regression test
+PIPELINE_REGRESSION_TEST = $(BINDIR)/test_pipeline_regression
+
 # Security test files
 SECURITY_TEST_SOURCES = $(wildcard $(TESTDIR)/test_security_*.c)
 SECURITY_TEST_BINARIES = $(SECURITY_TEST_SOURCES:$(TESTDIR)/%.c=$(BINDIR)/%)
 
-# Library objects (excluding main.c for testing)
-LIB_SOURCES = auth.c command.c logging.c security.c utils.c nss.c sudoers.c sssd.c filelock.c shell_enhancements.c shell_env.c
+# Library objects (excluding main.c for testing, including test_globals.c)
+LIB_SOURCES = auth.c command.c logging.c security.c utils.c nss.c sudoers.c sssd.c filelock.c shell_enhancements.c shell_env.c pipeline.c ansible_detection.c ai_detection.c dangerous_commands.c editor_detection.c test_globals.c
 LIB_OBJECTS = $(LIB_SOURCES:%.c=$(OBJDIR)/%.o)
 
 # Target executable
@@ -80,6 +83,22 @@ TARGET = $(BINDIR)/sudosh
 
 # Default target
 all: $(TARGET) path-validator
+
+# Pipeline regression test target
+pipeline-regression-test: $(PIPELINE_REGRESSION_TEST)
+
+$(PIPELINE_REGRESSION_TEST): $(OBJDIR)/$(TESTDIR)/test_pipeline_regression.o $(LIB_OBJECTS) | $(BINDIR)
+	$(CC) $< $(LIB_OBJECTS) -o $@ $(LDFLAGS)
+
+# Run pipeline regression tests
+test-pipeline-regression: $(PIPELINE_REGRESSION_TEST)
+	@echo "Running pipeline security regression tests..."
+	@./scripts/run_pipeline_regression_tests.sh
+
+# Quick pipeline smoke test
+test-pipeline-smoke: $(PIPELINE_REGRESSION_TEST)
+	@echo "Running quick pipeline smoke test..."
+	@./scripts/run_pipeline_regression_tests.sh --smoke-only
 
 # PATH validation tool
 path-validator: src/path_validator.c
@@ -398,6 +417,8 @@ help:
 	@echo "  unit-test        - Run unit tests only"
 	@echo "  integration-test - Run integration tests only"
 	@echo "  test-suid        - Set suid root for testing (requires sudo)"
+	@echo "  test-pipeline-regression - Run pipeline security regression tests"
+	@echo "  test-pipeline-smoke - Run quick pipeline smoke test"
 	@echo "  clean-suid       - Remove suid privileges (requires sudo)"
 	@echo "  install          - Install sudosh and manpage (requires root)"
 	@echo "  uninstall        - Remove sudosh and manpage (requires root)"
@@ -429,5 +450,8 @@ $(OBJDIR)/utils.o: $(SRCDIR)/utils.c $(SRCDIR)/sudosh.h
 $(OBJDIR)/nss.o: $(SRCDIR)/nss.c $(SRCDIR)/sudosh.h
 $(OBJDIR)/sudoers.o: $(SRCDIR)/sudoers.c $(SRCDIR)/sudosh.h
 $(OBJDIR)/sssd.o: $(SRCDIR)/sssd.c $(SRCDIR)/sudosh.h
+$(OBJDIR)/pipeline.o: $(SRCDIR)/pipeline.c $(SRCDIR)/sudosh.h
+$(OBJDIR)/ansible_detection.o: $(SRCDIR)/ansible_detection.c $(SRCDIR)/sudosh.h
+$(OBJDIR)/ai_detection.o: $(SRCDIR)/ai_detection.c $(SRCDIR)/ai_detection.h
 
-.PHONY: all tests test unit-test integration-test test-suid clean-suid install uninstall clean rebuild debug coverage coverage-report static-analysis rpm deb packages clean-packages help
+.PHONY: all tests test unit-test integration-test test-suid clean-suid install uninstall clean rebuild debug coverage coverage-report static-analysis rpm deb packages clean-packages help pipeline-regression-test test-pipeline-regression test-pipeline-smoke

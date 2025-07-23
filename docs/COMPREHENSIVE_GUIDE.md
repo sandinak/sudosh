@@ -7,7 +7,7 @@
 
 Sudosh is a secure, interactive sudo shell that provides elevated privileges with extensive logging, security protections, and audit capabilities. This comprehensive guide covers all aspects of sudosh including features, security enhancements, implementation details, and troubleshooting.
 
-## Key Features (v1.9.0)
+## Key Features (v1.9.3)
 
 - **Enhanced Tab Completion**: Comprehensive intelligent completion system with context awareness
 - **Directory Path Completion Fix**: Critical fix for `ls /etc/<Tab>` behavior

@@ -3,7 +3,7 @@
 #include <sys/wait.h>
 
 /* Global verbose flag for testing */
-int verbose_mode = 0;
+/* Global verbose flag is now defined in test_globals.c */
 
 /* Global test counters */
 int test_count = 0;
@@ -31,7 +31,7 @@ int test_command_line_options() {
     TEST_ASSERT_NOT_NULL(result, "version command should execute");
     TEST_ASSERT_EQ(0, WEXITSTATUS(result->exit_code), "version should exit with code 0");
     TEST_ASSERT(strstr(result->stdout_content, "sudosh") != NULL, "version should mention sudosh");
-    TEST_ASSERT(strstr(result->stdout_content, "1.8.0") != NULL, "version should show version number");
+    TEST_ASSERT(strstr(result->stdout_content, "1.9.3") != NULL, "version should show version number");
     free_capture_result(result);
     
     /* Test invalid option */
