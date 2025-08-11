@@ -118,6 +118,7 @@ static char *get_process_name(pid_t pid) {
     return process_name;
 #else
     /* Fallback - return NULL for non-Linux systems */
+    (void)pid; /* Suppress unused parameter warning */
     return NULL;
 #endif
 }

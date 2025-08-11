@@ -19,6 +19,12 @@ This directory contains comprehensive documentation for sudosh, covering install
 ### 🔒 Security Documentation
 - **[SECURITY_TESTING_SUMMARY.md](SECURITY_TESTING_SUMMARY.md)** - Security testing results and analysis
 
+### 🛠️ Feature Implementation
+- **[ENHANCED_WHICH_IMPLEMENTATION.md](ENHANCED_WHICH_IMPLEMENTATION.md)** - Enhanced 'which' command implementation details
+
+### 🏗️ Project Structure
+- **[PROJECT_STRUCTURE_REORGANIZATION.md](PROJECT_STRUCTURE_REORGANIZATION.md)** - Project reorganization and structure improvements
+
 ### 📋 Release Information
 - **[RELEASE_HISTORY.md](RELEASE_HISTORY.md)** - Version history and changelog
 

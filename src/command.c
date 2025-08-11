@@ -341,10 +341,10 @@ int execute_command(struct command_info *cmd, struct user_info *user) {
         }
 
         /* Change to target user privileges */
-        char *test_env = getenv("SUDOSH_TEST_MODE");
+        extern int test_mode;
         if (target_pwd) {
             /* Running as specific target user */
-            if (test_env && strcmp(test_env, "1") == 0) {
+            if (test_mode) {
                 /* Test mode: skip privilege changes */
             } else if (setgid(target_pwd->pw_gid) != 0) {
                 perror("setgid");
@@ -352,14 +352,14 @@ int execute_command(struct command_info *cmd, struct user_info *user) {
             }
 
             /* Set supplementary groups for target user */
-            if (test_env && strcmp(test_env, "1") == 0) {
+            if (test_mode) {
                 /* Test mode: skip privilege changes */
             } else if (initgroups(target_pwd->pw_name, target_pwd->pw_gid) != 0) {
                 perror("initgroups");
                 exit(EXIT_FAILURE);
             }
 
-            if (test_env && strcmp(test_env, "1") == 0) {
+            if (test_mode) {
                 /* Test mode: skip privilege changes */
             } else if (setuid(target_pwd->pw_uid) != 0) {
                 perror("setuid");
@@ -384,14 +384,14 @@ int execute_command(struct command_info *cmd, struct user_info *user) {
             }
         } else {
             /* Default behavior - change to root privileges */
-            if (test_env && strcmp(test_env, "1") == 0) {
+            if (test_mode) {
                 /* Test mode: skip privilege changes */
             } else if (setgid(0) != 0) {
                 perror("setgid");
                 exit(EXIT_FAILURE);
             }
 
-            if (test_env && strcmp(test_env, "1") == 0) {
+            if (test_mode) {
                 /* Test mode: skip privilege changes */
             } else if (setuid(0) != 0) {
                 perror("setuid");

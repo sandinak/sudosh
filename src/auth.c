@@ -20,8 +20,8 @@ static int mock_authenticate(const char *username) {
     char *password;
 
     /* Check if we're running in test mode (non-interactive) */
-    char *test_env = getenv("SUDOSH_TEST_MODE");
-    if (test_env && strcmp(test_env, "1") == 0) {
+    extern int test_mode;
+    if (test_mode) {
         /* Non-interactive test mode - simulate authentication based on username */
         if (verbose_mode) {
             printf("Mock authentication (test mode) for user: %s\n", username);
@@ -560,8 +560,8 @@ int authenticate_user(const char *username) {
     }
 
     /* Check if we're running in test mode (non-interactive) */
-    char *test_env = getenv("SUDOSH_TEST_MODE");
-    if (test_env && strcmp(test_env, "1") == 0) {
+    extern int test_mode;
+    if (test_mode) {
         /* Non-interactive test mode - simulate authentication */
         if (verbose_mode) {
             printf("Test mode authentication for user: %s\n", username);
@@ -999,6 +999,51 @@ int check_nopasswd_privileges_enhanced(const char *username) {
     return has_nopasswd;
 }
 
+
+/**
+ * Check if user has global NOPASSWD privileges (ALL)
+ * Returns 1 if a sudoers rule grants NOPASSWD for ALL commands
+ */
+int check_global_nopasswd_privileges_enhanced(const char *username) {
+    int has_global = 0;
+    char hostname[256];
+
+    if (!username || *username == '\0') {
+        return 0;
+    }
+
+    if (gethostname(hostname, sizeof(hostname)) != 0) {
+        strcpy(hostname, "localhost");
+    }
+
+    /* Try sudoers parsing first */
+    struct sudoers_config *sudoers_config = parse_sudoers_file(NULL);
+    if (sudoers_config) {
+        has_global = check_sudoers_global_nopasswd(username, hostname, sudoers_config);
+        free_sudoers_config(sudoers_config);
+    }
+
+    if (!has_global) {
+        /* Fallback to sudo -l parsing */
+        char command[256];
+        snprintf(command, sizeof(command), "sudo -l -U %s 2>/dev/null", username);
+        FILE *fp = popen(command, "r");
+        if (fp) {
+            char buffer[1024];
+            while (fgets(buffer, sizeof(buffer), fp)) {
+                /* Detect global NOPASSWD allowances */
+                if (strstr(buffer, "NOPASSWD: ALL") || strstr(buffer, ") NOPASSWD: ALL")) {
+                    has_global = 1;
+                    break;
+                }
+            }
+            pclose(fp);
+        }
+    }
+
+    return has_global;
+}
+
 /**
  * Check if authentication should be required despite NOPASSWD settings
  * This enforces password requirements for dangerous commands in editor environments only
@@ -1007,6 +1052,11 @@ int should_require_authentication(const char *username, const char *command) {
     /* Always require authentication if no username or command */
     if (!username || !command) {
         return 1;
+    }
+
+    /* If the user has global NOPASSWD (ALL) privileges, never require re-auth */
+    if (check_global_nopasswd_privileges_enhanced(username)) {
+        return 0;
     }
 
     /* Check if we're in an interactive editor environment */
@@ -1022,9 +1072,6 @@ int should_require_authentication(const char *username, const char *command) {
             return 1;  /* Require authentication in editor environments */
         }
     }
-
-    /* In normal shells, follow standard sudo rules - don't override NOPASSWD for dangerous commands */
-    /* This allows dangerous commands to run without password in normal shells if sudo rules permit */
 
     /* Default: follow normal NOPASSWD rules (don't require authentication) */
     return 0;

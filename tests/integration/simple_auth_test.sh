@@ -9,14 +9,29 @@ GREEN='\033[0;32m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
+# Use the local sudosh binary by default
+SUDOSH_BIN="${SUDOSH_BIN:-./bin/sudosh}"
+
+# Helper to run a command with timeout if available
+run_with_timeout() {
+    local seconds="$1"; shift
+    if command -v timeout >/dev/null 2>&1; then
+        timeout "$seconds" "$@"
+    elif command -v gtimeout >/dev/null 2>&1; then
+        gtimeout "$seconds" "$@"
+    else
+        "$@"
+    fi
+}
+
 echo "Testing enhanced authentication system..."
 echo
 
 # Test 1: Check if safe commands work
 echo -e "${BLUE}Test 1: Safe commands in current environment${NC}"
-echo "Command: sudosh 'echo Safe command test'"
+echo "Command: sudosh -c 'echo Safe command test'"
 
-output=$(/usr/local/bin/sudosh "echo 'Safe command test'" 2>&1)
+output=$(SUDOSH_TEST_MODE=1 run_with_timeout 5 "$SUDOSH_BIN" -c "echo 'Safe command test'" 2>&1)
 exit_code=$?
 
 if [ $exit_code -eq 0 ] && echo "$output" | grep -q "Safe command test"; then
@@ -30,9 +45,9 @@ echo
 
 # Test 2: Check dangerous command detection
 echo -e "${BLUE}Test 2: Dangerous command detection${NC}"
-echo "Command: sudosh -v 'rm /tmp/nonexistent'"
+echo "Command: sudosh -v -c 'rm /tmp/nonexistent'"
 
-SUDOSH_TEST_MODE=1 output=$(/usr/local/bin/sudosh -v "rm /tmp/nonexistent" 2>&1)
+output=$(SUDOSH_TEST_MODE=1 run_with_timeout 5 "$SUDOSH_BIN" -v -c "rm /tmp/nonexistent" 2>&1)
 exit_code=$?
 
 echo "Exit code: $exit_code"
@@ -55,7 +70,7 @@ echo "  DISPLAY: ${DISPLAY:-'not set'}"
 
 # Test with VSCode environment variable set
 echo "Testing with VSCODE_PID set..."
-VSCODE_PID=12345 SUDOSH_TEST_MODE=1 output=$(/usr/local/bin/sudosh -v "rm /tmp/test" 2>&1)
+output=$(VSCODE_PID=12345 SUDOSH_TEST_MODE=1 run_with_timeout 5 "$SUDOSH_BIN" -v -c "rm /tmp/test" 2>&1)
 
 if echo "$output" | grep -q "dangerous\|authentication\|editor"; then
     echo -e "${GREEN}PASS${NC}: Editor environment detection working"
@@ -69,12 +84,13 @@ echo
 echo -e "${BLUE}Test 4: Command classification test${NC}"
 
 # Test different command types
-commands=("echo hello" "rm file" "systemctl status" "vim file.txt" "chmod 755 file")
+# Use a non-interactive vim invocation to avoid hanging
+commands=("echo hello" "rm file" "systemctl status" "vim -u NONE -n -es -c q file.txt" "chmod 755 file")
 
 for cmd in "${commands[@]}"; do
     echo "Testing: $cmd"
-    SUDOSH_TEST_MODE=1 output=$(/usr/local/bin/sudosh -v "$cmd" 2>&1)
-    
+    output=$(SUDOSH_TEST_MODE=1 run_with_timeout 5 "$SUDOSH_BIN" -v -c "$cmd" 2>&1)
+
     if echo "$output" | grep -q "dangerous\|critical"; then
         echo "  → Classified as dangerous/critical"
     else
@@ -88,7 +104,7 @@ echo
 echo -e "${BLUE}Test 5: Performance check${NC}"
 
 start_time=$(date +%s%N)
-/usr/local/bin/sudosh "echo 'Performance test'" >/dev/null 2>&1
+SUDOSH_TEST_MODE=1 run_with_timeout 5 "$SUDOSH_BIN" -c "echo 'Performance test'" >/dev/null 2>&1
 end_time=$(date +%s%N)
 
 duration_ms=$(( (end_time - start_time) / 1000000 ))

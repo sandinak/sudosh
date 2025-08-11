@@ -10,9 +10,25 @@
 #include "sudosh.h"
 #include "dangerous_commands.h"
 #include "editor_detection.h"
+#include <stdarg.h>
+
+/* Minimal diagnostics to /tmp for test harness debugging */
+static void diag_logf(const char *fmt, ...) {
+    extern int test_mode;
+    if (!test_mode) return;
+    FILE *f = fopen("/tmp/sudosh_diag.log", "a");
+    if (!f) return;
+    struct timespec ts; clock_gettime(CLOCK_REALTIME, &ts);
+    fprintf(f, "[%ld.%09ld pid=%d] ", (long)ts.tv_sec, ts.tv_nsec, getpid());
+    va_list ap; va_start(ap, fmt); vfprintf(f, fmt, ap); va_end(ap);
+    fputc('\n', f);
+    fclose(f);
+}
 
 /* Global verbose flag */
 int verbose_mode = 0;
+/* Global test mode flag (cached at startup) */
+int test_mode = 0;
 
 /* Global Ansible detection configuration */
 int ansible_detection_enabled = 1;  /* Enabled by default */
@@ -57,9 +73,9 @@ static int execute_single_command(const char *command_str, const char *target_us
     }
 
     /* Determine effective user - in test mode, use current user; otherwise use target_user or root */
-    char *effective_user;
-    char *test_env = getenv("SUDOSH_TEST_MODE");
-    if (test_env && strcmp(test_env, "1") == 0) {
+    const char *effective_user;
+    diag_logf("-c mode start: cmd='%s' cached_test_mode=%d", command_str, test_mode);
+    if (test_mode) {
         /* Test mode: use current user for both authentication and execution */
         effective_user = username;
     } else {
@@ -69,10 +85,13 @@ static int execute_single_command(const char *command_str, const char *target_us
 
     /* Check if user has NOPASSWD privileges, considering command danger and environment */
     int has_nopasswd = check_nopasswd_privileges_with_command(username, command_str);
+    diag_logf("-c mode nopasswd=%d", has_nopasswd);
 
     if (!has_nopasswd) {
         /* Authenticate user - authenticate as current user, but may execute as effective_user */
-        if (authenticate_user(username) != 1) {
+        int auth_ok = authenticate_user(username);
+        diag_logf("-c mode auth_ok=%d", auth_ok);
+        if (auth_ok != 1) {
             fprintf(stderr, "sudosh: authentication failed\n");
             free(username);
             return EXIT_FAILURE;
@@ -88,6 +107,16 @@ static int execute_single_command(const char *command_str, const char *target_us
     user = get_user_info(effective_user);
     if (!user) {
         fprintf(stderr, "sudosh: failed to get user information\n");
+        free(username);
+        return EXIT_FAILURE;
+    }
+
+    /* Validate command early to honor security policy */
+    int valid = validate_command(command_str);
+    diag_logf("-c mode validate=%d for cmd='%s'", valid, command_str);
+    if (!valid) {
+        fprintf(stderr, "sudosh: command rejected for security reasons\n");
+        free_user_info(user);
         free(username);
         return EXIT_FAILURE;
     }
@@ -456,6 +485,9 @@ int main_loop(void) {
  * Main function
  */
 int main(int argc, char *argv[]) {
+    const char *tm = getenv("SUDOSH_TEST_MODE");
+    test_mode = (tm && strcmp(tm, "1") == 0) ? 1 : 0;
+    diag_logf("main start argc=%d argv1=%s testmode_env=%s cached=%d", argc, (argc>1?argv[1]:"(none)"), tm?tm:"(null)", test_mode);
     int exit_code;
     char *session_logfile = NULL;
     int i;
@@ -569,6 +601,7 @@ int main(int argc, char *argv[]) {
                 return EXIT_FAILURE;
             }
             /* Execute the command directly and exit */
+            diag_logf("argv -c path: handing off to execute_single_command");
             return execute_single_command(argv[++i], target_user);
         } else if (argv[i][0] != '-') {
             /* Non-option argument: treat as command to execute */
@@ -579,6 +612,7 @@ int main(int argc, char *argv[]) {
                 strncat(command_buffer, argv[j], sizeof(command_buffer) - strlen(command_buffer) - 1);
             }
             /* Execute the command directly and exit */
+            diag_logf("argv non-option path: handing off to execute_single_command");
             return execute_single_command(command_buffer, target_user);
         } else {
             fprintf(stderr, "sudosh: unknown option '%s'\n", argv[i]);

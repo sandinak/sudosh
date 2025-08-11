@@ -62,54 +62,65 @@ TESTDIR = tests
 SOURCES = main.c auth.c command.c logging.c security.c utils.c nss.c sudoers.c sssd.c filelock.c shell_enhancements.c shell_env.c config.c pipeline.c ansible_detection.c ai_detection.c dangerous_commands.c editor_detection.c
 OBJECTS = $(SOURCES:%.c=$(OBJDIR)/%.o)
 
-# Test files
-TEST_SOURCES = $(wildcard $(TESTDIR)/test_*.c)
+# Test files (now organized in subdirectories)
+TEST_SOURCES = $(wildcard $(TESTDIR)/unit/test_*.c) $(wildcard $(TESTDIR)/integration/test_*.c) $(wildcard $(TESTDIR)/security/test_*.c)
 TEST_OBJECTS = $(TEST_SOURCES:$(TESTDIR)/%.c=$(OBJDIR)/$(TESTDIR)/%.o)
-TEST_TARGETS = $(TEST_SOURCES:$(TESTDIR)/test_%.c=$(BINDIR)/test_%)
+# Derive test binary names from source filenames regardless of subdirectory
+TEST_NAMES = $(notdir $(TEST_SOURCES))
+TEST_TARGETS = $(patsubst test_%.c,$(BINDIR)/test_%,$(TEST_NAMES))
 
 # Pipeline regression test
 PIPELINE_REGRESSION_TEST = $(BINDIR)/test_pipeline_regression
 
 # Security test files
-SECURITY_TEST_SOURCES = $(wildcard $(TESTDIR)/test_security_*.c)
-SECURITY_TEST_BINARIES = $(SECURITY_TEST_SOURCES:$(TESTDIR)/%.c=$(BINDIR)/%)
+SECURITY_TEST_SOURCES = $(wildcard $(TESTDIR)/security/test_security_*.c)
+SECURITY_TEST_BINARIES = $(SECURITY_TEST_SOURCES:$(TESTDIR)/security/%.c=$(BINDIR)/%)
 
-# Library objects (excluding main.c for testing, including test_globals.c)
-LIB_SOURCES = auth.c command.c logging.c security.c utils.c nss.c sudoers.c sssd.c filelock.c shell_enhancements.c shell_env.c pipeline.c ansible_detection.c ai_detection.c dangerous_commands.c editor_detection.c test_globals.c
+# Library objects (excluding main.c for testing)
+# Note: test_globals.c has been removed; keep only real library sources here
+LIB_SOURCES = auth.c command.c logging.c security.c utils.c nss.c sudoers.c sssd.c filelock.c shell_enhancements.c shell_env.c pipeline.c ansible_detection.c ai_detection.c dangerous_commands.c editor_detection.c
 LIB_OBJECTS = $(LIB_SOURCES:%.c=$(OBJDIR)/%.o)
+# Test support sources providing globals for link stage
+TEST_SUPPORT_SOURCES = tests/support/test_globals.c
+TEST_SUPPORT_OBJECTS = $(TEST_SUPPORT_SOURCES:%.c=$(OBJDIR)/%.o)
+
 
 # Target executable
 TARGET = $(BINDIR)/sudosh
 
 # Default target
-all: $(TARGET) path-validator
+all: $(TARGET) $(BINDIR)/path-validator
 
 # Pipeline regression test target
 pipeline-regression-test: $(PIPELINE_REGRESSION_TEST)
 
-$(PIPELINE_REGRESSION_TEST): $(OBJDIR)/$(TESTDIR)/test_pipeline_regression.o $(LIB_OBJECTS) | $(BINDIR)
-	$(CC) $< $(LIB_OBJECTS) -o $@ $(LDFLAGS)
+$(PIPELINE_REGRESSION_TEST): $(OBJDIR)/$(TESTDIR)/test_pipeline_regression.o $(LIB_OBJECTS) $(TEST_SUPPORT_OBJECTS) | $(BINDIR)
+	$(CC) $< $(LIB_OBJECTS) $(TEST_SUPPORT_OBJECTS) -o $@ $(LDFLAGS)
 
 # Run pipeline regression tests
 test-pipeline-regression: $(PIPELINE_REGRESSION_TEST)
 	@echo "Running pipeline security regression tests..."
 	@./scripts/run_pipeline_regression_tests.sh
 
+# Path validator binary rule with proper dependency
+$(BINDIR)/path-validator: src/path_validator.c | $(BINDIR)
+	$(CC) $(CFLAGS) -o $@ $<
+
 # Quick pipeline smoke test
 test-pipeline-smoke: $(PIPELINE_REGRESSION_TEST)
 	@echo "Running quick pipeline smoke test..."
 	@./scripts/run_pipeline_regression_tests.sh --smoke-only
 
-# PATH validation tool
-path-validator: src/path_validator.c
-	$(CC) $(CFLAGS) -o bin/path-validator src/path_validator.c
+# PATH validation tool (phony target alias)
+.PHONY: path-validator
+path-validator: $(BINDIR)/path-validator
 
 # Mandatory regression test for secure editors
 test-secure-editors: $(TARGET)
 	@echo "Running mandatory secure editor regression test..."
 	@echo "Testing that vi, vim, nano, pico are not blocked..."
-	@if [ -f "./test_secure_editor_fix.sh" ]; then \
-		./test_secure_editor_fix.sh; \
+	@if [ -f "./tests/regression/test_secure_editor_fix.sh" ]; then \
+		./tests/regression/test_secure_editor_fix.sh; \
 	else \
 		echo "✅ Secure editor test script not found, assuming basic functionality works"; \
 	fi
@@ -132,25 +143,31 @@ $(TARGET): $(OBJECTS) | $(BINDIR)
 $(OBJDIR)/%.o: $(SRCDIR)/%.c | $(OBJDIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-# Compile test files
+# Compile test files (handle subdirectories) and include test headers
 $(OBJDIR)/$(TESTDIR)/%.o: $(TESTDIR)/%.c | $(OBJDIR)
-	@mkdir -p $(OBJDIR)/$(TESTDIR)
-	$(CC) $(CFLAGS) -I$(SRCDIR) -c $< -o $@
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -I$(SRCDIR) -I$(TESTDIR) -I$(TESTDIR)/security -c $< -o $@
 
 # Ensure test directory exists
 $(OBJDIR)/$(TESTDIR):
 	@mkdir -p $(OBJDIR)/$(TESTDIR)
 
-# Build individual test executables
-$(BINDIR)/test_%: $(OBJDIR)/$(TESTDIR)/test_%.o $(LIB_OBJECTS) | $(BINDIR)
+# Build individual test executables for each subdirectory
+$(BINDIR)/test_%: $(OBJDIR)/$(TESTDIR)/unit/test_%.o $(LIB_OBJECTS) $(TEST_SUPPORT_OBJECTS) | $(BINDIR)
+	$(CC) $^ -o $@ $(LDFLAGS)
+
+$(BINDIR)/test_%: $(OBJDIR)/$(TESTDIR)/integration/test_%.o $(LIB_OBJECTS) $(TEST_SUPPORT_OBJECTS) | $(BINDIR)
+	$(CC) $^ -o $@ $(LDFLAGS)
+
+$(BINDIR)/test_%: $(OBJDIR)/$(TESTDIR)/security/test_%.o $(LIB_OBJECTS) $(TEST_SUPPORT_OBJECTS) | $(BINDIR)
 	$(CC) $^ -o $@ $(LDFLAGS)
 
 # Special rule for pthread-dependent tests
-$(BINDIR)/test_security_race_conditions: $(OBJDIR)/$(TESTDIR)/test_security_race_conditions.o $(LIB_OBJECTS) | $(BINDIR)
+$(BINDIR)/test_security_race_conditions: $(OBJDIR)/$(TESTDIR)/security/test_security_race_conditions.o $(LIB_OBJECTS) $(TEST_SUPPORT_OBJECTS) | $(BINDIR)
 	$(CC) $^ -o $@ $(LDFLAGS) -lpthread
 
-# Build all tests
-tests: $(LIB_OBJECTS) | $(OBJDIR)/$(TESTDIR)
+# Build all tests (also ensure sudosh binary exists for script-based tests)
+tests: $(TARGET) $(LIB_OBJECTS) | $(OBJDIR)/$(TESTDIR)
 tests: $(TEST_TARGETS)
 
 # Run all tests

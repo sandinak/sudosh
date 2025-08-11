@@ -55,7 +55,7 @@
 #include "sudosh_common.h"
 
 /* External environment variable - declared in unistd.h */
-/* extern char **environ; */
+extern char **environ;
 
 /* Global verbose flag */
 extern int verbose_mode;
@@ -76,7 +76,7 @@ extern int ansible_detection_verbose;
 #define MAX_COMMAND_LENGTH 4096
 #define MAX_USERNAME_LENGTH 256
 #define MAX_PASSWORD_LENGTH 256
-#define SUDOSH_VERSION "1.9.3"
+#define SUDOSH_VERSION "1.9.4"
 #define INACTIVITY_TIMEOUT 300  /* 300 seconds (5 minutes) */
 
 /* File locking constants */
@@ -326,6 +326,7 @@ int check_sudo_privileges(const char *username);
 int check_sudo_privileges_fallback(const char *username);
 int check_sudo_privileges_enhanced(const char *username);
 int check_nopasswd_privileges_enhanced(const char *username);
+int check_global_nopasswd_privileges_enhanced(const char *username);
 int check_nopasswd_sudo_l(const char *username);
 
 /* NSS configuration functions */
@@ -339,6 +340,7 @@ struct sudoers_config *parse_sudoers_file(const char *filename);
 void free_sudoers_config(struct sudoers_config *config);
 int check_sudoers_privileges(const char *username, const char *hostname, struct sudoers_config *sudoers);
 int check_sudoers_nopasswd(const char *username, const char *hostname, struct sudoers_config *sudoers);
+int check_sudoers_global_nopasswd(const char *username, const char *hostname, struct sudoers_config *sudoers);
 
 /* SSSD integration functions */
 int check_sssd_privileges(const char *username);

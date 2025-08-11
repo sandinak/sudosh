@@ -281,14 +281,20 @@ int handle_which_command(const char *command) {
         }
         
         if (!is_builtin) {
-            /* Find command in PATH */
-            char *path = find_command_in_path(token);
-            if (path) {
-                printf("%s\n", path);
-                free(path);
+            /* Check if it's an alias */
+            char *alias_value = get_alias_value(token);
+            if (alias_value) {
+                printf("%s: aliased to `%s'\n", token, alias_value);
             } else {
-                printf("%s: not found\n", token);
-                found_all = 0;
+                /* Find command in PATH */
+                char *path = find_command_in_path(token);
+                if (path) {
+                    printf("%s\n", path);
+                    free(path);
+                } else {
+                    printf("%s: not found\n", token);
+                    found_all = 0;
+                }
             }
         }
         

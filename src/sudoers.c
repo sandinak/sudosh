@@ -42,7 +42,7 @@ static void free_userspec(struct sudoers_userspec *spec) {
     if (!spec) {
         return;
     }
-    
+
     /* Free string arrays */
     if (spec->users) {
         for (int i = 0; spec->users[i]; i++) {
@@ -50,21 +50,21 @@ static void free_userspec(struct sudoers_userspec *spec) {
         }
         free(spec->users);
     }
-    
+
     if (spec->hosts) {
         for (int i = 0; spec->hosts[i]; i++) {
             free(spec->hosts[i]);
         }
         free(spec->hosts);
     }
-    
+
     if (spec->commands) {
         for (int i = 0; spec->commands[i]; i++) {
             free(spec->commands[i]);
         }
         free(spec->commands);
     }
-    
+
     free(spec->runas_user);
     free(spec->source_file);
     free(spec);
@@ -77,12 +77,12 @@ static char **parse_list(const char *list_str) {
     if (!list_str) {
         return NULL;
     }
-    
+
     char *str_copy = strdup(list_str);
     if (!str_copy) {
         return NULL;
     }
-    
+
     /* Count items */
     int count = 1;
     for (char *p = str_copy; *p; p++) {
@@ -90,19 +90,19 @@ static char **parse_list(const char *list_str) {
             count++;
         }
     }
-    
+
     /* Allocate array */
     char **array = malloc((count + 1) * sizeof(char *));
     if (!array) {
         free(str_copy);
         return NULL;
     }
-    
+
     /* Parse items */
     char *token;
     char *saveptr;
     int i = 0;
-    
+
     token = strtok_r(str_copy, ",", &saveptr);
     while (token && i < count) {
         /* Trim whitespace */
@@ -113,7 +113,7 @@ static char **parse_list(const char *list_str) {
         while (end > token && isspace(*end)) {
             *end-- = '\0';
         }
-        
+
         array[i] = strdup(token);
         if (!array[i]) {
             /* Cleanup on failure */
@@ -124,11 +124,11 @@ static char **parse_list(const char *list_str) {
             free(str_copy);
             return NULL;
         }
-        
+
         i++;
         token = strtok_r(NULL, ",", &saveptr);
     }
-    
+
     array[i] = NULL;  /* Null terminate */
     free(str_copy);
     return array;
@@ -144,31 +144,31 @@ static struct sudoers_userspec *parse_sudoers_line(const char *line, const char 
     if (!line_copy) {
         return NULL;
     }
-    
+
     /* Skip leading whitespace */
     char *p = line_copy;
     while (*p && isspace(*p)) {
         p++;
     }
-    
+
     /* Skip comments and empty lines */
     if (*p == '#' || *p == '\0') {
         free(line_copy);
         return NULL;
     }
-    
+
     /* Skip Defaults lines for now */
     if (strncmp(p, "Defaults", 8) == 0) {
         free(line_copy);
         return NULL;
     }
-    
+
     struct sudoers_userspec *spec = create_userspec();
     if (!spec) {
         free(line_copy);
         return NULL;
     }
-    
+
     /* Find the '=' separator */
     char *equals = strchr(p, '=');
     if (!equals) {
@@ -176,11 +176,11 @@ static struct sudoers_userspec *parse_sudoers_line(const char *line, const char 
         free(line_copy);
         return NULL;
     }
-    
+
     *equals = '\0';
     char *left_side = p;
     char *right_side = equals + 1;
-    
+
     /* Parse left side: user host */
     /* Trim whitespace from left side first */
     while (*left_side && isspace(*left_side)) {
@@ -215,7 +215,7 @@ static struct sudoers_userspec *parse_sudoers_line(const char *line, const char 
         spec->users = parse_list(left_side);
         spec->hosts = parse_list("ALL");
     }
-    
+
     /* Parse right side: (runas_user) command */
     while (*right_side && isspace(*right_side)) {
         right_side++;
@@ -435,7 +435,7 @@ struct sudoers_config *parse_sudoers_file(const char *filename) {
         /* If we can't read sudoers, return empty config */
         return config;
     }
-    
+
     while ((read = getline(&line, &len, fp)) != -1) {
         /* Remove newline */
         if (read > 0 && line[read - 1] == '\n') {
@@ -475,7 +475,7 @@ struct sudoers_config *parse_sudoers_file(const char *filename) {
             }
         }
     }
-    
+
     free(line);
     fclose(fp);
 
@@ -492,14 +492,14 @@ void free_sudoers_config(struct sudoers_config *config) {
     if (!config) {
         return;
     }
-    
+
     struct sudoers_userspec *spec = config->userspecs;
     while (spec) {
         struct sudoers_userspec *next = spec->next;
         free_userspec(spec);
         spec = next;
     }
-    
+
     free(config->includedir);
     free(config);
 }
@@ -511,11 +511,11 @@ static int match_pattern(const char *pattern, const char *string) {
     if (!pattern || !string) {
         return 0;
     }
-    
+
     if (strcmp(pattern, "ALL") == 0) {
         return 1;
     }
-    
+
     return strcmp(pattern, string) == 0;
 }
 
@@ -526,12 +526,12 @@ static int user_matches_spec(const char *username, struct sudoers_userspec *spec
     if (!username || !spec || !spec->users) {
         return 0;
     }
-    
+
     for (int i = 0; spec->users[i]; i++) {
         if (match_pattern(spec->users[i], username)) {
             return 1;
         }
-        
+
         /* Check for group membership (groups start with %) */
         if (spec->users[i][0] == '%') {
             struct group *grp = getgrnam(spec->users[i] + 1);
@@ -544,7 +544,7 @@ static int user_matches_spec(const char *username, struct sudoers_userspec *spec
             }
         }
     }
-    
+
     return 0;
 }
 
@@ -611,6 +611,58 @@ int check_sudoers_nopasswd(const char *username, const char *hostname, struct su
     }
 
     return 0;  /* No matching rule with NOPASSWD found */
+}
+
+
+/**
+ * Check if user has global NOPASSWD privileges (NOPASSWD: ALL)
+ */
+int check_sudoers_global_nopasswd(const char *username, const char *hostname, struct sudoers_config *sudoers) {
+    if (!username || !sudoers) {
+        return 0;
+    }
+
+    if (!hostname) {
+        hostname = "localhost";  /* Default hostname */
+    }
+
+    struct sudoers_userspec *spec = sudoers->userspecs;
+    while (spec) {
+        if (user_matches_spec(username, spec)) {
+            /* Check hostname match */
+            int host_ok = 0;
+            if (spec->hosts) {
+                for (int i = 0; spec->hosts[i]; i++) {
+                    if (match_pattern(spec->hosts[i], hostname)) {
+                        host_ok = 1;
+                        break;
+                    }
+                }
+            }
+            if (!host_ok) {
+                spec = spec->next;
+                continue;
+            }
+
+            /* Must have NOPASSWD flag */
+            if (!spec->nopasswd) {
+                spec = spec->next;
+                continue;
+            }
+
+            /* Check commands include ALL */
+            if (spec->commands) {
+                for (int i = 0; spec->commands[i]; i++) {
+                    if (strcmp(spec->commands[i], "ALL") == 0) {
+                        return 1;  /* Global NOPASSWD */
+                    }
+                }
+            }
+        }
+        spec = spec->next;
+    }
+
+    return 0;
 }
 
 /**
