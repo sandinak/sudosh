@@ -29,44 +29,23 @@ run_with_timeout() {
         set -e
         return $status
     else
-        # Start the command; prefer setsid if available to kill process group, else just run in background
-        if command -v setsid >/dev/null 2>&1; then
-            SUDOSH_TEST_MODE=1 setsid "$@" &
-            local cmd_pid=$!
-            local pgid
-            pgid=$(ps -o pgid= -p "$cmd_pid" | tr -d ' ')
-            (
-                trap 'exit 0' TERM INT
-                sleep "$seconds"
-                if kill -0 "$cmd_pid" >/dev/null 2>&1; then
-                    kill -TERM -"$pgid" >/dev/null 2>&1 || kill -TERM "$cmd_pid" >/dev/null 2>&1 || true
-                    sleep 1
-                    kill -KILL -"$pgid" >/dev/null 2>&1 || kill -KILL "$cmd_pid" >/dev/null 2>&1 || true
-                fi
-            ) >/dev/null 2>&1 &
-            local watcher_pid=$!
-            wait "$cmd_pid"
-            local status=$?
-            kill "$watcher_pid" >/dev/null 2>&1 || true
-            return $status
-        else
-            SUDOSH_TEST_MODE=1 "$@" &
-            local cmd_pid=$!
-            (
-                trap 'exit 0' TERM INT
-                sleep "$seconds"
-                if kill -0 "$cmd_pid" >/dev/null 2>&1; then
-                    kill -TERM "$cmd_pid" >/dev/null 2>&1 || true
-                    sleep 1
-                    kill -KILL "$cmd_pid" >/dev/null 2>&1 || true
-                fi
-            ) >/dev/null 2>&1 &
-            local watcher_pid=$!
-            wait "$cmd_pid"
-            local status=$?
-            kill "$watcher_pid" >/dev/null 2>&1 || true
-            return $status
-        fi
+        # Start the command and enforce a timeout without requiring setsid
+        SUDOSH_TEST_MODE=1 "$@" &
+        local cmd_pid=$!
+        (
+            trap 'exit 0' TERM INT
+            sleep "$seconds"
+            if kill -0 "$cmd_pid" >/dev/null 2>&1; then
+                kill -TERM "$cmd_pid" >/dev/null 2>&1 || true
+                sleep 1
+                kill -KILL "$cmd_pid" >/dev/null 2>&1 || true
+            fi
+        ) >/dev/null 2>&1 &
+        local watcher_pid=$!
+        wait "$cmd_pid"
+        local status=$?
+        kill "$watcher_pid" >/dev/null 2>&1 || true
+        return $status
     fi
 }
 

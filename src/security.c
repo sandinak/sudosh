@@ -1121,8 +1121,25 @@ int validate_command_with_length(const char *command, size_t buffer_len) {
         log_security_violation(current_username, "path traversal attempt");
         return 0;
     }
+    /* Block URL-encoded traversal (case-insensitive): %2e%2e%2f or %2e%2e%5c */
+    {
+        size_t n = strnlen(command, 4096);
+        if (n > 0 && n < 4096) {
+            char folded[4096];
+            for (size_t i = 0; i < n; i++) {
+                char c = command[i];
+                if (c >= 'A' && c <= 'Z') c = (char)(c + 32);
+                folded[i] = c;
+            }
+            folded[n] = '\0';
+            if (strstr(folded, "%2e%2e%2f") || strstr(folded, "%2e%2e%5c")) {
+                log_security_violation(current_username, "url-encoded path traversal attempt");
+                return 0;
+            }
+        }
+    }
 
-    /* Block URL-encoded traversal or control sequences and format strings, except safe readonly commands */
+    /* Block URL-encoded/control/format sequences and expansions */
     const char *trim = command;
     while (*trim == ' ' || *trim == '\t') trim++;
     int is_echo = (strncmp(trim, "echo", 4) == 0) && (trim[4] == '\0' || trim[4] == ' ');
@@ -1130,22 +1147,20 @@ int validate_command_with_length(const char *command, size_t buffer_len) {
     int is_whoami = (strncmp(trim, "whoami", 6) == 0) && (trim[6] == '\0' || trim[6] == ' ');
     int is_date = (strncmp(trim, "date", 4) == 0) && (trim[4] == '\0' || trim[4] == ' ');
 
-    /* Allowlist of simple read-only commands (exclude echo; treat echo separately) */
-    int is_safe_simple = (is_ls || is_whoami || is_date);
-
-    if (strchr(command, '%') && !is_safe_simple) {
+    /* Block any percent usage (format specifiers or encoded sequences) */
+    if (strchr(command, '%')) {
         log_security_violation(current_username, "% character detected (format/encoding) in command");
         return 0;
     }
 
-    /* Block environment expansion unless a whitelisted simple readonly command */
-    if (strchr(command, '$') && !is_safe_simple) {
+    /* Block any environment expansion */
+    if (strchr(command, '$')) {
         log_security_violation(current_username, "environment expansion detected in command");
         return 0;
     }
 
-    /* Disallow dangerous quoting/backslash unless used with simple readonly commands or echo */
-    if (!is_safe_simple && !is_echo && (strchr(command, '\'') || strchr(command, '"') || strchr(command, '\\'))) {
+    /* Disallow dangerous quoting/backslash; allow quotes/backslash in simple echo usage */
+    if (!is_echo && (strchr(command, '\'') || strchr(command, '"') || strchr(command, '\\'))) {
         log_security_violation(current_username, "special quoting detected in command");
         return 0;
     }
@@ -1198,8 +1213,8 @@ int validate_command_with_length(const char *command, size_t buffer_len) {
         return 0;
     }
 
-    /* Block pipes as part of injection protection unless simple readonly commands or echo */
-    if (strchr(command, '|') && !(is_echo || is_ls || is_whoami || is_date)) {
+    /* Block any pipeline usage */
+    if (strchr(command, '|')) {
         log_security_violation(current_username, "pipeline usage blocked for security reasons");
         return 0;
     }

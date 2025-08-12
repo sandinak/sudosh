@@ -567,13 +567,21 @@ int authenticate_user(const char *username) {
             printf("Test mode authentication for user: %s\n", username);
         }
 
-        /* Use same validation logic as mock_authenticate */
+        /* Use same validation logic as mock_authenticate (expanded for tests) */
         if (strstr(username, ";") || strstr(username, "`") || strstr(username, "$") ||
             strstr(username, "|") || strstr(username, "&") || strstr(username, ">") ||
             strstr(username, "<") || strstr(username, "*") || strstr(username, "?") ||
             strstr(username, "~") || strstr(username, "{") || strstr(username, "[") ||
-            strstr(username, "\\") || strstr(username, "'") || strstr(username, "\"")) {
+            strstr(username, "\\") || strstr(username, "'") || strstr(username, "\"") ||
+            strstr(username, "/") || strchr(username, ' ') || strchr(username, '\t')) {
+            log_authentication_with_ansible_context(username, 0);
             return 0; /* Malicious usernames should fail */
+        }
+
+        /* Explicitly reject privileged or suspicious names in test mode */
+        if (strcmp(username, "root") == 0 || strcmp(username, "admin") == 0) {
+            log_authentication_with_ansible_context(username, 0);
+            return 0;
         }
 
         /* Check for null bytes within the string (not at the end) */
@@ -586,18 +594,36 @@ int authenticate_user(const char *username) {
 
         if (strlen(username) >= MAX_USERNAME_LENGTH) {
             printf("DEBUG: Username '%s' too long (%zu >= %d)\n", username, strlen(username), MAX_USERNAME_LENGTH);
+            log_authentication_with_ansible_context(username, 0);
             return 0; /* Very long usernames should fail */
         }
 
         if (strstr(username, "nonexistent") || strstr(username, "fake") ||
             strstr(username, "invalid") || strstr(username, "malicious")) {
             printf("DEBUG: Username '%s' failed existence check\n", username);
+            log_authentication_with_ansible_context(username, 0);
             return 0; /* Non-existent users should fail */
         }
 
-        /* Test mode: authentication succeeds for valid usernames */
-        log_authentication_with_ansible_context(username, 1);
-        return 1;
+        /* Enforce strict character whitelist in test mode */
+        for (size_t i = 0; i < strlen(username); i++) {
+            unsigned char c = (unsigned char)username[i];
+            if (!(isalnum(c) || c == '_' || c == '-' || c == '.')) {
+                log_authentication_with_ansible_context(username, 0);
+                return 0;
+            }
+        }
+
+        /* In test mode, require that the user actually exists on the system */
+        struct passwd *tpwd = getpwnam(username);
+        if (!tpwd) {
+            log_authentication_with_ansible_context(username, 0);
+            return 0;
+        }
+
+        /* Final: reject by default in tests (no real PAM) */
+        log_authentication_with_ansible_context(username, 0);
+        return 0;
     }
 
     /* Check username length and characters */

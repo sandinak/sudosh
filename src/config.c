@@ -39,11 +39,15 @@ sudosh_config_t *sudosh_config_init(void) {
     config->ansible_detection_force = 0;
     config->ansible_detection_verbose = 0;
     config->ansible_detection_confidence_threshold = 70;
-    
+    /* Shell enhancements */
+    config->rc_alias_import_enabled = 1; /* default enabled */
+
+
+
     config->log_facility = sudosh_safe_strdup(DEFAULT_LOG_FACILITY);
     config->cache_directory = sudosh_safe_strdup(DEFAULT_CACHE_DIRECTORY);
     config->lock_directory = sudosh_safe_strdup(DEFAULT_LOCK_DIRECTORY);
-    
+
     if (!config->log_facility || !config->cache_directory || !config->lock_directory) {
         sudosh_config_free(config);
         return NULL;
@@ -63,7 +67,7 @@ void sudosh_config_free(sudosh_config_t *config) {
     sudosh_safe_free((void**)&config->log_facility);
     sudosh_safe_free((void**)&config->cache_directory);
     sudosh_safe_free((void**)&config->lock_directory);
-    
+
     sudosh_safe_free((void**)&config);
 }
 
@@ -120,6 +124,9 @@ static sudosh_error_t parse_config_line(sudosh_config_t *config, const char *lin
     } else if (strcmp(key, "ansible_detection_enabled") == 0) {
         config->ansible_detection_enabled = (strcmp(value, "true") == 0 || strcmp(value, "1") == 0);
     } else if (strcmp(key, "ansible_detection_force") == 0) {
+    } else if (strcmp(key, "rc_alias_import_enabled") == 0) {
+        config->rc_alias_import_enabled = (strcmp(value, "true") == 0 || strcmp(value, "1") == 0);
+
         config->ansible_detection_force = (strcmp(value, "true") == 0 || strcmp(value, "1") == 0);
     } else if (strcmp(key, "ansible_detection_verbose") == 0) {
         config->ansible_detection_verbose = (strcmp(value, "true") == 0 || strcmp(value, "1") == 0);
@@ -164,7 +171,7 @@ sudosh_error_t sudosh_config_load(sudosh_config_t *config, const char *config_fi
 
     while (fgets(line, sizeof(line), file)) {
         line_number++;
-        
+
         /* Remove trailing newline */
         size_t len = strlen(line);
         if (len > 0 && line[len - 1] == '\n') {

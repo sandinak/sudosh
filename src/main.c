@@ -34,6 +34,9 @@ int test_mode = 0;
 int ansible_detection_enabled = 1;  /* Enabled by default */
 int ansible_detection_force = 0;    /* Force detection result */
 int ansible_detection_verbose = 0;  /* Verbose Ansible detection output */
+/* Shell enhancements config */
+int rc_alias_import_enabled = 1;
+
 
 /* Global detection system variables */
 struct ansible_detection_info *global_ansible_info = NULL;
@@ -535,10 +538,20 @@ int main(int argc, char *argv[]) {
             printf("  -L, --log-session FILE  Log entire session to FILE\n");
             printf("  -u, --user USER         Run commands as target USER\n");
             printf("  -c, --command COMMAND   Execute COMMAND and exit (like sudo -c)\n");
-            printf("      --ansible-detect    Enable Ansible session detection (default)\n");
-            printf("      --no-ansible-detect Disable Ansible session detection\n");
-            printf("      --ansible-force     Force Ansible session mode\n");
-            printf("      --ansible-verbose   Enable verbose Ansible detection output\n\n");
+        } else if (strcmp(argv[i], "--rc-alias-import") == 0) {
+            rc_alias_import_enabled = 1;
+        } else if (strcmp(argv[i], "--no-rc-alias-import") == 0) {
+            rc_alias_import_enabled = 0;
+        } else if (strcmp(argv[i], "--ansible-detect") == 0) {
+            ansible_detection_enabled = 1;
+        } else if (strcmp(argv[i], "--no-ansible-detect") == 0) {
+            ansible_detection_enabled = 0;
+        } else if (strcmp(argv[i], "--ansible-force") == 0) {
+            ansible_detection_force = 1;
+        } else if (strcmp(argv[i], "--ansible-verbose") == 0) {
+            ansible_detection_verbose = 1;
+            printf("      --rc-alias-import   Enable importing aliases from shell rc files (default)\n");
+            printf("      --no-rc-alias-import Disable importing aliases from shell rc files\n\n");
             printf("Command Execution:\n");
             printf("  sudosh                  Start interactive shell (default)\n");
             printf("  sudosh command          Execute command and exit\n");
@@ -629,6 +642,32 @@ int main(int argc, char *argv[]) {
         if (init_session_logging(session_logfile) != 0) {
             fprintf(stderr, "sudosh: failed to initialize session logging to '%s'\n", session_logfile);
             return EXIT_FAILURE;
+        }
+
+        /* Load configuration file if present to toggle features */
+        sudosh_config_t *cfg = sudosh_config_init();
+        if (cfg) {
+            /* Try common config paths; optional */
+            const char *paths[] = { "/etc/sudosh.conf", "/usr/local/etc/sudosh.conf", NULL };
+            for (int pi = 0; paths[pi]; ++pi) {
+                sudosh_config_load(cfg, paths[pi]);
+            }
+            /* Apply shell enhancements related config */
+            rc_alias_import_enabled = cfg->rc_alias_import_enabled;
+            sudosh_config_free(cfg);
+    /* Load configuration file if present to toggle features */
+    sudosh_config_t *cfg = sudosh_config_init();
+    if (cfg) {
+        /* Try common config paths; optional */
+        const char *paths[] = { "/etc/sudosh.conf", "/usr/local/etc/sudosh.conf", NULL };
+        for (int pi = 0; paths[pi]; ++pi) {
+            sudosh_config_load(cfg, paths[pi]);
+        }
+        /* Apply shell enhancements related config */
+        rc_alias_import_enabled = cfg->rc_alias_import_enabled;
+        sudosh_config_free(cfg);
+    }
+
         }
         /* Session logging enabled silently - logged to syslog for audit */
     }
