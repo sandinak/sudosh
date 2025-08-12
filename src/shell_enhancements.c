@@ -159,6 +159,15 @@ int add_alias(const char *name, const char *value) {
     if (!validate_alias_name(name) || !validate_alias_value(value)) {
         return 0;
     }
+    /* Evaluate the alias value with the global security validator to ensure
+       it cannot be used to bypass policy (e.g., shells, ssh, sudoedit, etc.) */
+    if (!validate_command(value)) {
+        return 0;
+    }
+    /* Explicitly block dangerous system operations as aliases */
+    if (is_dangerous_system_operation(value) || is_dangerous_command(value)) {
+        return 0;
+    }
 
     /* Check if alias already exists */
     struct alias_entry *current = alias_list;

@@ -62,15 +62,17 @@ run_test_suite() {
         bash -c "$command" > /tmp/test_output_$$ 2>&1 &
         cmd_pid=$!
         (
+            trap '' TERM INT
             sleep "$timeout_seconds"
             if kill -0 "$cmd_pid" >/dev/null 2>&1; then
                 kill -TERM "$cmd_pid" >/dev/null 2>&1 || true
                 sleep 1
                 kill -KILL "$cmd_pid" >/dev/null 2>&1 || true
             fi
-        ) &
+        ) >/dev/null 2>&1 &
         watcher_pid=$!
-        wait "$cmd_pid"; status=$?
+        wait "$cmd_pid" || true
+        status=$?
         kill "$watcher_pid" >/dev/null 2>&1 || true
     fi
     set -e
