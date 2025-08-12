@@ -63,6 +63,9 @@ extern int verbose_mode;
 /* Global test mode flag */
 extern int test_mode;
 
+/* Shell enhancements configuration */
+extern int rc_alias_import_enabled; /* default enabled; can be toggled via CLI or config */
+
 /* Global detection system results */
 extern struct ansible_detection_info *global_ansible_info;
 extern struct ai_detection_info *global_ai_info;
@@ -509,6 +512,8 @@ int remove_alias(const char *name);
 char *get_alias_value(const char *name);
 void print_aliases(void);
 int load_aliases_from_file(void);
+int load_aliases_from_shell_rc_files(void);
+
 int save_aliases_to_file(void);
 char *expand_aliases(const char *command);
 int validate_alias_name(const char *name);

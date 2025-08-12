@@ -283,6 +283,9 @@ typedef struct {
     int ansible_detection_force;
     int ansible_detection_verbose;
     int ansible_detection_confidence_threshold;
+
+    /* Shell enhancements */
+    int rc_alias_import_enabled; /* allow importing aliases from user rc files */
 } sudosh_config_t;
 
 /* Configuration management functions */
