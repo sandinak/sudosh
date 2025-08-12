@@ -24,6 +24,10 @@ Display help message and exit.
 .BR \-\-version
 Display version information and exit.
 .TP
+.TP
+.BR \-\-build\-info
+Display detailed build information and exit. Shows the version, git commit, build date (UTC), and build user. Useful for support and reproducibility.
+
 .BR \-v ", " \-\-verbose
 Enable verbose output including privilege detection details.
 .TP
@@ -192,6 +196,10 @@ Remove the specified environment variable. Only safe environment variables can b
 .B env
 Display all environment variables.
 .TP
+.TP
+.BR printenv
+Display environment variables (same as \fBenv\fR). Useful with variable names (e.g., \fBprintenv PATH\fR). Allowed by security policy for inspection; \fBenv\fR remains restricted for modifications.
+
 .B which \fIcommand\fR
 Show the location of the specified command or indicate if it's a built-in.
 .TP
@@ -365,6 +373,34 @@ Execute command number <number> from history (e.g., !1, !42).
 .TP
 .B history
 Show numbered list of all commands in history.
+
+\n.TP
+.B !-<number>
+Execute the Nth previous command (e.g., !-1 is the last command, !-2 second last).
+.TP
+.B !prefix
+Search from newest to oldest and execute the most recent command starting with 'prefix'.
+.TP
+.B Reverse incremental search
+Press Ctrl-R to search history interactively (when available); in non-interactive environments, use !prefix.
+\n.SS Prompt Customization
+By default, the prompt shows user@host:cwd## with colors inherited from your shell.
+You can customize the prompt using the environment variable \fBSUDOSH_PROMPT_FORMAT\fR with tokens:
+.IP \(bu 4
+%u username
+.IP \(bu 4
+%h hostname
+.IP \(bu 4
+%w current working directory
+.IP \(bu 4
+%? last command exit status
+.IP \(bu 4
+%# prompt marker (##)
+.PP
+Example:
+.nf
+export SUDOSH_PROMPT_FORMAT="[%u@%h %w] %#"
+.fi
 
 .SH LOGGING FEATURES
 sudosh provides comprehensive logging capabilities:

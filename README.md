@@ -65,7 +65,7 @@ Sudosh is a comprehensive, secure interactive shell that provides elevated privi
 
 ### **Shell Enhancements**
 - 🔗 **Alias management** - Create and manage command aliases with security validation
-- 🌍 **Environment variables** - Secure modification of whitelisted environment variables
+- 🌍 **Environment variables** - Secure modification of whitelisted environment variables; safe inspection via printenv
 - 📁 **Directory stack** - pushd/popd/dirs commands for directory navigation
 - 🔍 **Command information** - which/type commands for command introspection
 - 💾 **Persistent storage** - Aliases automatically saved and restored between sessions
@@ -216,6 +216,7 @@ sudosh - Interactive sudo shell and command executor
 Options:
   -h, --help              Show help message
       --version           Show version information
+      --build-info        Show detailed build information (version, git, date, user)
   -v, --verbose           Enable verbose output
   -l, --list              List available commands showing each permission source separately
   -L, --log-session FILE  Log entire session to FILE

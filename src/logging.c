@@ -42,7 +42,7 @@ void log_command(const char *username, const char *command, int success) {
     char hostname[256];
     char *tty;
     char *pwd;
-    
+
     if (!logging_initialized) {
         init_logging();
     }
@@ -102,7 +102,7 @@ void log_command(const char *username, const char *command, int success) {
 void log_authentication(const char *username, int success) {
     char hostname[256];
     char *tty;
-    
+
     if (!logging_initialized) {
         init_logging();
     }
@@ -141,7 +141,7 @@ void log_authentication(const char *username, int success) {
 void log_session_start(const char *username) {
     char hostname[256];
     char *tty;
-    
+
     if (!logging_initialized) {
         init_logging();
     }
@@ -174,7 +174,7 @@ void log_session_start(const char *username) {
 void log_session_end(const char *username) {
     char hostname[256];
     char *tty;
-    
+
     if (!logging_initialized) {
         init_logging();
     }
@@ -218,7 +218,7 @@ void log_error(const char *message) {
 void log_security_violation(const char *username, const char *violation) {
     char hostname[256];
     char *tty;
-    
+
     if (!logging_initialized) {
         init_logging();
     }
@@ -589,14 +589,27 @@ void add_to_history_buffer(const char *command) {
 }
 
 /**
- * Expand history references in command (e.g., !1, !42)
+ * Return the last index (0-based) where 'needle' appears in history, or -1
+ * Used to support reverse-i-search in a testable, non-interactive way
+ */
+int history_search_last_index(const char *needle) {
+    if (!needle || !history_buffer || history_count == 0) return -1;
+    for (int i = history_count - 1; i >= 0; --i) {
+        if (strstr(history_buffer[i], needle)) return i;
+    }
+    return -1;
+}
+
+
+/**
+ * Expand history references in command (e.g., !1, !42, !-3, !prefix)
  * Returns a newly allocated string that must be freed, or NULL on error
  */
 char *expand_history(const char *command) {
     char *result = NULL;
     const char *src = command;
     size_t result_len = 0;
-    size_t result_capacity = strlen(command) * 2 + 1;  /* Start with double the input size */
+    size_t result_capacity = command ? (strlen(command) * 2 + 1) : 1;
 
     if (!command) {
         return NULL;
@@ -610,76 +623,123 @@ char *expand_history(const char *command) {
     result[0] = '\0';
 
     while (*src) {
-        if (*src == '!' && isdigit(*(src + 1))) {
-            /* Found history expansion */
+        if (*src == '!' && *(src + 1)) {
+            const char *bang = src;
             src++;  /* Skip the '!' */
 
-            /* Parse the number */
-            char *endptr;
-            long hist_num = strtol(src, &endptr, 10);
+            /* Case 1: !-N (relative index from newest) */
+            if (*src == '-' && isdigit(*(src + 1))) {
+                char *endptr;
+                long rel = strtol(src + 1, &endptr, 10);
+                long idx = (long)history_count - rel;  /* 1 => last, 2 => second last */
+                if (rel > 0 && idx >= 0 && idx < history_count) {
+                    char *hist_cmd = get_history_entry((int)idx);
+                    if (hist_cmd) {
+                        size_t hist_len = strlen(hist_cmd);
+                        while (result_len + hist_len + 1 > result_capacity) {
+                            result_capacity *= 2;
+                            char *new_result = realloc(result, result_capacity);
+                            if (!new_result) { free(result); return NULL; }
+                            result = new_result;
+                        }
+                        strcat(result, hist_cmd);
+                        result_len += hist_len;
+                    }
+                } else {
+                    /* Append original text if invalid */
+                    size_t seg_len = (size_t)(endptr - bang);
+                    while (result_len + seg_len + 1 > result_capacity) {
+                        result_capacity *= 2;
+                        char *new_result = realloc(result, result_capacity);
+                        if (!new_result) { free(result); return NULL; }
+                        result = new_result;
+                    }
+                    strncat(result, bang, seg_len);
+                    result_len += seg_len;
+                }
+                src = endptr;
+                continue;
+            }
 
-            if (hist_num > 0 && hist_num <= history_count) {
-                /* Valid history number (1-based) */
-                char *hist_cmd = get_history_entry(hist_num - 1);  /* Convert to 0-based */
-                if (hist_cmd) {
+            /* Case 2: !N (absolute 1-based index) */
+            if (isdigit(*src)) {
+                char *endptr;
+                long hist_num = strtol(src, &endptr, 10);
+                if (hist_num > 0 && hist_num <= history_count) {
+                    char *hist_cmd = get_history_entry((int)(hist_num - 1));
+                    if (hist_cmd) {
+                        size_t hist_len = strlen(hist_cmd);
+                        while (result_len + hist_len + 1 > result_capacity) {
+                            result_capacity *= 2;
+                            char *new_result = realloc(result, result_capacity);
+                            if (!new_result) { free(result); return NULL; }
+                            result = new_result;
+                        }
+                        strcat(result, hist_cmd);
+                        result_len += hist_len;
+                    }
+                } else {
+                    /* Invalid history number - append as-is */
+                    size_t seg_len = (size_t)(endptr - bang);
+                    while (result_len + seg_len + 1 > result_capacity) {
+                        result_capacity *= 2;
+                        char *new_result = realloc(result, result_capacity);
+                        if (!new_result) { free(result); return NULL; }
+                        result = new_result;
+                    }
+                    strncat(result, bang, seg_len);
+                    result_len += seg_len;
+                }
+                src = endptr;
+                continue;
+            }
+
+            /* Case 3: !prefix (search last command starting with prefix) */
+            if (isalpha(*src)) {
+                const char *start = src;
+                while (*src && (isalnum(*src) || *src == '_' || *src == '-' || *src == '/')) src++;
+                size_t pref_len = (size_t)(src - start);
+                char tmp[256];
+                if (pref_len >= sizeof(tmp)) pref_len = sizeof(tmp) - 1;
+                strncpy(tmp, start, pref_len);
+                tmp[pref_len] = '\0';
+                int idx = history_search_last_index(tmp);
+                if (idx >= 0) {
+                    char *hist_cmd = get_history_entry(idx);
                     size_t hist_len = strlen(hist_cmd);
-
-                    /* Ensure we have enough space */
                     while (result_len + hist_len + 1 > result_capacity) {
                         result_capacity *= 2;
                         char *new_result = realloc(result, result_capacity);
-                        if (!new_result) {
-                            free(result);
-                            return NULL;
-                        }
+                        if (!new_result) { free(result); return NULL; }
                         result = new_result;
                     }
-
-                    /* Append the history command */
                     strcat(result, hist_cmd);
                     result_len += hist_len;
-                }
-            } else {
-                /* Invalid history number - append as-is */
-                char temp[32];
-                snprintf(temp, sizeof(temp), "!%ld", hist_num);
-                size_t temp_len = strlen(temp);
-
-                /* Ensure we have enough space */
-                while (result_len + temp_len + 1 > result_capacity) {
-                    result_capacity *= 2;
-                    char *new_result = realloc(result, result_capacity);
-                    if (!new_result) {
-                        free(result);
-                        return NULL;
+                } else {
+                    /* No match - append original */
+                    size_t seg_len = (size_t)(src - bang);
+                    while (result_len + seg_len + 1 > result_capacity) {
+                        result_capacity *= 2;
+                        char *new_result = realloc(result, result_capacity);
+                        if (!new_result) { free(result); return NULL; }
+                        result = new_result;
                     }
-                    result = new_result;
+                    strncat(result, bang, seg_len);
+                    result_len += seg_len;
                 }
-
-                strcat(result, temp);
-                result_len += temp_len;
+                continue;
             }
-
-            /* Move source pointer past the number */
-            src = endptr;
-        } else {
-            /* Regular character - copy it */
-            /* Ensure we have enough space */
-            if (result_len + 2 > result_capacity) {
-                result_capacity *= 2;
-                char *new_result = realloc(result, result_capacity);
-                if (!new_result) {
-                    free(result);
-                    return NULL;
-                }
-                result = new_result;
-            }
-
-            result[result_len] = *src;
-            result[result_len + 1] = '\0';
-            result_len++;
-            src++;
         }
+
+        /* Append regular character */
+        if (result_len + 2 > result_capacity) {
+            result_capacity *= 2;
+            char *new_result = realloc(result, result_capacity);
+            if (!new_result) { free(result); return NULL; }
+            result = new_result;
+        }
+        result[result_len++] = *src++;
+        result[result_len] = '\0';
     }
 
     return result;

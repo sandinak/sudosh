@@ -22,6 +22,46 @@ char *target_user = NULL;
 #include <pwd.h>
 #include <termios.h>
 
+
+/* Alias completion helper types and prototype */
+typedef struct alias_collect_ctx { char ***matchesp; int *countp; int *capacityp; } alias_collect_ctx_t;
+static int alias_collect_cb(const char *name, void *vctx);
+
+/* Callback to collect alias names into completion matches (file-scope) */
+static int alias_collect_cb(const char *name, void *vctx) {
+    alias_collect_ctx_t *ctx = (alias_collect_ctx_t *)vctx;
+    char **matches = *(ctx->matchesp);
+    int match_count = *(ctx->countp);
+    int match_capacity = *(ctx->capacityp);
+
+    /* Check duplicates */
+    for (int j = 0; j < match_count; j++) {
+        if (strcmp(matches[j], name) == 0) return 0;
+    }
+
+    /* Expand capacity if needed */
+    if (match_count >= match_capacity - 1) {
+        int new_capacity = match_capacity * 2;
+        char **new_matches = realloc(matches, new_capacity * sizeof(char *));
+        if (!new_matches) return 1; /* stop on allocation failure */
+        matches = new_matches;
+        *(ctx->matchesp) = matches;
+        *(ctx->capacityp) = new_capacity;
+    }
+
+    matches[match_count] = strdup(name);
+    if (matches[match_count]) {
+        match_count++;
+        *(ctx->countp) = match_count;
+    }
+    return 0;
+}
+
+/* Track last exit status for prompt; defined here for utils (UI layer) */
+int last_exit_status = 0;
+
+
+
 /**
  * Get user information by username
  */
@@ -503,6 +543,8 @@ static void init_global_color_config(void) {
 
 /**
  * Print the sudosh prompt with current working directory and colors
+ * Supports optional formatting via SUDOSH_PROMPT_FORMAT using tokens:
+ *  %u username, %h hostname, %w cwd, %? last exit status, %# prompt marker (##)
  */
 static void print_prompt(void) {
     char *cwd = get_prompt_cwd();
@@ -523,28 +565,69 @@ static void print_prompt(void) {
         short_hostname = hostname;
     }
 
-    /* Print colored prompt */
-    if (global_color_config && global_color_config->colors_enabled) {
-        if (target_user) {
-            printf("%s%s%s@%s%s%s:%s%s%s%s## %s",
-                   global_color_config->username_color, target_user, global_color_config->reset_color,
-                   global_color_config->hostname_color, short_hostname, global_color_config->reset_color,
-                   global_color_config->path_color, cwd, global_color_config->reset_color,
-                   global_color_config->prompt_color, global_color_config->reset_color);
-        } else {
-            printf("%s%s%s@%s%s%s:%s%s%s%s## %s",
-                   global_color_config->username_color, "root", global_color_config->reset_color,
-                   global_color_config->hostname_color, short_hostname, global_color_config->reset_color,
-                   global_color_config->path_color, cwd, global_color_config->reset_color,
-                   global_color_config->prompt_color, global_color_config->reset_color);
+    /* Resolve user component */
+    const char *user_component = target_user ? target_user : "root";
+
+    /* Optional prompt format */
+    const char *fmt = getenv("SUDOSH_PROMPT_FORMAT");
+    extern int last_exit_status;
+    if (fmt && fmt[0] != '\0') {
+        /* Build formatted prompt into a buffer */
+        char out[1024]; out[0] = '\0';
+        const char *p = fmt;
+        while (*p && strlen(out) < sizeof(out) - 4) {
+            if (*p == '%' && *(p+1)) {
+                p++;
+                char temp[512]; temp[0] = '\0';
+                switch (*p) {
+                    case 'u': strncat(out, user_component, sizeof(out)-strlen(out)-1); break;
+                    case 'h': strncat(out, short_hostname, sizeof(out)-strlen(out)-1); break;
+                    case 'w': strncat(out, cwd, sizeof(out)-strlen(out)-1); break;
+                    case '?': {
+                        char num[16]; snprintf(num, sizeof(num), "%d", last_exit_status);
+                        strncat(out, num, sizeof(out)-strlen(out)-1);
+                        break;
+                    }
+                    case '#': strncat(out, "##", sizeof(out)-strlen(out)-1); break;
+                    case '%': strncat(out, "%", sizeof(out)-strlen(out)-1); break;
+                    default: /* unknown token, include literally */
+                        strncat(out, "%", sizeof(out)-strlen(out)-1);
+                        char cstr[2] = {*p, '\0'}; strncat(out, cstr, sizeof(out)-strlen(out)-1);
+                }
+                p++;
+                continue;
+            }
+            char c[2] = {*p++, '\0'}; strncat(out, c, sizeof(out)-strlen(out)-1);
         }
+        /* Apply colors if enabled: colorize user@host:path then append space */
+        if (global_color_config && global_color_config->colors_enabled) {
+            /* Simple approach: print without embedding color inside tokens */
+            printf("%s%s%s@%s%s%s:%s%s%s%s ",
+                   global_color_config->username_color, user_component, global_color_config->reset_color,
+                   global_color_config->hostname_color, short_hostname, global_color_config->reset_color,
+                   global_color_config->path_color, cwd, global_color_config->reset_color,
+                   global_color_config->prompt_color);
+            /* Then print the formatted tail (which may include %# etc.) */
+            printf("%s", out);
+            printf(" %s", global_color_config->reset_color);
+        } else {
+            printf("%s@%s:%s %s ", user_component, short_hostname, cwd, out);
+        }
+        free(cwd);
+        fflush(stdout);
+        return;
+    }
+
+    /* Default colored prompt */
+    if (global_color_config && global_color_config->colors_enabled) {
+        printf("%s%s%s@%s%s%s:%s%s%s%s## %s",
+               global_color_config->username_color, user_component, global_color_config->reset_color,
+               global_color_config->hostname_color, short_hostname, global_color_config->reset_color,
+               global_color_config->path_color, cwd, global_color_config->reset_color,
+               global_color_config->prompt_color, global_color_config->reset_color);
     } else {
         /* Fallback to non-colored prompt */
-        if (target_user) {
-            printf("%s@%s:%s## ", target_user, short_hostname, cwd);
-        } else {
-            printf("root@%s:%s## ", short_hostname, cwd);
-        }
+        printf("%s@%s:%s## ", user_component, short_hostname, cwd);
     }
 
     free(cwd);
@@ -1502,7 +1585,7 @@ int is_whitespace_only(const char *str) {
  */
 char *safe_strdup(const char *str) {
     char *copy;
-    
+
     if (!str) {
         return NULL;
     }
@@ -1760,6 +1843,12 @@ char **complete_command(const char *text) {
         }
     }
 
+    /* Also include alias names matching the prefix */
+    /* Use a small context struct to carry state into the callback */
+    struct alias_collect_ctx { char ***matchesp; int *countp; int *capacityp; } acc = { &matches, &match_count, &match_capacity };
+    /* Callback defined at file scope */
+    alias_iterate_names_with_prefix(text, alias_collect_cb, &acc);
+
     /* Null-terminate the matches array */
     matches[match_count] = NULL;
 
@@ -1807,6 +1896,8 @@ char *find_completion_start(const char *buffer, int pos) {
     if (!prefix) {
         return NULL;
     }
+
+
 
     strncpy(prefix, buffer + start, prefix_len);
     prefix[prefix_len] = '\0';

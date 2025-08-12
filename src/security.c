@@ -1093,11 +1093,15 @@ int validate_command_with_length(const char *command, size_t buffer_len) {
         return 0;
     }
 
-    /* Reject control characters (newline, tab, carriage return, etc.) */
+    /* Reject control characters (newline, tab, carriage return, etc.) and non-ASCII bytes */
     for (size_t i = 0; i < cmd_len; i++) {
         unsigned char c = (unsigned char)command[i];
         if (c < 0x20) {
             log_security_violation(current_username, "control character detected in command");
+            return 0;
+        }
+        if (c >= 0x80) {
+            log_security_violation(current_username, "non-ASCII byte detected in command");
             return 0;
         }
     }
@@ -1146,6 +1150,7 @@ int validate_command_with_length(const char *command, size_t buffer_len) {
     int is_ls = (strncmp(trim, "ls", 2) == 0) && (trim[2] == '\0' || trim[2] == ' ');
     int is_whoami = (strncmp(trim, "whoami", 6) == 0) && (trim[6] == '\0' || trim[6] == ' ');
     int is_date = (strncmp(trim, "date", 4) == 0) && (trim[4] == '\0' || trim[4] == ' ');
+    int is_printenv = (strncmp(trim, "printenv", 8) == 0) && (trim[8] == '\0' || trim[8] == ' ');
 
     /* Block any percent usage (format specifiers or encoded sequences) */
     if (strchr(command, '%')) {
@@ -1153,10 +1158,12 @@ int validate_command_with_length(const char *command, size_t buffer_len) {
         return 0;
     }
 
-    /* Block any environment expansion */
+    /* Block any environment expansion, except allow with printenv */
     if (strchr(command, '$')) {
-        log_security_violation(current_username, "environment expansion detected in command");
-        return 0;
+        if (!is_printenv) {
+            log_security_violation(current_username, "environment expansion detected in command");
+            return 0;
+        }
     }
 
     /* Disallow dangerous quoting/backslash; allow quotes/backslash in simple echo usage */
@@ -1165,16 +1172,14 @@ int validate_command_with_length(const char *command, size_t buffer_len) {
         return 0;
     }
 
-    /* Block environment manipulation invocations */
+    /* Block environment manipulation invocations; explicitly allow printenv */
     if (strncmp(trim, "env", 3) == 0 && (trim[3] == '\0' || trim[3] == ' ')) {
         log_security_violation(current_username, "env command blocked");
         return 0;
     }
     if (strncmp(trim, "printenv", 8) == 0 && (trim[8] == '\0' || trim[8] == ' ')) {
-        log_security_violation(current_username, "printenv command blocked");
-        return 0;
-    }
-    if (strncmp(trim, "export", 6) == 0 && (trim[6] == '\0' || trim[6] == ' ')) {
+        /* Allow printenv to proceed */
+    } else if (strncmp(trim, "export", 6) == 0 && (trim[6] == '\0' || trim[6] == ' ')) {
         log_security_violation(current_username, "export command blocked");
         return 0;
     }
@@ -1216,12 +1221,20 @@ int validate_command_with_length(const char *command, size_t buffer_len) {
     /* Block any pipeline usage */
     if (strchr(command, '|')) {
         log_security_violation(current_username, "pipeline usage blocked for security reasons");
+        /* Enhanced user guidance for pipes */
+        fprintf(stderr, "sudosh: pipes (|) are blocked for security reasons\n");
+        fprintf(stderr, "sudosh: pipelines can chain commands and bypass security controls\n");
+        fprintf(stderr, "sudosh: run commands individually to ensure proper auditing\n");
         return 0;
     }
 
     /* Check for redirection operators */
     if (strchr(command, '>') || strchr(command, '<')) {
         log_security_violation(current_username, "file redirection blocked for security reasons");
+        /* Enhanced user guidance for I/O redirection */
+        fprintf(stderr, "sudosh: I/O redirection is blocked for security reasons\n");
+        fprintf(stderr, "sudosh: redirection could overwrite critical system files\n");
+        fprintf(stderr, "sudosh: it may be used to bypass file permissions\n");
         return 0;
     }
 

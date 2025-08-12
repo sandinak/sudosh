@@ -208,6 +208,30 @@ sudo journalctl -u sudo -f
 sudo tail -f /var/log/auth.log        # Debian/Ubuntu
 sudo tail -f /var/log/secure          # RHEL/CentOS/Fedora
 
+### Command-Line Options Update
+
+```text
+Usage: sudosh [options] [command [args...]]
+
+Options:
+  -h, --help              Show help message
+      --version           Show version information
+      --build-info        Show detailed build information (version, git, date, user)
+  -v, --verbose           Enable verbose output
+  -l, --list              List available commands showing each permission source separately
+  -L, --log-session FILE  Log entire session to FILE
+  -u, --user USER         Run commands as target USER
+  -c, --command COMMAND   Execute COMMAND and exit (like sudo -c)
+      --ansible-detect    Enable Ansible session detection (default)
+      --no-ansible-detect Disable Ansible session detection
+      --ansible-force     Force Ansible session mode
+      --ansible-verbose   Enable verbose Ansible detection output
+```
+
+### Environment Inspection
+- Use `printenv` to safely inspect environment variables (e.g., `printenv PATH`).
+- For security reasons, `env` and `export` modifications are restricted to a whitelist and may be rejected by validation.
+
 # Search for specific user
 sudo grep "username" /var/log/auth.log
 ```

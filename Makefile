@@ -11,6 +11,13 @@ CFLAGS = -Wall -Wextra -std=c99 -O2
 PREFIX = /usr/local
 BINDIR_INSTALL = $(PREFIX)/bin
 MANDIR = $(PREFIX)/share/man/man1
+# Build-time version (override with: make VERSION=x.y.z)
+VERSION ?= $(shell git describe --tags --always 2>/dev/null || echo 1.9.4)
+CFLAGS += -DSUDOSH_VERSION=\"$(VERSION)\"
+# Provide build-info via environment variables passed by CI or set here
+export SUDOSH_BUILD_GIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
+export SUDOSH_BUILD_DATE ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
+export SUDOSH_BUILD_USER ?= $(shell whoami)
 
 # Detect OS and set appropriate flags
 UNAME_S := $(shell uname -s)
@@ -228,7 +235,7 @@ integration-test: tests
 
 # Generate manpage
 sudosh.1: $(SRCDIR)/sudosh.1.in
-	sed 's/@VERSION@/$(shell grep SUDOSH_VERSION $(SRCDIR)/sudosh.h | cut -d'"' -f2)/g' $(SRCDIR)/sudosh.1.in > sudosh.1
+	sed 's/@VERSION@/$(VERSION)/g' $(SRCDIR)/sudosh.1.in > sudosh.1
 
 # Install target (requires root privileges unless DESTDIR is set for packaging)
 install: $(TARGET) sudosh.1

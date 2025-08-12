@@ -274,6 +274,26 @@ void print_aliases(void) {
     }
 }
 
+/* Iterate alias names matching a prefix; returns count found */
+int alias_iterate_names_with_prefix(const char *prefix, int (*cb)(const char *name, void *), void *ctx) {
+    if (!alias_system_initialized) {
+        init_alias_system();
+    }
+    if (!cb) return 0;
+    int count = 0;
+    size_t plen = prefix ? strlen(prefix) : 0;
+    for (struct alias_entry *cur = alias_list; cur; cur = cur->next) {
+        if (!prefix || strncmp(cur->name, prefix, plen) == 0) {
+            if (cb(cur->name, ctx)) {
+                /* callback can signal to stop early by returning non-zero */
+                return count;
+            }
+            count++;
+        }
+    }
+    return count;
+}
+
 /**
  * Load aliases from file
  */
