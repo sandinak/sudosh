@@ -1164,6 +1164,7 @@ int validate_command_with_length(const char *command, size_t buffer_len) {
             log_security_violation(current_username, "environment expansion detected in command");
             return 0;
         }
+
     }
 
     /* Disallow dangerous quoting/backslash; allow quotes/backslash in simple echo usage */
