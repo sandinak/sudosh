@@ -222,7 +222,7 @@ run_smoke_test() {
     cat > "$temp_test" << 'EOF'
 #include <stdio.h>
 #include <string.h>
-#include "../src/sudosh.h"
+#include "sudosh.h"
 
 int main() {
     // Basic smoke tests
