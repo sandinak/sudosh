@@ -197,3 +197,5 @@ ansible_plugins/**/__pycache__/
 
 # Allow committed C regression test driver for pipeline tests
 !tests/test_pipeline_regression.c
+!tests/support/test_globals.c
+
