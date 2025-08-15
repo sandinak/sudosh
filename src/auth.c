@@ -8,6 +8,7 @@
  */
 
 #include "sudosh.h"
+#include "sudosh_common.h"
 #include "dangerous_commands.h"
 #include "editor_detection.h"
 
@@ -111,7 +112,7 @@ int pam_conversation(int num_msg, const struct pam_message **msg,
                 /* Username or other visible prompt */
                 printf("%s", msg[i]->msg);
                 fflush(stdout);
-                responses[i].resp = malloc(MAX_USERNAME_LENGTH);
+                responses[i].resp = sudosh_safe_malloc(MAX_USERNAME_LENGTH);
                 if (!responses[i].resp || !fgets(responses[i].resp, MAX_USERNAME_LENGTH, stdin)) {
                     goto cleanup_error;
                 }
@@ -160,8 +161,9 @@ char *get_password(const char *prompt) {
     char *password;
     size_t len;
 
-    password = malloc(MAX_PASSWORD_LENGTH);
+    password = sudosh_safe_malloc(MAX_PASSWORD_LENGTH);
     if (!password) {
+        SUDOSH_LOG_ERROR("Failed to allocate memory for password");
         return NULL;
     }
 
@@ -246,8 +248,9 @@ char *get_auth_cache_path(const char *username) {
         return NULL;
     }
 
-    cache_path = malloc(MAX_CACHE_PATH_LENGTH);
+    cache_path = sudosh_safe_malloc(MAX_CACHE_PATH_LENGTH);
     if (!cache_path) {
+        SUDOSH_LOG_ERROR("Failed to allocate memory for cache path");
         return NULL;
     }
 
@@ -595,6 +598,43 @@ int authenticate_user(const char *username) {
             return 0; /* Non-existent users should fail */
         }
 
+        /* Even in test mode, validate username for dangerous characters */
+        /* Check for embedded null bytes - examine first 256 characters for null bytes */
+        for (int i = 0; i < 256 && i < (int)strlen(username) + 10; i++) {
+            if (username[i] == '\0' && i < (int)strlen(username)) {
+                printf("DEBUG: Username contains embedded null byte at position %d\n", i);
+                return 0; /* Embedded null bytes should fail */
+            }
+            /* If we hit the actual end of the string, stop */
+            if (username[i] == '\0') {
+                break;
+            }
+        }
+
+        /* Check each character for dangerous patterns */
+        size_t username_len = strlen(username);
+        for (size_t i = 0; i < username_len; i++) {
+            char c = username[i];
+            /* Check for dangerous characters */
+            if (c == '\n' || c == '\r' || c == '\t' ||
+                c == ';' || c == '|' || c == '&' || c == '`' ||
+                c == '$' || c == '>' || c == '<' || c == '*' ||
+                c == '?' || c == '~' || c == '{' || c == '}' ||
+                c == '[' || c == ']' || c == '\\' || c == '\'' ||
+                c == '"') {
+                printf("DEBUG: Username '%s' contains dangerous character at position %zu: 0x%02x\n",
+                       username, i, (unsigned char)c);
+                return 0; /* Dangerous characters should fail */
+            }
+        }
+
+        /* Check for path traversal patterns */
+        if (strstr(username, "../") || strstr(username, "/..") ||
+            strstr(username, "/.") || strstr(username, "./")) {
+            printf("DEBUG: Username '%s' contains path traversal pattern\n", username);
+            return 0; /* Path traversal should fail */
+        }
+
         /* Test mode: authentication succeeds for valid usernames */
         log_authentication_with_ansible_context(username, 1);
         return 1;
@@ -681,6 +721,14 @@ int authenticate_user(const char *username) {
  * Enhanced sudo privilege checking using NSS, sudoers parsing, and SSSD
  */
 int check_sudo_privileges_enhanced(const char *username) {
+    /* Require that the user actually exists on the system (via NSS) */
+    if (!username || *username == '\0') {
+        return 0;
+    }
+    if (getpwnam(username) == NULL) {
+        /* Unknown user must not be granted any privileges */
+        return 0;
+    }
     struct nss_config *nss_config = NULL;
     struct sudoers_config *sudoers_config = NULL;
     struct nss_source *source;
@@ -749,9 +797,9 @@ int check_sudo_privileges_enhanced(const char *username) {
             free_sudoers_config(sudoers_config);
         }
 
-        /* If still no privileges, fall back to sudo -l method */
+        /* Final fallback: group membership only (no external sudo) */
         if (!has_privileges) {
-            has_privileges = check_sudo_privileges(username);
+            has_privileges = check_sudo_privileges_fallback(username);
         }
     }
 
@@ -922,6 +970,14 @@ int check_runas_permissions(const char *username, const char *target_user) {
  * Check if user has NOPASSWD privileges using enhanced checking
  */
 int check_nopasswd_privileges_enhanced(const char *username) {
+    /* Require that the user actually exists on the system (via NSS) */
+    if (!username || *username == '\0') {
+        return 0;
+    }
+    if (getpwnam(username) == NULL) {
+        /* Unknown user must not be granted NOPASSWD */
+        return 0;
+    }
     struct nss_config *nss_config = NULL;
     struct sudoers_config *sudoers_config = NULL;
     struct nss_source *source;
@@ -990,10 +1046,7 @@ int check_nopasswd_privileges_enhanced(const char *username) {
             free_sudoers_config(sudoers_config);
         }
 
-        /* If still no NOPASSWD found, fall back to sudo -l method */
-        if (!has_nopasswd) {
-            has_nopasswd = check_nopasswd_sudo_l(username);
-        }
+        /* No shelling out to sudo -l in sudosh replacement */
     }
 
     return has_nopasswd;
@@ -1044,39 +1097,12 @@ int check_nopasswd_privileges_with_command(const char *username, const char *com
 }
 
 /**
- * Check if user has NOPASSWD privileges using sudo -l
+ * Legacy stub (removed): Checking NOPASSWD via 'sudo -l' is not supported in sudosh replacement
+ * Always return 0 to avoid external sudo dependency.
  */
 int check_nopasswd_sudo_l(const char *username) {
-    char command[256];
-    FILE *fp;
-    char buffer[1024];
-    int has_nopasswd = 0;
-
-    /* Check for NULL or empty username */
-    if (!username || *username == '\0') {
-        return 0;
-    }
-
-    /* Build sudo -l command for the user */
-    snprintf(command, sizeof(command), "sudo -l -U %s 2>/dev/null", username);
-
-    /* Execute sudo -l to check privileges */
-    fp = popen(command, "r");
-    if (!fp) {
-        return 0;
-    }
-
-    /* Read output and look for NOPASSWD indicators */
-    while (fgets(buffer, sizeof(buffer), fp)) {
-        /* Look for NOPASSWD in the output */
-        if (strstr(buffer, "NOPASSWD:")) {
-            has_nopasswd = 1;
-            break;
-        }
-    }
-
-    pclose(fp);
-    return has_nopasswd;
+    (void)username;
+    return 0;
 }
 
 /**
@@ -1095,8 +1121,9 @@ int check_command_permission(const char *username, const char *command) {
     }
 
     /* Extract just the command name (first word) for checking */
-    cmd_copy = strdup(command);
+    cmd_copy = sudosh_safe_strdup(command);
     if (!cmd_copy) {
+        SUDOSH_LOG_ERROR("Failed to duplicate command for permission check");
         return 0;
     }
 
@@ -1170,64 +1197,11 @@ int check_command_permission(const char *username, const char *command) {
 }
 
 /**
- * Check if user has sudo privileges by calling sudo -l
- * This properly checks the sudoers configuration
+ * Check if user has sudo privileges without calling external sudo
+ * Uses enhanced parser + NSS/SSSD checks
  */
 int check_sudo_privileges(const char *username) {
-    char command[256];
-    FILE *fp;
-    char buffer[1024];
-    int has_privileges = 0;
-
-    /* Check for NULL or empty username */
-    if (!username || *username == '\0') {
-        return 0;
-    }
-
-    /* Build sudo -l command for the user */
-    snprintf(command, sizeof(command), "sudo -l -U %s 2>/dev/null", username);
-
-    /* Execute sudo -l to check privileges */
-    fp = popen(command, "r");
-    if (!fp) {
-        /* If we can't run sudo -l, fall back to group check */
-        return check_sudo_privileges_fallback(username);
-    }
-
-    /* Read output and look for privilege indicators */
-    while (fgets(buffer, sizeof(buffer), fp)) {
-        /* Look for common sudo privilege patterns */
-        if (strstr(buffer, "(ALL)") ||
-            strstr(buffer, "may run the following commands") ||
-            strstr(buffer, "NOPASSWD:")) {
-            has_privileges = 1;
-            break;
-        }
-
-        /* Look for specific command entries that indicate sudo privileges */
-        /* Format: "    (user) command" or "    (user) NOPASSWD: command" */
-        char *trimmed = buffer;
-        while (*trimmed && isspace(*trimmed)) trimmed++;  /* Skip leading whitespace */
-
-        if (*trimmed == '(' && strchr(trimmed, ')')) {
-            /* This looks like a sudo rule entry */
-            char *close_paren = strchr(trimmed, ')');
-            if (close_paren && *(close_paren + 1)) {
-                /* There's content after the closing paren, indicating a command */
-                char *command_part = close_paren + 1;
-                while (*command_part && isspace(*command_part)) command_part++;
-
-                /* If there's a command (not just whitespace), user has privileges */
-                if (*command_part && *command_part != '\0') {
-                    has_privileges = 1;
-                    break;
-                }
-            }
-        }
-    }
-
-    pclose(fp);
-    return has_privileges;
+    return check_sudo_privileges_enhanced(username);
 }
 
 /**

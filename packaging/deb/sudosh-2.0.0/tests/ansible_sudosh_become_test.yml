@@ -1,0 +1,227 @@
+---
+# Ansible Test Playbook for Sudosh Become Method
+# This playbook tests sudosh as an Ansible become method
+
+- name: Test Sudosh as Ansible Become Method
+  hosts: localhost
+  connection: local
+  gather_facts: yes
+  vars:
+    sudosh_binary: "{{ playbook_dir }}/../bin/sudosh"
+    test_results_dir: "{{ playbook_dir }}/test_results"
+    
+  tasks:
+    - name: Create test results directory
+      file:
+        path: "{{ test_results_dir }}"
+        state: directory
+        mode: '0755'
+    
+    - name: Check if sudosh binary exists
+      stat:
+        path: "{{ sudosh_binary }}"
+      register: sudosh_stat
+      
+    - name: Fail if sudosh binary doesn't exist
+      fail:
+        msg: "Sudosh binary not found at {{ sudosh_binary }}. Please run 'make' first."
+      when: not sudosh_stat.stat.exists or not sudosh_stat.stat.executable
+
+    - name: Test 1 - Standard sudo become method (baseline)
+      command: whoami
+      become: yes
+      become_method: sudo
+      become_user: root
+      register: sudo_whoami
+      
+    - name: Display sudo result
+      debug:
+        msg: "Standard sudo result: {{ sudo_whoami.stdout }}"
+
+    - name: Test 2 - Sudosh become method with environment detection
+      command: whoami
+      become: yes
+      become_method: sudosh
+      become_user: root
+      environment:
+        ANSIBLE_BECOME_METHOD: sudosh
+        ANSIBLE_MODULE_NAME: command
+        ANSIBLE_TASK_UUID: "{{ ansible_run_tags | default('test-task') }}"
+      register: sudosh_whoami
+      vars:
+        ansible_become_plugins: "{{ playbook_dir }}/../ansible_plugins/become"
+        
+    - name: Display sudosh result
+      debug:
+        msg: "Sudosh become result: {{ sudosh_whoami.stdout }}"
+
+    - name: Test 3 - Sudosh with verbose detection
+      command: id
+      become: yes
+      become_method: sudosh
+      become_user: root
+      environment:
+        ANSIBLE_BECOME_METHOD: sudosh
+        ANSIBLE_MODULE_NAME: command
+        ANSIBLE_PLAYBOOK_DIR: "{{ playbook_dir }}"
+        ANSIBLE_CONFIG: "{{ playbook_dir }}/../ansible_plugins/ansible.cfg"
+      register: sudosh_id
+      vars:
+        ansible_become_plugins: "{{ playbook_dir }}/../ansible_plugins/become"
+        ansible_sudosh_detection_verbose: true
+        
+    - name: Display sudosh id result
+      debug:
+        msg: "Sudosh id result: {{ sudosh_id.stdout }}"
+
+    - name: Test 4 - File operations with sudosh
+      file:
+        path: "{{ test_results_dir }}/sudosh_test_file"
+        state: touch
+        mode: '0644'
+        owner: root
+        group: root
+      become: yes
+      become_method: sudosh
+      become_user: root
+      environment:
+        ANSIBLE_BECOME_METHOD: sudosh
+        ANSIBLE_MODULE_NAME: file
+      vars:
+        ansible_become_plugins: "{{ playbook_dir }}/../ansible_plugins/become"
+      register: sudosh_file
+      
+    - name: Verify file was created
+      stat:
+        path: "{{ test_results_dir }}/sudosh_test_file"
+      register: test_file_stat
+      
+    - name: Display file creation result
+      debug:
+        msg: "File created successfully: {{ test_file_stat.stat.exists }}, Owner: {{ test_file_stat.stat.pw_name | default('unknown') }}"
+
+    - name: Test 5 - Package operations with sudosh (if applicable)
+      package:
+        name: curl
+        state: present
+      become: yes
+      become_method: sudosh
+      become_user: root
+      environment:
+        ANSIBLE_BECOME_METHOD: sudosh
+        ANSIBLE_MODULE_NAME: package
+      vars:
+        ansible_become_plugins: "{{ playbook_dir }}/../ansible_plugins/become"
+      register: sudosh_package
+      ignore_errors: yes
+      
+    - name: Display package result
+      debug:
+        msg: "Package operation result: {{ sudosh_package.changed | default('failed') }}"
+      when: sudosh_package is defined
+
+    - name: Test 6 - Service operations with sudosh
+      service:
+        name: sshd
+        state: started
+      become: yes
+      become_method: sudosh
+      become_user: root
+      environment:
+        ANSIBLE_BECOME_METHOD: sudosh
+        ANSIBLE_MODULE_NAME: service
+      vars:
+        ansible_become_plugins: "{{ playbook_dir }}/../ansible_plugins/become"
+      register: sudosh_service
+      ignore_errors: yes
+      
+    - name: Display service result
+      debug:
+        msg: "Service operation result: {{ sudosh_service.changed | default('failed') }}"
+      when: sudosh_service is defined
+
+    - name: Test 7 - Check system logs for sudosh detection
+      shell: |
+        # Check for recent sudosh log entries with become method detection
+        journalctl --since "5 minutes ago" | grep -i "sudosh.*become\|become.*sudosh\|ANSIBLE_BECOME_METHOD" | tail -10 || echo "No sudosh become method log entries found"
+      register: become_log_entries
+      become: yes
+      become_method: sudo  # Use sudo for log checking
+      ignore_errors: yes
+      
+    - name: Display become method log entries
+      debug:
+        var: become_log_entries.stdout_lines
+
+    - name: Test 8 - Environment variable verification
+      shell: |
+        echo "Current environment variables related to Ansible:"
+        env | grep -i ansible | sort || echo "No Ansible environment variables found"
+      become: yes
+      become_method: sudosh
+      become_user: root
+      environment:
+        ANSIBLE_BECOME_METHOD: sudosh
+        ANSIBLE_MODULE_NAME: shell
+        ANSIBLE_PLAYBOOK_DIR: "{{ playbook_dir }}"
+        ANSIBLE_INVENTORY: "localhost,"
+        ANSIBLE_CONFIG: "{{ playbook_dir }}/../ansible_plugins/ansible.cfg"
+      vars:
+        ansible_become_plugins: "{{ playbook_dir }}/../ansible_plugins/become"
+      register: env_check
+      
+    - name: Display environment check
+      debug:
+        var: env_check.stdout_lines
+
+    - name: Save comprehensive test results
+      copy:
+        content: |
+          Sudosh Become Method Test Results
+          =================================
+          
+          Test Date: {{ ansible_date_time.iso8601 }}
+          Sudosh Binary: {{ sudosh_binary }}
+          Playbook Directory: {{ playbook_dir }}
+          
+          Test Results Summary:
+          
+          1. Standard sudo whoami: {{ sudo_whoami.stdout }}
+          2. Sudosh become whoami: {{ sudosh_whoami.stdout }}
+          3. Sudosh become id: {{ sudosh_id.stdout }}
+          4. File creation: {{ test_file_stat.stat.exists }}
+          5. Package operation: {{ sudosh_package.changed | default('failed') }}
+          6. Service operation: {{ sudosh_service.changed | default('failed') }}
+          
+          Environment Variables Detected:
+          {{ env_check.stdout }}
+          
+          System Log Entries:
+          {{ become_log_entries.stdout }}
+          
+          Test Status: {% if sudo_whoami.stdout == sudosh_whoami.stdout %}SUCCESS{% else %}FAILED{% endif %}
+          
+          Notes:
+          - Sudosh become method should produce same results as sudo
+          - Additional logging and detection should be visible in system logs
+          - Environment variables should show Ansible context
+          
+        dest: "{{ test_results_dir }}/sudosh_become_test_results.txt"
+        mode: '0644'
+        
+    - name: Final test summary
+      debug:
+        msg: |
+          Sudosh Become Method Testing Complete!
+          
+          Key Results:
+          - Standard sudo user: {{ sudo_whoami.stdout }}
+          - Sudosh become user: {{ sudosh_whoami.stdout }}
+          - Test file created: {{ test_file_stat.stat.exists }}
+          - Results match: {% if sudo_whoami.stdout == sudosh_whoami.stdout %}YES{% else %}NO{% endif %}
+          
+          The sudosh become method {% if sudo_whoami.stdout == sudosh_whoami.stdout %}is working correctly{% else %}may have issues{% endif %}.
+          
+          Check the system logs and test results file for detailed information:
+          - Results: {{ test_results_dir }}/sudosh_become_test_results.txt
+          - Logs: journalctl | grep sudosh

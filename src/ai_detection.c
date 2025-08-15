@@ -8,11 +8,8 @@
  * Author: Branson Matheson <branson@sandsite.org>
  */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-#include <syslog.h>
+#include "sudosh.h"
+#include "sudosh_common.h"
 #include <time.h>
 #include <sys/types.h>
 
@@ -422,9 +419,9 @@ struct ai_detection_info *detect_ai_session(void) {
             info->should_block = 1;  /* Block very high confidence regardless */
         }
 
-        /* Set tool name based on what we found */
-        if (info->tool_type == AI_TOOL_NONE) {
-            info->tool_type = AI_TOOL_AUGMENT;  /* Default to Augment for process detection */
+        /* Set tool name based on what we found - only if tool_type was actually set by detection */
+        if (info->tool_type == AI_TOOL_NONE && process_confidence >= 85) {
+            info->tool_type = AI_TOOL_AUGMENT;  /* Default to Augment for high-confidence process detection */
         }
 
         switch (info->tool_type) {

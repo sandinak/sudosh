@@ -8,19 +8,20 @@
  */
 
 #include "sudosh.h"
+#include "sudosh_common.h"
 
+/* System includes */
 #include <ctype.h>
+#include <dirent.h>
+#include <errno.h>
+#include <limits.h>
+#include <pwd.h>
+#include <sys/ioctl.h>
+#include <sys/stat.h>
+#include <termios.h>
 
 /* Global target user for -u option */
 char *target_user = NULL;
-#include <dirent.h>
-#include <sys/stat.h>
-#include <limits.h>
-#include <sys/ioctl.h>
-#include <termios.h>
-#include <errno.h>
-#include <pwd.h>
-#include <termios.h>
 
 /**
  * Get user information by username
@@ -1124,12 +1125,12 @@ char *read_command(void) {
 
     /* Return a copy of the buffer */
     if (len > 0) {
-        line = malloc(len + 1);
+        line = sudosh_safe_malloc(len + 1);
         if (line) {
             strcpy(line, buffer);
         }
     } else {
-        line = malloc(1);
+        line = sudosh_safe_malloc(1);
         if (line) {
             line[0] = '\0';
         }
@@ -1146,8 +1147,9 @@ int validate_path_security(const char *path_env) {
         return 0; /* No PATH is a security issue */
     }
 
-    char *path_copy = strdup(path_env);
+    char *path_copy = sudosh_safe_strdup(path_env);
     if (!path_copy) {
+        SUDOSH_LOG_ERROR("Failed to duplicate PATH environment variable");
         return 0;
     }
 
@@ -1498,22 +1500,10 @@ int is_whitespace_only(const char *str) {
 }
 
 /**
- * Safe string copy
+ * Safe string copy (deprecated - use sudosh_safe_strdup instead)
  */
 char *safe_strdup(const char *str) {
-    char *copy;
-    
-    if (!str) {
-        return NULL;
-    }
-
-    copy = malloc(strlen(str) + 1);
-    if (!copy) {
-        return NULL;
-    }
-
-    strcpy(copy, str);
-    return copy;
+    return sudosh_safe_strdup(str);
 }
 
 /* Global terminal state for restoration */
@@ -1525,7 +1515,7 @@ static int terminal_state_saved = 0;
  */
 void save_terminal_state(void) {
     if (!terminal_state_saved && isatty(STDIN_FILENO)) {
-        saved_terminal_state = malloc(sizeof(struct termios));
+        saved_terminal_state = sudosh_safe_malloc(sizeof(struct termios));
         if (saved_terminal_state && tcgetattr(STDIN_FILENO, saved_terminal_state) == 0) {
             terminal_state_saved = 1;
         } else {
@@ -2152,14 +2142,29 @@ char **complete_path(const char *text, int start, int end, int executables_only,
     (void)start; /* Suppress unused parameter warning */
     (void)end;   /* Suppress unused parameter warning */
 
-    /* Check for = expansion first */
-    if (text && text[0] == '=') {
-        return complete_equals_expansion(text);
-    }
-
+    const char *working_text;
     char **matches = NULL;
     int match_count = 0;
     int match_capacity = 16;
+    char *expanded_text = NULL;
+
+    /* Handle NULL input */
+    if (!text) {
+        return NULL;
+    }
+
+    /* Handle empty input */
+    if (strlen(text) == 0) {
+        /* For empty input, use current directory */
+        working_text = "./";
+    } else {
+        working_text = text;
+    }
+
+    /* Check for = expansion first */
+    if (working_text[0] == '=') {
+        return complete_equals_expansion(working_text);
+    }
 
     /* Allocate initial matches array */
     matches = malloc(match_capacity * sizeof(char *));
@@ -2167,27 +2172,23 @@ char **complete_path(const char *text, int start, int end, int executables_only,
         return NULL;
     }
 
-    /* Handle tilde expansion for path completion */
-    char *expanded_text = NULL;
-    const char *working_text = text;
-
-    if (text && text[0] == '~') {
+    if (working_text && working_text[0] == '~') {
         /* Handle tilde expansion */
-        char *last_slash = strrchr(text, '/');
+        char *last_slash = strrchr(working_text, '/');
 
         if (!last_slash) {
             /* Just ~username - complete usernames */
             /* This handles both ~ and ~partial_username cases */
-            return complete_usernames(text);
+            return complete_usernames(working_text);
         } else {
             /* ~username/path - expand the tilde part and complete the path */
-            char *tilde_part = malloc(last_slash - text + 1);
+            char *tilde_part = malloc(last_slash - working_text + 1);
             if (!tilde_part) {
                 free(matches);
                 return NULL;
             }
-            strncpy(tilde_part, text, last_slash - text);
-            tilde_part[last_slash - text] = '\0';
+            strncpy(tilde_part, working_text, last_slash - working_text);
+            tilde_part[last_slash - working_text] = '\0';
 
             char *expanded_tilde = expand_tilde_path(tilde_part);
             free(tilde_part);
@@ -2195,7 +2196,7 @@ char **complete_path(const char *text, int start, int end, int executables_only,
             if (!expanded_tilde) {
                 /* Tilde expansion failed - try username completion for the tilde part */
                 free(matches);
-                return complete_usernames(text);
+                return complete_usernames(working_text);
             }
 
             /* Create the expanded text for completion */

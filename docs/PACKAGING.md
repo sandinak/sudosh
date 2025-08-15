@@ -64,7 +64,7 @@ make deb
 
 ### Build Source Tarball Only
 ```bash
-make packaging/sudosh-1.3.2.tar.gz
+make packaging/sudosh-2.0.0.tar.gz
 ```
 
 ## Package Contents
@@ -86,7 +86,7 @@ make packaging/sudosh-1.3.2.tar.gz
 
 ### RPM Package Information
 - **Name**: sudosh
-- **Version**: 1.3.2
+- **Version**: 2.0.0
 - **License**: MIT
 - **Dependencies**: pam
 - **Build Dependencies**: gcc, make, pam-devel
@@ -123,7 +123,7 @@ make packaging/sudosh-1.3.2.tar.gz
 ### RPM Package Testing
 ```bash
 # Install the package
-sudo rpm -ivh dist/sudosh-1.3.2-1.*.rpm
+sudo rpm -ivh dist/sudosh-2.0.0-1.*.rpm
 
 # Test functionality
 sudo sudosh
@@ -136,7 +136,7 @@ sudo rpm -e sudosh
 ### DEB Package Testing
 ```bash
 # Install the package
-sudo dpkg -i dist/sudosh_1.3.2-1_*.deb
+sudo dpkg -i dist/sudosh_2.0.0-1_*.deb
 
 # Fix any dependency issues
 sudo apt-get install -f
@@ -154,19 +154,19 @@ sudo apt remove sudosh
 ### Verify Package Contents
 ```bash
 # RPM package
-rpm -qlp dist/sudosh-1.3.2-1.*.rpm
+rpm -qlp dist/sudosh-2.0.0-1.*.rpm
 
 # DEB package
-dpkg-deb -c dist/sudosh_1.3.2-1_*.deb
+dpkg-deb -c dist/sudosh_2.0.0-1_*.deb
 ```
 
 ### Verify Package Dependencies
 ```bash
 # RPM package
-rpm -qRp dist/sudosh-1.3.2-1.*.rpm
+rpm -qRp dist/sudosh-2.0.0-1.*.rpm
 
 # DEB package
-dpkg-deb -I dist/sudosh_1.3.2-1_*.deb
+dpkg-deb -I dist/sudosh_2.0.0-1_*.deb
 ```
 
 ## Customization

@@ -46,10 +46,26 @@ mkdir -p /var/run/sudosh
 chmod 700 /var/run/sudosh
 chown root:root /var/run/sudosh
 
+echo "sudosh installed successfully"
+echo "To install sudosh as a sudo replacement, run:"
+echo "  sudo make install-sudo-replacement"
+echo ""
+echo "This will safely backup your original sudo to sudo.orig"
+
 %postun
-# Clean up cache directory on removal
+# Check if sudo is actually sudosh and restore if needed
 if [ $1 -eq 0 ]; then
+    if [ -f "/usr/bin/sudo" ] && [ -f "/usr/bin/sudo.orig" ]; then
+        if /usr/bin/sudo --version 2>/dev/null | grep -q "sudosh"; then
+            echo "Restoring original sudo..."
+            cp /usr/bin/sudo.orig /usr/bin/sudo
+            echo "Original sudo restored"
+        fi
+    fi
+    # Clean up cache directory on removal
     rm -rf /var/run/sudosh
+    # Remove backup sudo on complete removal
+    rm -f /usr/bin/sudo.orig
 fi
 
 %changelog

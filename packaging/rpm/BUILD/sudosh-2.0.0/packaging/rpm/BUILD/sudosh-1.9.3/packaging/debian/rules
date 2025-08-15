@@ -1,0 +1,11 @@
+#!/usr/bin/make -f
+
+%:
+dh $@
+
+override_dh_auto_install:
+$(MAKE) install DESTDIR=$(CURDIR)/debian/sudosh BINDIR_INSTALL=/usr/bin MANDIR=/usr/share/man/man1
+
+override_dh_fixperms:
+dh_fixperms
+chmod 4755 debian/sudosh/usr/bin/sudosh

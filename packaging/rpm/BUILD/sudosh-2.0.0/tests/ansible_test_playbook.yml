@@ -1,0 +1,198 @@
+---
+# Ansible Test Playbook for Sudosh Detection
+# This playbook tests sudosh's ability to detect Ansible sessions
+
+- name: Test Sudosh Ansible Detection
+  hosts: localhost
+  connection: local
+  gather_facts: no
+  vars:
+    sudosh_binary: "{{ playbook_dir }}/../bin/sudosh"
+    test_results_dir: "{{ playbook_dir }}/test_results"
+    
+  tasks:
+    - name: Create test results directory
+      file:
+        path: "{{ test_results_dir }}"
+        state: directory
+        mode: '0755'
+    
+    - name: Check if sudosh binary exists
+      stat:
+        path: "{{ sudosh_binary }}"
+      register: sudosh_stat
+      
+    - name: Fail if sudosh binary doesn't exist
+      fail:
+        msg: "Sudosh binary not found at {{ sudosh_binary }}. Please run 'make' first."
+      when: not sudosh_stat.stat.exists or not sudosh_stat.stat.executable
+      
+    - name: Test sudosh help with Ansible environment
+      shell: |
+        {{ sudosh_binary }} --ansible-verbose --help
+      register: help_output
+      environment:
+        ANSIBLE_HOST_KEY_CHECKING: "false"
+        ANSIBLE_PYTHON_INTERPRETER: "/usr/bin/python3"
+        ANSIBLE_CONFIG: "/etc/ansible/ansible.cfg"
+        ANSIBLE_INVENTORY: "/etc/ansible/hosts"
+        ANSIBLE_FORCE_COLOR: "true"
+      
+    - name: Display help output
+      debug:
+        var: help_output.stdout_lines
+        
+    - name: Test sudosh list command with Ansible environment
+      shell: |
+        timeout 10s {{ sudosh_binary }} --ansible-verbose -l || true
+      register: list_output
+      environment:
+        ANSIBLE_HOST_KEY_CHECKING: "false"
+        ANSIBLE_PYTHON_INTERPRETER: "/usr/bin/python3"
+        ANSIBLE_CONFIG: "/etc/ansible/ansible.cfg"
+        ANSIBLE_INVENTORY: "/etc/ansible/hosts"
+        ANSIBLE_PLAYBOOK_DIR: "{{ playbook_dir }}"
+        ANSIBLE_ROLES_PATH: "/etc/ansible/roles"
+      
+    - name: Display list output
+      debug:
+        var: list_output.stdout_lines
+        
+    - name: Test forced Ansible detection
+      shell: |
+        {{ sudosh_binary }} --ansible-force --ansible-verbose --help
+      register: forced_output
+      
+    - name: Display forced detection output
+      debug:
+        var: forced_output.stdout_lines
+        
+    - name: Test disabled Ansible detection
+      shell: |
+        {{ sudosh_binary }} --no-ansible-detect --ansible-verbose --help
+      register: disabled_output
+      environment:
+        ANSIBLE_HOST_KEY_CHECKING: "false"
+        ANSIBLE_CONFIG: "/etc/ansible/ansible.cfg"
+        
+    - name: Display disabled detection output
+      debug:
+        var: disabled_output.stdout_lines
+        
+    - name: Check system logs for Ansible detection entries
+      shell: |
+        # Check for recent sudosh log entries
+        journalctl --since "5 minutes ago" | grep -i "sudosh.*ansible\|ansible.*sudosh" | tail -10 || echo "No Ansible-related sudosh log entries found"
+      register: log_entries
+      become: yes
+      ignore_errors: yes
+      
+    - name: Display log entries
+      debug:
+        var: log_entries.stdout_lines
+        
+    - name: Save test results
+      copy:
+        content: |
+          Sudosh Ansible Detection Test Results
+          ====================================
+          
+          Test Date: {{ ansible_date_time.iso8601 }}
+          Sudosh Binary: {{ sudosh_binary }}
+          
+          Help Output with Ansible Environment:
+          {{ help_output.stdout }}
+          
+          List Output with Ansible Environment:
+          {{ list_output.stdout }}
+          
+          Forced Detection Output:
+          {{ forced_output.stdout }}
+          
+          Disabled Detection Output:
+          {{ disabled_output.stdout }}
+          
+          System Log Entries:
+          {{ log_entries.stdout }}
+          
+        dest: "{{ test_results_dir }}/ansible_detection_test_results.txt"
+        mode: '0644'
+        
+    - name: Test summary
+      debug:
+        msg: |
+          Ansible Detection Test Summary:
+          - Help command executed successfully
+          - List command executed successfully  
+          - Forced detection tested
+          - Disabled detection tested
+          - System logs checked
+          - Results saved to {{ test_results_dir }}/ansible_detection_test_results.txt
+          
+          Check the output above for evidence of Ansible session detection.
+          Look for messages containing "Ansible session detected" or similar.
+
+- name: Test Sudosh with Different Ansible Commands
+  hosts: localhost
+  connection: local
+  gather_facts: no
+  vars:
+    sudosh_binary: "{{ playbook_dir }}/../bin/sudosh"
+    
+  tasks:
+    - name: Test with ansible-runner simulation
+      shell: |
+        # Simulate being called from ansible-runner
+        exec -a ansible-runner {{ sudosh_binary }} --ansible-verbose --help
+      register: runner_output
+      environment:
+        ANSIBLE_RUNNER_JOB_ID: "test-job-123"
+        ANSIBLE_RUNNER_ARTIFACT_DIR: "/tmp/ansible-runner"
+        
+    - name: Display ansible-runner simulation output
+      debug:
+        var: runner_output.stdout_lines
+        
+    - name: Test with comprehensive Ansible environment
+      shell: |
+        {{ sudosh_binary }} --ansible-verbose --help
+      register: comprehensive_output
+      environment:
+        ANSIBLE_HOST_KEY_CHECKING: "false"
+        ANSIBLE_PYTHON_INTERPRETER: "/usr/bin/python3"
+        ANSIBLE_CONFIG: "/etc/ansible/ansible.cfg"
+        ANSIBLE_INVENTORY: "/etc/ansible/hosts"
+        ANSIBLE_PLAYBOOK_DIR: "{{ playbook_dir }}"
+        ANSIBLE_ROLES_PATH: "/etc/ansible/roles"
+        ANSIBLE_VAULT_PASSWORD_FILE: "/dev/null"
+        ANSIBLE_FORCE_COLOR: "true"
+        ANSIBLE_STDOUT_CALLBACK: "default"
+        ANSIBLE_CALLBACK_PLUGINS: "/usr/share/ansible/plugins/callback"
+        ANSIBLE_ACTION_PLUGINS: "/usr/share/ansible/plugins/action"
+        ANSIBLE_LIBRARY: "/usr/share/ansible/plugins/modules"
+        ANSIBLE_MODULE_UTILS: "/usr/share/ansible/plugins/module_utils"
+        ANSIBLE_FILTER_PLUGINS: "/usr/share/ansible/plugins/filter"
+        ANSIBLE_LOOKUP_PLUGINS: "/usr/share/ansible/plugins/lookup"
+        ANSIBLE_STRATEGY_PLUGINS: "/usr/share/ansible/plugins/strategy"
+        ANSIBLE_CONNECTION_PLUGINS: "/usr/share/ansible/plugins/connection"
+        ANSIBLE_VARS_PLUGINS: "/usr/share/ansible/plugins/vars"
+        ANSIBLE_CACHE_PLUGIN: "memory"
+        
+    - name: Display comprehensive environment output
+      debug:
+        var: comprehensive_output.stdout_lines
+        
+    - name: Final test summary
+      debug:
+        msg: |
+          Comprehensive Ansible Detection Testing Complete!
+          
+          Tests performed:
+          1. Basic Ansible environment detection
+          2. Ansible-runner simulation
+          3. Comprehensive Ansible environment variables
+          4. Forced and disabled detection modes
+          5. System logging verification
+          
+          Review the output above to verify that sudosh correctly detects
+          Ansible sessions in various scenarios.

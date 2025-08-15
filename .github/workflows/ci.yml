@@ -1,0 +1,276 @@
+name: Sudosh CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  release:
+    types: [ published ]
+
+env:
+  SUDOSH_TEST_MODE: 1
+
+jobs:
+  build-and-test:
+    name: Build and Test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [ubuntu-20.04, ubuntu-22.04]
+        compiler: [gcc, clang]
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          build-essential \
+          libpam0g-dev \
+          clang \
+          cppcheck \
+          valgrind \
+          ansible
+    
+    - name: Set compiler
+      run: |
+        if [ "${{ matrix.compiler }}" = "clang" ]; then
+          echo "CC=clang" >> $GITHUB_ENV
+        else
+          echo "CC=gcc" >> $GITHUB_ENV
+        fi
+    
+    - name: Build sudosh
+      run: |
+        make clean
+        make CC=$CC
+    
+    - name: Run unit tests
+      run: make unit-test
+    
+    - name: Run integration tests
+      run: make integration-test
+    
+    - name: Run security tests
+      run: make security-test
+    
+    - name: Run command line tests
+      run: ./tests/test_command_line_execution.sh
+    
+    - name: Run sudo replacement tests
+      run: ./tests/test_sudo_replacement.sh
+    
+    - name: Run comprehensive test suite
+      run: ./tests/run_comprehensive_tests.sh
+    
+    - name: Run static analysis
+      run: make static-analysis
+    
+    - name: Upload test results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: test-results-${{ matrix.os }}-${{ matrix.compiler }}
+        path: tests/test_results/
+
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          build-essential \
+          libpam0g-dev \
+          cppcheck \
+          clang-tools
+    
+    - name: Build for security analysis
+      run: |
+        make clean
+        make debug
+    
+    - name: Run comprehensive security tests
+      run: |
+        make security-test
+        ./tests/security_cve_tests.sh
+    
+    - name: Run static security analysis
+      run: |
+        # Run cppcheck with security focus
+        cppcheck --enable=all --std=c99 --suppress=missingIncludeSystem \
+          --xml --xml-version=2 src/ 2> cppcheck-results.xml || true
+        
+        # Run clang static analyzer if available
+        if command -v scan-build >/dev/null 2>&1; then
+          scan-build make clean && scan-build make
+        fi
+
+  package-build:
+    name: Package Build
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    if: github.event_name == 'release'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Install packaging dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          build-essential \
+          libpam0g-dev \
+          rpm \
+          dpkg-dev \
+          debhelper
+    
+    - name: Build packages
+      run: |
+        make clean
+        make
+        make packages
+    
+    - name: Upload packages
+      uses: actions/upload-artifact@v3
+      with:
+        name: packages
+        path: dist/
+
+  compatibility-test:
+    name: Compatibility Test
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    
+    strategy:
+      matrix:
+        test-scenario:
+          - name: "Basic Sudo Compatibility"
+            commands: |
+              ./bin/sudosh echo "test"
+              ./bin/sudosh -u $(whoami) whoami
+              ./bin/sudosh -c "echo test"
+          - name: "Security Features"
+            commands: |
+              AUGMENT_SESSION_ID=test ./bin/sudosh echo "blocked" || true
+              ./bin/sudosh rm -rf / || true
+          - name: "Interactive Features"
+            commands: |
+              echo "help" | timeout 5 ./bin/sudosh || true
+              echo "exit" | timeout 5 ./bin/sudosh || true
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          build-essential \
+          libpam0g-dev \
+          timeout
+    
+    - name: Build sudosh
+      run: |
+        make clean
+        make
+    
+    - name: Run compatibility tests
+      run: |
+        echo "Running: ${{ matrix.test-scenario.name }}"
+        ${{ matrix.test-scenario.commands }}
+
+  documentation-check:
+    name: Documentation Check
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Check documentation completeness
+      run: |
+        # Check that key documentation files exist
+        test -f README.md
+        test -f docs/COMPREHENSIVE_GUIDE.md
+        test -f docs/TESTING_GUIDE.md
+        test -f ENHANCEMENT_SUMMARY.md
+        
+        # Check that man page can be generated
+        make sudosh.1
+        test -f sudosh.1
+        
+        # Verify documentation mentions sudo replacement
+        grep -q "sudo replacement" README.md
+        grep -q "drop-in replacement" README.md || grep -q "sudo compatibility" README.md
+
+  performance-test:
+    name: Performance Test
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          build-essential \
+          libpam0g-dev \
+          time
+    
+    - name: Build optimized version
+      run: |
+        make clean
+        CFLAGS="-O3 -DNDEBUG" make
+    
+    - name: Run performance tests
+      run: |
+        # Test command execution performance
+        echo "Testing command execution performance..."
+        time for i in {1..100}; do
+          ./bin/sudosh echo "performance test $i" >/dev/null
+        done
+        
+        # Test startup time
+        echo "Testing startup time..."
+        time ./bin/sudosh --version >/dev/null
+
+  cross-platform-test:
+    name: Cross Platform Test
+    strategy:
+      matrix:
+        os: [ubuntu-20.04, ubuntu-22.04]
+    
+    runs-on: ${{ matrix.os }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          build-essential \
+          libpam0g-dev
+    
+    - name: Build and test
+      run: |
+        make clean
+        make
+        ./tests/test_command_line_execution.sh
+        ./tests/test_sudo_replacement.sh

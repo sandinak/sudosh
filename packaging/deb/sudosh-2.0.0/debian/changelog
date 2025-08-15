@@ -1,0 +1,8 @@
+sudosh (2.0.0-1) unstable; urgency=medium
+
+  * Version 2.0.0 release
+  * Authentication caching support
+  * Color support for prompts
+  * Enhanced security features
+
+ -- Branson Matheson <branson@sandsite.org>  Wed, 23 Jul 2025 20:58:12 -0700

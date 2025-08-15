@@ -1,0 +1,735 @@
+.TH SUDOSH 1 "December 2024" "sudosh @VERSION@" "User Commands"
+.SH NAME
+sudosh \- secure interactive sudo shell with comprehensive logging and CVE protection
+.SH SYNOPSIS
+.B sudosh
+[\fIOPTION\fR]...
+.br
+.B sudosh
+[\fB\-L\fR \fIFILE\fR] [\fB\-h\fR] [\fB\-v\fR] [\fB\-l\fR]
+.SH DESCRIPTION
+.B sudosh
+is a secure interactive sudo shell that provides a command prompt for executing privileged commands with comprehensive logging to syslog. It uses PAM (Pluggable Authentication Modules) for secure user authentication and logs all commands in the same format as sudo.
+
+Unlike traditional sudo which executes single commands, sudosh provides an interactive shell session where multiple commands can be executed with elevated privileges while maintaining full audit trails and advanced security protections.
+
+.B sudosh
+includes protection against recent CVE vulnerabilities including CVE-2023-22809 (sudoedit privilege escalation), CVE-2022-3715 (bash heap buffer overflow), and various Shellshock variants. It features enhanced environment sanitization, null byte injection detection, and comprehensive command validation to prevent security exploits.
+
+.SH OPTIONS
+.TP
+.BR \-h ", " \-\-help
+Display help message and exit.
+.TP
+.BR \-\-version
+Display version information and exit.
+.TP
+.BR \-v ", " \-\-verbose
+Enable verbose output including privilege detection details.
+.TP
+.BR \-l ", " \-\-list
+List available commands from sudoers configuration with comprehensive source attribution. This option provides detailed analysis of sudo permissions similar to \fBsudo -l\fR but with enhanced source tracking. The output includes:
+.RS
+.IP \(bu 2
+\fBDefaults Configuration\fR: Shows sudo defaults that apply to the user
+.IP \(bu 2
+\fBDirect Sudoers Rules\fR: Explicit rules for the specific user with source file paths
+.IP \(bu 2
+\fBGroup-Based Privileges\fR: Shows admin groups the user belongs to
+.IP \(bu 2
+\fBSystem-Wide Group Rules\fR: Sudoers rules that apply to groups the user is in
+.IP \(bu 2
+\fBSummary\fR: Clear indication of privilege types and authorization status
+.RE
+Each permission entry includes the specific file path where the rule is defined, making it easy to identify which sudoers file to modify for specific permissions.
+.TP
+.BR \-L " \fIFILE\fR, " \-\-log\-session " \fIFILE\fR"
+Log the entire session (input and output) to the specified file. This creates a detailed log of all commands entered and their output with timestamps.
+.TP
+.BR \-u " \fIUSER\fR, " \-\-user " \fIUSER\fR"
+Run commands as the specified target user (requires sudoers permission).
+.TP
+.BR \-\-ansible\-detect
+Enable Ansible session detection (default). When enabled, sudosh automatically detects if it's being called from an Ansible automation session and adjusts logging and behavior accordingly.
+.TP
+.BR \-\-no\-ansible\-detect
+Disable Ansible session detection. This prevents sudosh from attempting to detect Ansible sessions and treats all sessions as regular interactive sessions.
+.TP
+.BR \-\-ansible\-force
+Force Ansible session mode regardless of detection results. This option enables Ansible detection and forces sudosh to treat the session as an Ansible automation session.
+.TP
+.BR \-\-ansible\-verbose
+Enable verbose output for Ansible detection. This provides detailed information about the detection process, including confidence levels and detection methods used.
+
+.SH USAGE
+.SH ENHANCED FEATURES
+.B sudosh
+version 1.9.3 introduces several enhanced features for improved security and usability:
+
+.SS Permission Analysis
+The \fB\-l\fR option provides comprehensive sudo permission analysis with detailed source attribution. Unlike standard \fBsudo -l\fR, sudosh shows exactly which file grants each permission, making it easy to troubleshoot and audit sudo configurations.
+
+.SS Source File Tracking
+All sudoers rules are tracked to their source files, providing transparency about where permissions are defined. This is particularly useful in environments with multiple sudoers files in \fI/etc/sudoers.d/\fR.
+
+.SS Enhanced Security
+Comprehensive null pointer checking and memory management improvements ensure stable operation even with complex sudoers configurations.
+
+.SS Enhanced Tab Completion System
+Comprehensive intelligent tab completion with context awareness:
+.IP \(bu 2
+\fBEmpty line completion\fR: Pressing Tab on an empty line displays all available commands (built-ins and PATH executables)
+.IP \(bu 2
+\fBContext-aware completion\fR: Different behavior for commands vs arguments
+.IP \(bu 2
+\fBDirectory path completion\fR: \fBls /etc/<Tab>\fR displays all files in /etc/ instead of auto-completing to first entry
+.IP \(bu 2
+\fBCD command optimization\fR: \fBcd <Tab>\fR shows directories only for efficient navigation
+.IP \(bu 2
+\fBClean multi-column display\fR: Professional formatting for completion lists
+.IP \(bu 2
+\fBBackward compatibility\fR: All existing tab completion behavior preserved
+
+.SS Directory Path Completion Fix
+Critical fix for directory path completion behavior:
+.IP \(bu 2
+\fBFixed\fR: \fBls /etc/<Tab>\fR now displays all files in /etc/ instead of auto-completing to first entry
+.IP \(bu 2
+\fBPreserved\fR: \fBls /etc/host<Tab>\fR still auto-completes to matching files
+.IP \(bu 2
+\fBEnhanced\fR: Works with absolute paths (/etc/) and relative paths (src/)
+.IP \(bu 2
+\fBRobust\fR: Handles edge cases (spaces, tabs, complex nested paths)
+
+.SS Improved Compatibility
+Better handling of different sudoers file formats and locations, including support for macOS-specific paths like \fI/private/etc/sudoers.d\fR.
+
+.SH OPERATION
+When started, sudosh performs the following steps:
+.IP 1. 4
+Checks if the current user has sudo privileges (member of wheel or sudo group)
+.IP 2. 4
+Prompts for password authentication via PAM
+.IP 3. 4
+Provides an interactive shell prompt with color support: \fBuser@hostname:/current/directory##\fR
+.IP 4. 4
+Logs all commands and authentication attempts to syslog
+.IP 5. 4
+Automatically logs command history to ~/.sudosh_history with timestamps
+
+.SH ANSIBLE DETECTION
+.B sudosh
+includes intelligent detection of Ansible automation sessions to provide appropriate logging and behavior for automated environments.
+
+.SS Detection Methods
+Ansible sessions are detected using multiple methods with confidence scoring:
+.IP \(bu 2
+\fBEnvironment Variables\fR: Checks for ANSIBLE_* environment variables such as ANSIBLE_HOST_KEY_CHECKING, ANSIBLE_PYTHON_INTERPRETER, and others
+.IP \(bu 2
+\fBParent Process Analysis\fR: Examines the process tree to identify ansible-playbook, ansible-runner, or related processes
+.IP \(bu 2
+\fBExecution Context\fR: Analyzes terminal type, SSH connection indicators, and working directory patterns
+.IP \(bu 2
+\fBHeuristic Analysis\fR: Combines multiple weak indicators for improved detection accuracy
+
+.SS Ansible-Specific Behavior
+When an Ansible session is detected, sudosh adjusts its behavior:
+.IP \(bu 2
+\fBSuppressed Lecture\fR: Skips the sudo lecture message to avoid cluttering automation logs
+.IP \(bu 2
+\fBEnhanced Logging\fR: Adds Ansible context to syslog entries including detection method, confidence level, and parent process information
+.IP \(bu 2
+\fBEnvironment Logging\fR: Records detected Ansible environment variables for audit purposes
+.IP \(bu 2
+\fBSession Tracking\fR: Logs session start/end with Ansible-specific metadata
+
+.SS Configuration
+Ansible detection can be controlled via command-line options or configuration file:
+.IP \(bu 2
+\fBansible_detection_enabled\fR: Enable/disable detection (default: true)
+.IP \(bu 2
+\fBansible_detection_force\fR: Force Ansible mode regardless of detection
+.IP \(bu 2
+\fBansible_detection_verbose\fR: Enable verbose detection output
+.IP \(bu 2
+\fBansible_detection_confidence_threshold\fR: Minimum confidence level (0-100, default: 70)
+
+.SH BUILT-IN COMMANDS
+.TP
+.BR help ", " ?
+Show available commands and usage examples. Both \fBhelp\fR and \fB?\fR display the same help information.
+.TP
+.B commands
+List all available commands, including built-in commands and system commands found in PATH.
+.TP
+.B rules
+Show detailed sudo rules and their sources for the current user. Displays the same information as \fBsudosh -l\fR but from within the interactive shell. Shows direct sudoers rules, group-based privileges, and system-wide group rules with source file attribution.
+.TP
+.B history
+Show numbered command history from ~/.sudosh_history. Use with !<number> to execute previous commands.
+.TP
+.B cd \fI[directory]\fR
+Change the current working directory. If no directory is specified, changes to the user's home directory.
+.TP
+.B pwd
+Print the current working directory.
+.TP
+.B path
+Display PATH environment variable. Shows the raw PATH value on the first line, followed by any directories that are not accessible (cannot be read). If all directories are accessible, only the PATH value is shown.
+.TP
+.B alias \fI[name[=value]]\fR
+Create or display command aliases. With no arguments, displays all defined aliases. With just a name, displays that specific alias. With name=value, creates or updates an alias. Aliases are automatically saved and restored between sessions.
+.TP
+.B unalias \fIname\fR
+Remove the specified alias.
+.TP
+.B export \fI[var[=value]]\fR
+Set or display environment variables. With no arguments, displays all exported variables. With just a variable name, displays that variable. With var=value, sets the variable. Only safe environment variables can be modified.
+.TP
+.B unset \fIvar\fR
+Remove the specified environment variable. Only safe environment variables can be removed.
+.TP
+.B env
+Display all environment variables.
+.TP
+.B which \fIcommand\fR
+Show the location of the specified command or indicate if it's a built-in.
+.TP
+.B type \fIcommand\fR
+Show detailed information about the specified command including its type (built-in, alias, or file path).
+.TP
+.B pushd \fIdirectory\fR
+Push the current directory onto the directory stack and change to the specified directory.
+.TP
+.B popd
+Pop the top directory from the directory stack and change to it.
+.TP
+.B dirs
+Display the directory stack, showing the current directory first followed by stacked directories.
+.TP
+.BR exit ", " quit
+Exit the sudosh shell. Ctrl-D also exits gracefully.
+.TP
+.I command
+Execute any other command with root privileges.
+
+.SH EXAMPLES
+.TP
+Start sudosh:
+.B sudosh
+.TP
+Execute commands in sudosh:
+.nf
+sudosh:/home/user# ls -la /root
+sudosh:/home/user# systemctl restart nginx
+sudosh:/home/user# apt update && apt upgrade
+sudosh:/home/user# cd /var/log
+sudosh:/var/log# pwd
+sudosh:/var/log# commands
+sudosh:/var/log# rules
+sudosh:/var/log# help
+sudosh:/var/log# exit
+.fi
+.TP
+Use shell enhancement features:
+.nf
+sudosh:/home/user# alias ll='ls -la'
+sudosh:/home/user# alias grep='grep --color=always'
+sudosh:/home/user# ll /etc
+sudosh:/home/user# export EDITOR=vim
+sudosh:/home/user# pushd /var/log
+sudosh:/var/log# popd
+sudosh:/home/user# which ls
+sudosh:/home/user# type ll
+sudosh:/home/user# dirs
+.fi
+.TP
+Start sudosh with session logging:
+.B sudosh -L /tmp/my_session.log
+.TP
+List available commands showing each permission source:
+.B sudosh -l
+.nf
+Output shows detailed breakdown by permission source:
+
+Sudo privileges for user on hostname:
+=====================================
+
+Defaults Configuration:
+    env_reset, env_keep+=BLOCKSIZE, ...
+
+Direct Sudoers Rules:
+    hostname = (root) NOPASSWD: ALL  [Source: sudoers file]
+
+Group-Based Privileges:
+    Group 'admin': (ALL) ALL  [Source: group membership]
+
+System-Wide Group Rules:
+    hostname = (ALL) ALL  [Source: %admin group rule]
+
+Summary:
+✓ User has direct sudoers rules
+✓ User has privileges through group membership
+User is authorized to run sudo commands on hostname
+.fi
+.TP
+Enhanced tab completion examples:
+.nf
+# Empty line completion - shows all available commands
+sudosh:/home/user# <Tab>
+cat       cd        commands  cp        echo      exit      find      grep
+help      history   ls        mkdir     path      pwd       quit      rm
+rules     sort      version   vi        wc
+
+# Empty argument completion - shows files and directories
+sudosh:/home/user# ls <Tab>
+Documents/    Downloads/    Pictures/     file1.txt     file2.log
+
+# CD command completion - shows directories only
+sudosh:/home/user# cd <Tab>
+Documents/    Downloads/    Pictures/     Projects/
+
+# Directory path completion - shows directory contents
+sudosh:/home/user# ls /etc/<Tab>
+afpovertcp.cfg    aliases         aliases.db      apache2/
+apparmor/         apparmor.d/     apport/         apt/
+bash.bashrc       bash_completion bash_completion.d/ bind/
+
+# Partial completion - auto-completes to matching files
+sudosh:/home/user# ls /etc/host<Tab>
+sudosh:/home/user# ls /etc/hosts
+.fi
+.TP
+Ansible detection examples:
+.nf
+# Enable verbose Ansible detection
+sudo sudosh --ansible-verbose
+
+# Force Ansible mode for testing
+sudo sudosh --ansible-force
+
+# Disable Ansible detection
+sudo sudosh --no-ansible-detect
+
+# Example Ansible session detection output (with --ansible-verbose)
+sudosh: Ansible session detected (Found 3 Ansible environment variables, confidence: 95%)
+
+# Example log entries for Ansible sessions
+Dec 15 10:30:15 hostname sudosh: user : ANSIBLE_SESSION_START: detected_env_vars=3 parent_process=ansible-playbook details=Found 3 Ansible environment variables
+Dec 15 10:30:15 hostname sudosh: user : ANSIBLE_ENV_VARS: ANSIBLE_HOST_KEY_CHECKING, ANSIBLE_PYTHON_INTERPRETER, ANSIBLE_CONFIG
+Dec 15 10:30:16 hostname sudosh: user : COMMAND=/bin/systemctl status nginx ; ANSIBLE_CONTEXT: method=env_vars confidence=95% parent_pid=12345 parent_process=ansible-playbook
+.fi
+
+.SH LINE EDITING AND HISTORY
+sudosh provides comprehensive line editing and history capabilities:
+
+.SS Line Editing
+.TP
+.B Ctrl-A
+Move cursor to the beginning of the line.
+.TP
+.B Ctrl-E
+Move cursor to the end of the line.
+.TP
+.B Ctrl-B
+Move cursor one character backward.
+.TP
+.B Ctrl-F
+Move cursor one character forward.
+.TP
+.B Ctrl-D
+Delete the character at the cursor position, or exit if line is empty.
+.TP
+.B Ctrl-K
+Delete from cursor to end of line.
+.TP
+.B Ctrl-U
+Delete the entire line.
+.TP
+.B Backspace
+Delete the character before the cursor.
+.TP
+.B Ctrl-C
+Cancel the current line and start fresh. Clears any typed text and resets the cursor to a new prompt, matching standard shell behavior.
+
+.SS History Navigation
+.TP
+.B Up Arrow
+Navigate to previous command in history.
+.TP
+.B Down Arrow
+Navigate to next command in history.
+.TP
+.B !<number>
+Execute command number <number> from history (e.g., !1, !42).
+.TP
+.B history
+Show numbered list of all commands in history.
+
+.SH LOGGING FEATURES
+sudosh provides comprehensive logging capabilities:
+
+.SS Syslog Integration
+All authentication attempts, commands, and security events are logged to syslog with detailed information including hostname, TTY, working directory, and timestamps.
+
+.SS Command History
+All commands executed in sudosh are automatically logged to \fB~/.sudosh_history\fR with timestamps. This file is created with 0600 permissions (readable/writable by owner only) for security.
+
+.SS Session Logging
+When the \fB-l\fR option is used, sudosh logs the complete session including all input and output to the specified file. This creates a detailed transcript of the entire session with timestamps.
+
+.SH SECURITY FEATURES
+.SS Authentication Caching
+sudosh implements secure authentication caching similar to sudo:
+.IP \(bu 4
+Successful authentications are cached for 15 minutes by default
+.IP \(bu 4
+Cache files are stored in /var/run/sudosh with strict permissions (0600, root-owned)
+.IP \(bu 4
+Separate cache files per user and TTY for security isolation
+.IP \(bu 4
+Expired cache files are automatically cleaned up
+.IP \(bu 4
+Failed authentications invalidate existing cache entries
+
+.SS Environment Sanitization
+sudosh removes dangerous environment variables such as LD_PRELOAD, CDPATH, and others that could be used for privilege escalation attacks. It sets a secure PATH and appropriate umask.
+
+.SS Command Validation
+All commands are validated for security issues including:
+.IP \(bu 4
+Null byte injection attempts
+.IP \(bu 4
+Excessive command length
+.IP \(bu 4
+Path traversal attempts (../)
+.IP \(bu 4
+Shell command blocking (bash, sh, zsh, etc.)
+.IP \(bu 4
+Dangerous command detection with user confirmation prompts
+
+.SS Shell Enhancement Security
+sudosh provides bash/zsh-like shell enhancements with comprehensive security validation:
+.IP \(bu 4
+.B Alias Security
+- Alias names must be valid identifiers (alphanumeric and underscore only)
+- Alias values are validated to prevent command injection, variable substitution, and shell metacharacters
+- Built-in command names cannot be aliased to prevent hijacking
+- Aliases are stored securely in the user's home directory
+.IP \(bu 4
+.B Environment Variable Security
+- Only whitelisted environment variables can be modified (EDITOR, PAGER, LANG, etc.)
+- Critical variables like PATH, LD_PRELOAD, SHELL are protected from modification
+- All sudo-related variables (SUDO_USER, SUDO_UID, etc.) are read-only
+.IP \(bu 4
+.B Directory Stack Security
+- Directory changes are validated using standard system calls
+- No special path traversal protections needed as chdir() handles validation
+- Stack depth is limited to prevent memory exhaustion
+.IP \(bu 4
+.B Command Information Security
+- which and type commands use secure PATH resolution
+- No execution of external programs for command lookup
+- Built-in commands and aliases are identified safely
+
+.SS Intelligent Gut Check Commands
+sudosh implements intelligent "gut check" warnings that distinguish between safe and dangerous operations. The system now intelligently analyzes commands to reduce false positives while maintaining security:
+
+.B Safe Read-Only Operations (No Warning):
+.IP \(bu 4
+.B cat, head, tail
+- File viewing commands on system files
+.IP \(bu 4
+.B less, more, most, pg
+- Pagers with security restrictions (shell escapes disabled)
+.IP \(bu 4
+.B ls, find, locate, grep
+- File listing and searching commands
+.IP \(bu 4
+.B ps, top, htop, id, whoami, date, uptime
+- System information commands
+
+.B Blocked Commands (Security Risk):
+.IP \(bu 4
+.B Interactive editors: vi, vim, emacs, nano
+- Can execute shell commands and bypass security (use sudoedit instead)
+.IP \(bu 4
+.B Shell commands: bash, sh, zsh, csh
+- Direct shell access is not permitted
+.IP \(bu 4
+.B Pipes and redirection: |, >, >>, <
+- Only single commands are supported; file redirection is blocked for security
+
+.B Dangerous Operations (Warning Required):
+.IP \(bu 4
+.B Output redirection to system directories
+- Commands like "echo text > /etc/passwd" or "cat file >> /etc/hosts"
+.IP \(bu 4
+.B Pipes to dangerous commands
+- Commands like "cat /etc/passwd | rm /etc/hosts"
+
+.B Dangerous System Commands:
+.IP \(bu 4
+.B init, shutdown, halt, reboot, poweroff
+- System control commands
+.IP \(bu 4
+.B systemctl poweroff, systemctl reboot, systemctl halt
+- Systemd power management
+.IP \(bu 4
+.B systemctl emergency, systemctl rescue
+- Emergency system modes
+
+.B Dangerous Command Flags:
+.IP \(bu 4
+.B rm -rf, rm -R
+- Recursive file removal
+.IP \(bu 4
+.B chmod -R, chmod --recursive
+- Recursive permission changes
+.IP \(bu 4
+.B chown -R, chown --recursive
+- Recursive ownership changes
+.IP \(bu 4
+.B chgrp -R, chgrp --recursive
+- Recursive group changes
+
+.B Critical System Directory Access:
+.IP \(bu 4
+.B /dev/*
+- Device files and hardware interfaces
+.IP \(bu 4
+.B /proc/*
+- Process and kernel information
+.IP \(bu 4
+.B /sys/*
+- System and kernel parameters
+
+When these commands are detected, sudosh displays a simplified warning message and prompts for confirmation with "y/N" before proceeding. Users with ALL commands in their sudoers configuration will skip warnings but all commands are still logged for audit purposes.
+
+.B Archive Extraction Safety:
+.IP \(bu 4
+.B tar -x, unzip, gunzip, bunzip2
+- Archive extraction commands that may overwrite files
+.IP \(bu 4
+.B Extraction to system directories
+- Operations targeting /etc, /usr, /var, or other critical paths
+.IP \(bu 4
+.B Dangerous extraction flags
+- Commands with --overwrite, --force, or similar destructive options
+
+This helps prevent accidental execution of potentially destructive operations while reducing warning fatigue for experienced administrators.
+
+.B Secure Pager Execution:
+Pagers like \fBless\fR, \fBmore\fR, \fBmost\fR, and \fBpg\fR are allowed to run but with security restrictions to prevent shell escapes:
+.IP \(bu 4
+Shell command execution is disabled (LESSSECURE=1)
+.IP \(bu 4
+Editor spawning is prevented (EDITOR=/bin/false, VISUAL=/bin/false)
+.IP \(bu 4
+Shell access is blocked (SHELL=/bin/false)
+.IP \(bu 4
+Dangerous environment variables are cleared or overridden
+.IP \(bu 4
+All pager usage is logged for security auditing
+
+.B CVE Vulnerability Protection:
+Sudosh has been audited against major bash CVE vulnerabilities and implements specific protections:
+.IP \(bu 4
+\fBCVE-2023-22809 (Sudoedit privilege escalation)\fR: Sudoedit commands are blocked and dangerous editor environment variables are sanitized
+.IP \(bu 4
+\fBCVE-2022-3715 (Heap overflow)\fR: Enhanced parameter validation and null byte injection detection implemented
+.IP \(bu 4
+\fBCVE-2019-9924 (rbash bypass)\fR: Not applicable - custom security model used
+.IP \(bu 4
+\fBCVE-2014-6271 (Shellshock)\fR: Protected via environment sanitization and input validation
+.IP \(bu 4
+\fBCVE-2014-7169 (Shellshock variant)\fR: Mitigated through controlled execution model
+.IP \(bu 4
+\fBCVE-2014-7186/7187 (Memory corruption)\fR: Prevented by input length limits and validation
+.IP \(bu 4
+Enhanced environment sanitization removes dangerous variables including EDITOR, VISUAL, SUDO_EDITOR, LD_PRELOAD, PYTHONPATH, and other library injection vectors
+.IP \(bu 4
+Complete vulnerability analysis available in SECURITY_AUDIT.md
+
+.SS Privilege Management
+.IP \(bu 4
+Requires setuid root or running as root
+.IP \(bu 4
+Proper privilege escalation for command execution
+.IP \(bu 4
+Signal handling for clean shutdown
+
+.SS Authentication
+.IP \(bu 4
+PAM-based authentication
+.IP \(bu 4
+Group membership validation (wheel/sudo groups)
+.IP \(bu 4
+Failed authentication logging
+
+.SH LOGGING
+All sudosh activity is logged to syslog with facility LOG_AUTHPRIV. Log entries include:
+.IP \(bu 4
+Authentication attempts (success/failure)
+.IP \(bu 4
+Session start/end events
+.IP \(bu 4
+Command executions with full context (TTY, PWD, USER, COMMAND)
+.IP \(bu 4
+Security violations
+
+Log format matches sudo for compatibility with existing log analysis tools:
+.nf
+username : TTY=tty ; PWD=directory ; USER=root ; COMMAND=command
+.fi
+
+.SH COLOR SUPPORT
+sudosh automatically inherits and applies colors from the calling shell's environment to provide a familiar user experience.
+
+.SS Automatic Color Detection
+sudosh detects terminal color capabilities by examining:
+.IP \(bu 4
+.B TERM
+environment variable (e.g., xterm-256color, screen, tmux)
+.IP \(bu 4
+.B COLORTERM
+environment variable (e.g., truecolor, 24bit)
+.IP \(bu 4
+TTY status to ensure colors are only applied to interactive terminals
+
+.SS PS1 Color Inheritance
+Colors are extracted from the calling shell's PS1 environment variable:
+.IP \(bu 4
+Supports standard bash color formats: \\[\\033[...m\\]
+.IP \(bu 4
+Supports alternative formats: \\[\\e[...m\\]
+.IP \(bu 4
+Applies colors to username, hostname, and path components
+.IP \(bu 4
+Maintains color consistency with the original shell prompt
+
+.SS Environment Preservation
+Color-related environment variables are preserved during security sanitization:
+.IP \(bu 4
+PS1 (shell prompt with color codes)
+.IP \(bu 4
+TERM (terminal type)
+.IP \(bu 4
+COLORTERM (color capability indicator)
+.IP \(bu 4
+LS_COLORS (directory listing colors)
+.IP \(bu 4
+GREP_COLORS (grep output colors)
+
+.SS Graceful Fallback
+When colors are not supported or detected:
+.IP \(bu 4
+Falls back to plain text prompt
+.IP \(bu 4
+Maintains full functionality without colors
+.IP \(bu 4
+No error messages or warnings displayed
+
+.SH CONFIGURATION
+sudosh uses the system's PAM configuration. It attempts to use the "sudo" PAM service, which typically inherits from the system authentication configuration.
+
+On systems without PAM support, sudosh falls back to mock authentication for demonstration purposes.
+
+.SH FILES
+.TP
+.I /etc/pam.d/sudo
+PAM configuration file used by sudosh
+.TP
+.I /etc/group
+Group membership file (wheel/sudo groups)
+.TP
+.I /var/log/auth.log
+Authentication log file (Debian/Ubuntu)
+.TP
+.I /var/log/secure
+Security log file (Red Hat/CentOS)
+
+.SH EXIT STATUS
+.TP
+.B 0
+Success
+.TP
+.B 1
+General failure
+.TP
+.B 2
+Authentication failure
+.TP
+.B 127
+Command not found
+
+.SH SECURITY CONSIDERATIONS
+.IP \(bu 4
+sudosh should only be used in trusted environments
+.IP \(bu 4
+Regular security audits are recommended
+.IP \(bu 4
+Monitor logs for suspicious activity
+.IP \(bu 4
+Keep the system and dependencies updated
+.IP \(bu 4
+The binary must be installed with setuid root permissions for production use
+
+.SH INSTALLATION
+To install sudosh with proper permissions:
+.nf
+make
+sudo make install
+.fi
+
+This installs the binary to /usr/local/bin/sudosh with setuid root permissions.
+
+.SH VIEWING LOGS
+To view sudosh logs:
+.nf
+# On systems with journald
+sudo journalctl -t sudosh
+
+# On systems with traditional syslog
+sudo tail -f /var/log/auth.log
+sudo tail -f /var/log/secure
+.fi
+
+.SH TROUBLESHOOTING
+.SS Permission Denied
+Ensure sudosh is installed with setuid root:
+.nf
+ls -l /usr/local/bin/sudosh
+# Should show: -rwsr-xr-x ... root root ... sudosh
+.fi
+
+.SS Authentication Issues
+Check PAM configuration:
+.nf
+ls /etc/pam.d/sudo
+.fi
+
+.SS User Not in Sudoers
+Add user to appropriate group:
+.nf
+# Debian/Ubuntu
+sudo usermod -aG sudo username
+
+# Red Hat/CentOS
+sudo usermod -aG wheel username
+.fi
+
+.SH AUTHOR
+Written for secure system administration and audit compliance.
+
+.SH REPORTING BUGS
+Report bugs and security issues through appropriate channels.
+
+.SH COPYRIGHT
+This is free software; see the source for copying conditions.
+
+.SH SEE ALSO
+.BR sudo (8),
+.BR su (1),
+.BR pam (8),
+.BR syslog (3)

@@ -1,15 +1,45 @@
-# Sudosh - Secure Interactive Sudo Shell
+# Sudosh 2.0 - Complete Sudo Replacement with Enhanced Security
 
 **Author**: Branson Matheson <branson@sandsite.org>
 **Development**: This project was primarily developed using [Augment Code](https://www.augmentcode.com) AI assistance
 
-[![Version](https://img.shields.io/badge/version-1.9.3-blue.svg)](https://github.com/sandinak/sudosh)
+[![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)](https://github.com/sandinak/sudosh)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Security](https://img.shields.io/badge/security-enhanced-red.svg)](docs/ENHANCED_SECURITY_FEATURES.md)
+[![Security](https://img.shields.io/badge/security-enhanced-red.svg)](docs/SECURITY_TESTING_SUMMARY.md)
+[![Sudo Compatible](https://img.shields.io/badge/sudo-compatible-brightgreen.svg)](#sudo-replacement)
+[![Shell Restriction](https://img.shields.io/badge/shell-restriction-orange.svg)](docs/SHELL_RESTRICTION_FEATURE.md)
 
-Sudosh is a comprehensive, secure interactive shell that provides elevated privileges with extensive logging, security protections, and audit capabilities. It's designed for system administrators who need secure, monitored access to privileged operations.
+Sudosh is a **complete drop-in replacement for sudo** that provides both interactive shell capabilities and full command-line compatibility with enhanced security, comprehensive logging, and advanced protection features. It seamlessly replaces sudo while adding powerful security enhancements including AI detection, dangerous command blocking, and comprehensive audit trails.
+
+## 🚀 **What's New in 2.0**
+
+### **Enhanced Shell Access Restriction** ⭐ NEW
+- **Universal Shell Blocking** - All users without explicit permissions restricted from shells (`bash`, `sh`, `python`, `su`, etc.)
+- **Unified Behavior** - Both command-line and interactive modes show warning and continue in secure environment
+- **Simple Messaging** - Clean, non-intrusive warnings: "Shell access restricted, putting you in sudosh interactive mode"
+- **Flexible Authorization** - Grant access via `sudo-shells` group or explicit sudoers rules
+
+### **Secure File Editing (sudoedit)** ⭐ NEW
+- **Protected Editor Environment** - Secure file editing with `-e` option that prevents shell escapes
+- **Editor Preference Support** - Respects `SUDO_EDITOR`, `VISUAL`, `EDITOR` environment variables or defaults to `vi`
+- **Multiple File Support** - Edit multiple files in a single session: `sudosh -e file1 file2 file3`
+- **Security Hardening** - Disables shell access, external commands, and dangerous editor features
+
+### **Improved System Integration** ⭐ NEW
+- **System Sudo Replacement** - Replaces `/usr/bin/sudo` (not `/usr/local/bin/sudo`) for better compatibility
+- **Manpage Integration** - Installs as `sudo.8` manpage, backs up original to `osudo.8`
+- **Safe Backup Strategy** - Original sudo backed up to `osudo` for easy restoration
+- **Consolidated Documentation** - All docs moved to `docs/` directory with comprehensive guides
 
 ## 🚀 **Features**
+
+### **Sudo Replacement Capabilities**
+- **Complete sudo compatibility** - Drop-in replacement supporting all standard sudo command patterns
+- **Command-line execution** - `sudosh command args` works exactly like `sudo command args`
+- **Full option support** - All standard sudo options: `-u`, `-c`, `-l`, `-v`, `-e`, etc.
+- **Secure file editing** - `sudosh -e filename` provides protected editing environment
+- **Safe installation** - Automatic backup of original sudo during installation
+- **Seamless transition** - Existing scripts and workflows work without modification
 
 ### **Core Functionality**
 - **Interactive sudo shell** with comprehensive privilege management
@@ -30,7 +60,7 @@ Sudosh is a comprehensive, secure interactive shell that provides elevated privi
 - **Package generation** - Professional RPM and DEB packages for easy distribution
 
 ### **Security Features**
-- 🔒 **Shell command blocking** - Prevents bash, sh, python -c, etc.
+- 🔒 **Enhanced Shell Restriction** - Universal blocking of shells (`bash`, `sh`, `python`, `su`, etc.) with graceful fallback
 - ⚠️ **Smart warning system** - Simplified prompts for dangerous operations
 - 🛡️ **System directory protection** - Monitors access to /etc, /dev, /proc, etc.
 - 📦 **Archive extraction safety** - Warns about potentially destructive archive operations
@@ -111,13 +141,37 @@ The AI detection system uses a modular approach to identify and control differen
 
 ## 📦 **Installation**
 
-### **Build from Source**
+### **Standard Installation**
 ```bash
 git clone https://github.com/sandinak/sudosh.git
 cd sudosh
 make
 sudo make install
 ```
+
+### **Sudo Replacement Installation** ⭐ RECOMMENDED
+Install sudosh 2.0 as a complete drop-in replacement for sudo:
+
+```bash
+git clone https://github.com/sandinak/sudosh.git
+cd sudosh
+make
+sudo make install-sudo-replacement
+```
+
+**What this does:**
+- Safely backs up your original sudo to `osudo` (at `/usr/bin/osudo`)
+- Backs up original sudo manpage to `osudo.8` (at `/usr/share/man/man8/osudo.8`)
+- Installs sudosh as the system's `sudo` command at `/usr/bin/sudo`
+- Installs sudosh manpage as `sudo.8` for seamless integration
+- Maintains all existing sudo functionality while adding enhanced security
+- Allows easy restoration with `sudo make restore-sudo`
+
+**Safety Features:**
+- Will not overwrite existing `osudo` backup
+- 10-second confirmation delay before installation
+- Complete reversibility with restoration commands
+- System-standard paths for better compatibility
 
 ### **Package Installation**
 
@@ -200,6 +254,90 @@ sudosh -v -u www-data ls /var/www
 sudosh -u mysql mysqldump --all-databases > backup.sql
 ```
 
+### **Secure File Editing (sudoedit)**
+```bash
+# Edit a single file (uses EDITOR environment variable or defaults to vi)
+sudosh -e /etc/hosts
+
+# Edit multiple files
+sudosh -e /etc/hosts /etc/resolv.conf
+
+# Use specific editor
+EDITOR=nano sudosh -e /etc/config.conf
+
+# Edit as specific user
+sudosh -u www-data -e /var/www/config.php
+
+# Editor precedence: SUDO_EDITOR > VISUAL > EDITOR > vi
+SUDO_EDITOR=vim sudosh -e /etc/important.conf
+```
+
+**Key Benefits of Secure File Editing:**
+- **Protected Environment** - Prevents shell escapes and external command execution
+- **Editor Flexibility** - Respects user's preferred editor through environment variables
+- **Multiple Files** - Edit several files in a single secure session
+- **Comprehensive Logging** - All file editing operations are logged for audit trails
+
+### **Authentication Options**
+```bash
+# Use askpass helper (GUI password prompt)
+sudosh -A systemctl restart nginx
+
+# Read password from stdin (for scripts)
+echo "password" | sudosh -S systemctl status apache2
+
+# Reset authentication cache (force re-authentication)
+sudosh -k
+
+# Remove authentication cache completely
+sudosh -K
+
+# Non-interactive mode (fail if password required)
+sudosh -n systemctl status httpd
+```
+
+### **Execution Modes**
+```bash
+# Run command in background
+sudosh -b long-running-backup-script.sh
+
+# Run login shell as target user
+sudosh -i -u postgres
+
+# Run regular shell as target user
+sudosh -s -u www-data
+
+# Ring bell when prompting for password
+sudosh -B systemctl restart mysql
+```
+
+### **Environment Control**
+```bash
+# Change root directory (chroot)
+sudosh -R /var/chroot/webserver ls /
+
+# Set command timeout (30 seconds)
+sudosh -T 30 slow-database-query.sh
+
+# Combine timeout with user specification
+sudosh -u postgres -T 60 pg_dump large_database
+```
+
+### **Advanced Usage Examples**
+```bash
+# Multiple options combined
+sudosh -A -u apache -T 120 -b deploy-application.sh
+
+# Non-interactive with background execution
+sudosh -n -b -u backup backup-script.sh
+
+# Verbose mode with authentication reset
+sudosh -v -k systemctl restart critical-service
+
+# Chroot with specific user and timeout
+sudosh -R /opt/jail -u restricted -T 300 restricted-command
+```
+
 **Key Benefits of Command-Line Mode:**
 - **Drop-in sudo replacement** - Use existing sudo commands by replacing `sudo` with `sudosh`
 - **Enhanced security** - All AI detection and security features apply to command-line mode
@@ -213,14 +351,34 @@ Usage: sudosh [options] [command [args...]]
 
 sudosh - Interactive sudo shell and command executor
 
-Options:
+Core Options:
   -h, --help              Show help message
       --version           Show version information
-  -v, --verbose           Enable verbose output
+  -v, --verbose           Enable verbose output / validate timestamp (without args)
   -l, --list              List available commands showing each permission source separately
   -L, --log-session FILE  Log entire session to FILE
   -u, --user USER         Run commands as target USER
   -c, --command COMMAND   Execute COMMAND and exit (like sudo -c)
+  -e, --edit              Edit files in secure environment (sudoedit mode)
+
+Authentication Options:
+  -A                      Use askpass helper for password prompting
+  -S                      Read password from stdin
+  -k                      Reset authentication timestamp
+  -K                      Remove authentication timestamp completely
+  -n                      Non-interactive mode (fail if password required)
+
+Execution Options:
+  -b                      Run command in background
+  -i                      Run login shell as target user
+  -s                      Run shell as target user
+  -B                      Ring bell when prompting for password
+
+Environment Options:
+  -R DIR                  Change root directory (chroot)
+  -T SECONDS              Set command timeout in seconds
+
+Ansible Integration:
       --ansible-detect    Enable Ansible session detection (default)
       --no-ansible-detect Disable Ansible session detection
       --ansible-force     Force Ansible session mode
@@ -729,14 +887,42 @@ appuser@hostname:/opt/app## git pull origin main
 
 Sudosh includes a comprehensive test suite with extensive security testing to ensure reliability and protection against vulnerabilities.
 
-### **Run All Tests**
+### **Comprehensive Test Suite**
+```bash
+# Run all tests (recommended)
+make test-comprehensive
+
+# Run CI/CD compatible tests (non-interactive)
+make test-ci
+
+# Run specific test categories
+./tests/run_comprehensive_tests.sh command_line sudo_replacement
+./tests/run_comprehensive_tests.sh security unit
+```
+
+### **Individual Test Suites**
 ```bash
 # Run complete test suite
 make test
 
 # Run all security tests
 make security-tests
+
+# Test sudo replacement functionality
+./tests/test_sudo_replacement.sh
+
+# Test CI/CD compatibility
+./tests/test_ci_compatibility.sh
 ```
+
+### **Test Categories**
+- **Unit Tests** - Core functionality validation
+- **Integration Tests** - Component interaction testing
+- **Security Tests** - CVE protection and vulnerability testing
+- **Command Line Tests** - Sudo compatibility validation
+- **Sudo Replacement Tests** - Drop-in replacement functionality
+- **CI/CD Tests** - Automated environment compatibility
+- **Ansible Tests** - Automation framework integration
 
 ### **Security Test Categories**
 ```bash
@@ -996,6 +1182,7 @@ make security-tests
 
 Comprehensive documentation is available in the `docs/` directory:
 
+- **[Sudo Replacement Guide](docs/SUDO_REPLACEMENT_GUIDE.md)** ⭐ - Complete guide for using sudosh as sudo replacement
 - **[Enhanced Security Features](docs/ENHANCED_SECURITY_FEATURES.md)** - Detailed security protections
 - **[Target User Functionality](docs/TARGET_USER_FUNCTIONALITY.md)** - Multi-user capabilities
 - **[Security Testing Summary](docs/SECURITY_TESTING_SUMMARY.md)** - Security validation framework

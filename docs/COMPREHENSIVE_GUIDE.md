@@ -7,14 +7,18 @@
 
 Sudosh is a secure, interactive sudo shell that provides elevated privileges with extensive logging, security protections, and audit capabilities. This comprehensive guide covers all aspects of sudosh including features, security enhancements, implementation details, and troubleshooting.
 
-## Key Features (v1.9.3)
+## Key Features (v2.0.0)
 
+- **Complete Sudo Replacement**: Drop-in replacement for sudo with full CLI compatibility
+- **Enhanced Shell Access Restriction**: Universal shell blocking with graceful fallback
+- **Secure File Editing (sudoedit)**: Protected editor environment with `-e` option
+- **Comprehensive CLI Options**: Full sudo-compatible command line interface
+- **AI Detection and Blocking**: Multi-AI tool detection and prevention system
 - **Enhanced Tab Completion**: Comprehensive intelligent completion system with context awareness
-- **Directory Path Completion Fix**: Critical fix for `ls /etc/<Tab>` behavior
 - **Authentication Caching**: Secure credential caching similar to sudo (15-minute default)
 - **Color Support**: Automatic color inheritance from calling shell's PS1 environment
-- **Package Generation**: Comprehensive packaging for RPM and DEB based systems
-- **Enhanced Security**: Multi-layered command validation and blocking
+- **Package Generation**: Professional RPM and DEB packages for easy distribution
+- **Enhanced Security**: Multi-layered command validation and CVE protection
 - **Comprehensive Logging**: Detailed audit trails and session management
 
 ## Table of Contents

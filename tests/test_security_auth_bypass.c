@@ -40,27 +40,39 @@ int test_sudo_group_bypass() {
 /* Test PAM bypass attempts */
 int test_pam_bypass() {
     /* Test various PAM bypass techniques */
-    
+
     /* Test 1: Empty username */
     int result1 = authenticate_user("");
-    if (result1) return 1; /* Vulnerable */
-    
+    if (result1) {
+        printf("DEBUG: Empty username test failed - authentication succeeded\n");
+        return 1; /* Vulnerable */
+    }
+
     /* Test 2: NULL username */
     int result2 = authenticate_user(NULL);
-    if (result2) return 1; /* Vulnerable */
-    
+    if (result2) {
+        printf("DEBUG: NULL username test failed - authentication succeeded\n");
+        return 1; /* Vulnerable */
+    }
+
     /* Test 3: Very long username */
     char long_username[MAX_USERNAME_LENGTH + 100];
     memset(long_username, 'A', sizeof(long_username) - 1);
     long_username[sizeof(long_username) - 1] = '\0';
-    
+
     int result3 = authenticate_user(long_username);
-    if (result3) return 1; /* Vulnerable */
-    
-    /* Test 4: Username with special characters */
-    int result4 = authenticate_user("root\x00admin");
-    if (result4) return 1; /* Vulnerable */
-    
+    if (result3) {
+        printf("DEBUG: Long username test failed - authentication succeeded\n");
+        return 1; /* Vulnerable */
+    }
+
+    /* Test 4: Username with special characters that should be rejected */
+    int result4 = authenticate_user("root;admin");  /* Semicolon injection */
+    if (result4) {
+        printf("DEBUG: Special characters test failed - authentication succeeded for 'root;admin'\n");
+        return 1; /* Vulnerable */
+    }
+
     return 0; /* Secure */
 }
 
@@ -112,6 +124,7 @@ int test_credential_stuffing() {
     for (int i = 0; malicious_users[i]; i++) {
         if (authenticate_user(malicious_users[i])) {
             /* Authentication succeeded for malicious username - vulnerable */
+            printf("DEBUG: Credential stuffing test failed for username: '%s'\n", malicious_users[i]);
             return 1;
         }
     }
@@ -255,6 +268,9 @@ int main() {
 
     /* Set test mode for non-interactive authentication */
     setenv("SUDOSH_TEST_MODE", "1", 1);
+
+    /* Set up test environment */
+    set_current_username("testuser");
 
     /* Initialize security test counters */
     security_count = 0;

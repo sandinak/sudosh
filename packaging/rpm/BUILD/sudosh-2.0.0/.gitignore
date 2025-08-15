@@ -1,0 +1,195 @@
+# Prerequisites
+*.d
+
+# Object files
+*.o
+*.ko
+*.obj
+*.elf
+
+# Linker output
+*.ilk
+*.map
+*.exp
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Libraries
+*.lib
+*.a
+*.la
+*.lo
+
+# Shared objects (inc. Windows DLLs)
+*.dll
+*.so
+*.so.*
+*.dylib
+
+# Executables
+*.exe
+*.out
+*.app
+*.i*86
+*.x86_64
+*.hex
+
+# Debug files
+*.dSYM/
+*.su
+*.idb
+*.pdb
+
+# Kernel Module Compile Results
+*.mod*
+*.cmd
+.tmp_versions/
+modules.order
+Module.symvers
+Mkfile.old
+dkms.conf
+
+# debug information files
+*.dwo
+
+# Sudosh-specific build artifacts
+obj/
+bin/
+sudosh
+test_*
+demo_*
+
+# Test files and outputs
+tests/test_results.txt
+tests/*.log
+tests/*.out
+tests/temp_*
+/tmp/sudosh_*
+/tmp/test_*
+
+# Log files
+*.log
+session_*.log
+sudosh_*.log
+
+# History files
+.sudosh_history
+*_history
+
+# Temporary files
+*.tmp
+*.temp
+*~
+.#*
+\#*#
+
+# Core dumps
+core
+core.*
+vgcore.*
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*.vim
+.DS_Store
+Thumbs.db
+
+# Backup files
+*.bak
+*.backup
+*.orig
+
+# Man pages (generated)
+*.1
+*.8
+
+# Security test outputs
+/tmp/sudosh_security_logs/
+/tmp/sudosh_vulnerabilities.log
+/tmp/sudosh_security_report.md
+
+# Coverage and profiling files
+*.gcov
+*.gcda
+*.gcno
+coverage/
+gmon.out
+*.prof
+
+# Documentation build artifacts
+docs/*.html
+docs/*.pdf
+docs/build/
+
+# Runtime files
+*.pid
+*.sock
+*.lock
+
+# Local development
+local/
+dev/
+scratch/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+
+# Ansible specific
+*.retry
+.ansible/
+ansible_plugins/__pycache__/
+ansible_plugins/**/__pycache__/

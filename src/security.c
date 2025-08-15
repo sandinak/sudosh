@@ -8,6 +8,7 @@
  */
 
 #include "sudosh.h"
+#include "sudosh_common.h"
 
 /* Global variables for signal handling */
 static volatile sig_atomic_t interrupted = 0;
@@ -352,19 +353,29 @@ void setup_secure_editor_environment(void) {
 
     /* Disable external command execution in vi/vim */
     setenv("VISUAL", "/bin/false", 1);
-    setenv("EDITOR", "/bin/false", 1);
 
     /* Disable dangerous vi/vim features */
     unsetenv("VIMINIT");
     unsetenv("VIMRC");
     unsetenv("EXINIT");
 
-    /* Set secure vi options */
-    setenv("VIMINIT", "set nomodeline noexrc secure", 1);
+    /* Set secure vi options to prevent shell escapes */
+    setenv("VIMINIT", "set nomodeline noexrc secure noswapfile nobackup nowritebackup", 1);
 
     /* Disable pager and other external programs */
     setenv("PAGER", "/bin/false", 1);
     setenv("MANPAGER", "/bin/false", 1);
+
+    /* Disable other potential escape vectors */
+    setenv("BROWSER", "/bin/false", 1);
+    setenv("MAILER", "/bin/false", 1);
+
+    /* Secure nano editor */
+    unsetenv("NANORC");
+
+    /* Secure emacs */
+    unsetenv("EMACSLOADPATH");
+    unsetenv("EMACSPATH");
 
     /* Additional Shellshock protection */
     unsetenv("BASH_ENV");
@@ -591,6 +602,150 @@ int is_sudoedit_command(const char *command) {
 }
 
 /**
+ * Check if user has ALL commands permission in sudoers
+ */
+int user_has_all_commands(const char *username) {
+    if (!username) return 0;
+
+    struct sudoers_config *sudoers_config = parse_sudoers_file(NULL);
+    if (!sudoers_config) {
+        return 0;
+    }
+
+    int has_all_commands = 0;
+    char hostname[256];
+    if (gethostname(hostname, sizeof(hostname)) != 0) {
+        strcpy(hostname, "localhost");
+    }
+
+    struct sudoers_userspec *spec = sudoers_config->userspecs;
+    while (spec) {
+        /* Check if this rule applies to the user */
+        if (spec->users) {
+            for (int i = 0; spec->users && spec->users[i]; i++) {
+                int user_matches = 0;
+
+                /* Direct username match */
+                if (strcmp(spec->users[i], username) == 0) {
+                    user_matches = 1;
+                }
+                /* Group membership check */
+                else if (spec->users[i][0] == '%') {
+                    struct group *grp = getgrnam(spec->users[i] + 1);
+                    if (grp && grp->gr_mem) {
+                        for (char **member = grp->gr_mem; member && *member; member++) {
+                            if (*member && strcmp(*member, username) == 0) {
+                                user_matches = 1;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                if (user_matches) {
+                    /* Check if this rule has ALL commands */
+                    if (spec->commands) {
+                        for (int j = 0; spec->commands[j]; j++) {
+                            if (strcmp(spec->commands[j], "ALL") == 0) {
+                                has_all_commands = 1;
+                                break;
+                            }
+                        }
+                    }
+                    if (has_all_commands) break;
+                }
+            }
+        }
+        if (has_all_commands) break;
+        spec = spec->next;
+    }
+
+    free_sudoers_config(sudoers_config);
+    return has_all_commands;
+}
+
+/**
+ * Check if user has specific shell permissions or is in sudo-shells group
+ */
+int user_has_shell_permissions(const char *username) {
+    if (!username) return 0;
+
+    /* Check if user is in sudo-shells group */
+    struct group *shell_group = getgrnam("sudo-shells");
+    if (shell_group && shell_group->gr_mem) {
+        for (char **member = shell_group->gr_mem; *member; member++) {
+            if (strcmp(*member, username) == 0) {
+                return 1; /* User is in sudo-shells group */
+            }
+        }
+    }
+
+    /* Check for specific shell permissions in sudoers */
+    struct sudoers_config *sudoers_config = parse_sudoers_file(NULL);
+    if (!sudoers_config) {
+        return 0;
+    }
+
+    int has_shell_permission = 0;
+    const char *shell_commands[] = {
+        "sh", "bash", "zsh", "csh", "tcsh", "ksh", "fish", "dash",
+        "/bin/sh", "/bin/bash", "/bin/zsh", "/bin/csh", "/bin/tcsh",
+        "/bin/ksh", "/bin/fish", "/bin/dash", "/usr/bin/bash",
+        "/usr/bin/zsh", "/usr/bin/fish", "/usr/local/bin/bash",
+        "/usr/local/bin/zsh", "/usr/local/bin/fish",
+        NULL
+    };
+
+    struct sudoers_userspec *spec = sudoers_config->userspecs;
+    while (spec) {
+        /* Check if this rule applies to the user */
+        if (spec->users) {
+            for (int i = 0; spec->users && spec->users[i]; i++) {
+                int user_matches = 0;
+
+                /* Direct username match */
+                if (strcmp(spec->users[i], username) == 0) {
+                    user_matches = 1;
+                }
+                /* Group membership check */
+                else if (spec->users[i][0] == '%') {
+                    struct group *grp = getgrnam(spec->users[i] + 1);
+                    if (grp && grp->gr_mem) {
+                        for (char **member = grp->gr_mem; member && *member; member++) {
+                            if (*member && strcmp(*member, username) == 0) {
+                                user_matches = 1;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                if (user_matches) {
+                    /* Check if this rule has specific shell commands */
+                    if (spec->commands) {
+                        for (int j = 0; spec->commands[j]; j++) {
+                            for (int k = 0; shell_commands[k]; k++) {
+                                if (strcmp(spec->commands[j], shell_commands[k]) == 0) {
+                                    has_shell_permission = 1;
+                                    break;
+                                }
+                            }
+                            if (has_shell_permission) break;
+                        }
+                    }
+                    if (has_shell_permission) break;
+                }
+            }
+        }
+        if (has_shell_permission) break;
+        spec = spec->next;
+    }
+
+    free_sudoers_config(sudoers_config);
+    return has_shell_permission;
+}
+
+/**
  * Check if command is a shell or shell-like command
  */
 int is_shell_command(const char *command) {
@@ -607,11 +762,12 @@ int is_shell_command(const char *command) {
         "/usr/bin/python", "/usr/bin/python3", "/usr/bin/perl",
         "/usr/bin/ruby", "/usr/bin/node", "/usr/bin/nodejs",
         "irb", "pry", "ipython", "ipython3",
+        "su", "/bin/su", "/usr/bin/su",
         NULL
     };
 
     /* Extract the command name (first word) */
-    char *cmd_copy = strdup(command);
+    char *cmd_copy = sudosh_safe_strdup(command);
     if (!cmd_copy) return 0;
 
     char *cmd_name = strtok(cmd_copy, " \t");
@@ -1093,6 +1249,22 @@ int validate_command_with_length(const char *command, size_t buffer_len) {
         return 0;
     }
 
+    /* Check for dangerous control characters */
+    for (size_t i = 0; i < cmd_len; i++) {
+        unsigned char c = (unsigned char)command[i];
+        if (c == '\n' || c == '\r' || c == '\t' || c < 32) {
+            log_security_violation(current_username, "dangerous control character in command");
+            return 0;
+        }
+    }
+
+    /* Check for URL-encoded dangerous characters */
+    if (strstr(command, "%00") || strstr(command, "%0a") || strstr(command, "%0A") ||
+        strstr(command, "%0d") || strstr(command, "%0D") || strstr(command, "%09")) {
+        log_security_violation(current_username, "URL-encoded control character in command");
+        return 0;
+    }
+
     /* Check for extremely long commands (CVE-2022-3715 mitigation) */
     if (cmd_len > MAX_COMMAND_LENGTH) {
         log_security_violation(current_username, "command too long");
@@ -1100,7 +1272,9 @@ int validate_command_with_length(const char *command, size_t buffer_len) {
     }
 
     /* Check for path traversal attempts */
-    if (strstr(command, "../") || strstr(command, "..\\")) {
+    if (strstr(command, "../") || strstr(command, "..\\") ||
+        strstr(command, "%2e%2e%2f") || strstr(command, "%2e%2e%5c") ||
+        strstr(command, "..%2f") || strstr(command, "..%5c")) {
         log_security_violation(current_username, "path traversal attempt");
         return 0;
     }
@@ -1113,10 +1287,10 @@ int validate_command_with_length(const char *command, size_t buffer_len) {
         return 0;
     }
 
-    /* Check for pipes - these will be handled separately by pipeline validation */
+    /* Check for pipes - block for security unless specifically allowed */
     if (strchr(command, '|')) {
-        /* Don't block here - let pipeline validation handle it */
-        return 1;
+        log_security_violation(current_username, "pipe operator blocked for security reasons");
+        return 0;
     }
 
     /* Check for redirection operators */
@@ -1125,21 +1299,38 @@ int validate_command_with_length(const char *command, size_t buffer_len) {
         return 0;
     }
 
-    /* Enhanced security checks */
-
-    /* Block sudoedit commands (CVE-2023-22809 protection) */
-    if (is_sudoedit_command(command)) {
-        log_security_violation(current_username, "sudoedit command blocked (CVE-2023-22809)");
-        fprintf(stderr, "sudosh: sudoedit commands are not permitted for security reasons\n");
-        fprintf(stderr, "sudosh: use regular editors like vi, vim, nano instead\n");
+    /* Check for dangerous environment variable manipulation */
+    if (strstr(command, "LD_PRELOAD=") || strstr(command, "LD_LIBRARY_PATH=") ||
+        strstr(command, "DYLD_") || strstr(command, "PATH=")) {
+        log_security_violation(current_username, "dangerous environment variable manipulation");
         return 0;
     }
 
-    /* Block shell commands */
-    if (is_shell_command(command)) {
-        log_security_violation(current_username, "shell command blocked");
-        fprintf(stderr, "sudosh: shell commands are not permitted\n");
+    /* Enhanced security checks */
+
+    /* Block external sudoedit commands (CVE-2023-22809 protection) */
+    /* Note: Internal sudoedit mode (-e flag) is handled separately with secure environment */
+    if (is_sudoedit_command(command)) {
+        log_security_violation(current_username, "external sudoedit command blocked (CVE-2023-22809)");
+        fprintf(stderr, "sudosh: external sudoedit commands are not permitted for security reasons\n");
+        fprintf(stderr, "sudosh: use 'sudosh -e filename' for secure file editing\n");
         return 0;
+    }
+
+    /* Enhanced shell command blocking */
+    if (is_shell_command(command)) {
+        /* Check if user has specific shell permissions */
+        if (!user_has_shell_permissions(current_username)) {
+            /* User does not have shell permissions */
+            log_security_violation(current_username, "shell command blocked - no shell permissions");
+
+            /* Both command-line and interactive mode: show warning and continue in interactive mode */
+            fprintf(stderr, "Shell access restricted, putting you in sudosh interactive mode\n");
+            return -2; /* Special return code to indicate fallback to interactive mode */
+        }
+
+        /* User has shell permissions - allow the shell command */
+        return 1;
     }
 
     /* Block SSH commands */
