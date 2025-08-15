@@ -105,22 +105,12 @@ build_test() {
         exit 1
     fi
     
-    print_status $YELLOW "Building regression test..."
-    if ! "$CC" $CFLAGS -Isrc \
-         -c tests/test_pipeline_regression.c -o obj/test_pipeline_regression.o; then
-        print_status $RED "Error: Failed to compile regression test"
+    print_status $YELLOW "Building regression test (via Makefile)..."
+    if ! make -s pipeline-regression-test > /dev/null 2>&1; then
+        print_status $RED "Error: Failed to build regression test"
         exit 1
     fi
-    
-    _detect_pam_and_libs
-    if ! "$CC" obj/test_pipeline_regression.o obj/auth.o obj/command.o obj/logging.o \
-         obj/security.o obj/utils.o obj/nss.o obj/sudoers.o obj/sssd.o obj/filelock.o \
-         obj/shell_enhancements.o obj/shell_env.o obj/config.o obj/pipeline.o \
-         -o "$TEST_BINARY" $LIBS; then
-        print_status $RED "Error: Failed to link regression test"
-        exit 1
-    fi
-    
+
     print_status $GREEN "✓ Build successful"
 }
 
