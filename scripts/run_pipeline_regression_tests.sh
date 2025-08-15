@@ -21,6 +21,37 @@ BUILD_DIR="$PROJECT_ROOT"
 TEST_BINARY="$BUILD_DIR/bin/test_pipeline_regression"
 LOG_FILE="$PROJECT_ROOT/pipeline_regression_test.log"
 
+# Toolchain (allow override via environment)
+CC=${CC:-gcc}
+# Default CFLAGS suitable for Linux/macOS; CI passes its own CFLAGS
+CFLAGS_DEFAULT="-Wall -Wextra -std=c99 -O2"
+if [[ "$(uname -s)" == "Linux" ]]; then
+    CFLAGS_DEFAULT+=" -D_GNU_SOURCE"
+fi
+CFLAGS=${CFLAGS:-$CFLAGS_DEFAULT}
+LIBS=""
+
+# Detect PAM availability and set linker flags portably
+# - On Linux: prefer -lpam -lpam_misc
+# - On macOS: only -lpam is available; no pam_misc
+# - If PAM headers unavailable: define MOCK_AUTH and do not link PAM
+_detect_pam_and_libs() {
+    local os
+    os=$(uname -s)
+    if echo '#include <security/pam_appl.h>' | "$CC" -E - >/dev/null 2>&1; then
+        if [[ "$os" == "Linux" ]]; then
+            LIBS="-lpam -lpam_misc"
+        elif [[ "$os" == "Darwin" ]]; then
+            LIBS="-lpam"
+        else
+            LIBS="-lpam"
+        fi
+    else
+        CFLAGS+=" -DMOCK_AUTH"
+        LIBS=""
+    fi
+}
+
 # Function to print colored output
 print_status() {
     local color=$1
@@ -75,16 +106,17 @@ build_test() {
     fi
     
     print_status $YELLOW "Building regression test..."
-    if ! gcc -Wall -Wextra -std=c99 -O2 -D_GNU_SOURCE -Isrc \
+    if ! "$CC" $CFLAGS -Isrc \
          -c tests/test_pipeline_regression.c -o obj/test_pipeline_regression.o; then
         print_status $RED "Error: Failed to compile regression test"
         exit 1
     fi
     
-    if ! gcc obj/test_pipeline_regression.o obj/auth.o obj/command.o obj/logging.o \
+    _detect_pam_and_libs
+    if ! "$CC" obj/test_pipeline_regression.o obj/auth.o obj/command.o obj/logging.o \
          obj/security.o obj/utils.o obj/nss.o obj/sudoers.o obj/sssd.o obj/filelock.o \
          obj/shell_enhancements.o obj/shell_env.o obj/config.o obj/pipeline.o \
-         -o "$TEST_BINARY" -lpam -lpam_misc; then
+         -o "$TEST_BINARY" $LIBS; then
         print_status $RED "Error: Failed to link regression test"
         exit 1
     fi
@@ -213,11 +245,12 @@ int main() {
 }
 EOF
     
-    if gcc -Isrc -c "$temp_test" -o /tmp/smoke_test.o 2>/dev/null && \
-       gcc /tmp/smoke_test.o obj/pipeline.o obj/security.o obj/utils.o obj/logging.o \
+    _detect_pam_and_libs
+    if "$CC" -Isrc -c "$temp_test" -o /tmp/smoke_test.o 2>/dev/null && \
+       "$CC" /tmp/smoke_test.o obj/pipeline.o obj/security.o obj/utils.o obj/logging.o \
        obj/auth.o obj/command.o obj/nss.o obj/sudoers.o obj/sssd.o obj/filelock.o \
        obj/shell_enhancements.o obj/shell_env.o obj/config.o \
-       -o /tmp/smoke_test -lpam -lpam_misc 2>/dev/null && \
+       -o /tmp/smoke_test $LIBS 2>/dev/null && \
        /tmp/smoke_test > /dev/null 2>&1; then
         print_status $GREEN "✓ Smoke test passed"
         rm -f "$temp_test" /tmp/smoke_test.o /tmp/smoke_test
