@@ -116,6 +116,12 @@ $(BINDIR)/path-validator: src/path_validator.c | $(BINDIR)
 $(OBJDIR)/test_pipeline_regression.o: tests/test_pipeline_regression.c | $(OBJDIR)
 		$(CC) $(CFLAGS) -I$(SRCDIR) -I$(TESTDIR) -c $< -o $@
 
+
+# Explicit rule for test support globals object to avoid pattern matching issues
+$(OBJDIR)/tests/support/test_globals.o: tests/support/test_globals.c | $(OBJDIR)
+		@mkdir -p $(dir $@)
+		$(CC) $(CFLAGS) -I$(SRCDIR) -I$(TESTDIR) -c $< -o $@
+
 $(PIPELINE_REGRESSION_TEST): $(OBJDIR)/test_pipeline_regression.o $(LIB_OBJECTS) $(TEST_SUPPORT_OBJECTS) | $(BINDIR)
 		$(CC) $^ -o $@ $(LDFLAGS)
 
