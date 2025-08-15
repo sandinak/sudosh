@@ -240,6 +240,8 @@ EOF
        "$CC" /tmp/smoke_test.o obj/pipeline.o obj/security.o obj/utils.o obj/logging.o \
        obj/auth.o obj/command.o obj/nss.o obj/sudoers.o obj/sssd.o obj/filelock.o \
        obj/shell_enhancements.o obj/shell_env.o obj/config.o \
+       obj/ansible_detection.o obj/ai_detection.o obj/dangerous_commands.o obj/editor_detection.o \
+       obj/tests/support/test_globals.o \
        -o /tmp/smoke_test $LIBS 2>/dev/null && \
        /tmp/smoke_test > /dev/null 2>&1; then
         print_status $GREEN "✓ Smoke test passed"
