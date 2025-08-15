@@ -347,7 +347,7 @@ clean-suid: $(TARGET)
 
 # Package variables
 PACKAGE_NAME = sudosh
-PACKAGE_VERSION = $(shell grep SUDOSH_VERSION $(SRCDIR)/sudosh.h | cut -d'"' -f2)
+PACKAGE_VERSION = $(VERSION)
 PACKAGE_MAINTAINER = Branson Matheson <branson@sandsite.org>
 PACKAGE_DESCRIPTION = Secure interactive shell with comprehensive logging and audit capabilities
 PACKAGE_HOMEPAGE = https://github.com/sandinak/sudosh
@@ -415,8 +415,8 @@ rpm: $(TARGET) sudosh.1 $(RPM_BUILD_DIR)/SPECS/$(PACKAGE_NAME).spec $(PACKAGE_DI
 # Build DEB package
 deb: $(TARGET) sudosh.1 $(DEB_BUILD_DIR)/$(PACKAGE_NAME)-$(PACKAGE_VERSION)/debian $(PACKAGE_DIR)/$(PACKAGE_NAME)-$(PACKAGE_VERSION).tar.gz $(DIST_DIR)
 	@echo "Building DEB package..."
-	@cd $(DEB_BUILD_DIR) && tar -xzf ../../$(PACKAGE_NAME)-$(PACKAGE_VERSION).tar.gz
-	@cp -r $(DEB_BUILD_DIR)/$(PACKAGE_NAME)-$(PACKAGE_VERSION)/debian $(DEB_BUILD_DIR)/$(PACKAGE_NAME)-$(PACKAGE_VERSION)/
+	@cd $(DEB_BUILD_DIR) && tar -xzf ../$(PACKAGE_NAME)-$(PACKAGE_VERSION).tar.gz
+	@echo "Debian control files already in place"
 	@cd $(DEB_BUILD_DIR)/$(PACKAGE_NAME)-$(PACKAGE_VERSION) && dpkg-buildpackage -us -uc
 	@cp $(DEB_BUILD_DIR)/*.deb $(DIST_DIR)/ 2>/dev/null || true
 	@echo "DEB package created in $(DIST_DIR)/"

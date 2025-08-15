@@ -1,8 +1,0 @@
-sudosh (@VERSION@-1) unstable; urgency=medium
-
-  * Version @VERSION@ release
-  * Authentication caching support
-  * Color support for prompts
-  * Enhanced security features
-
- -- @MAINTAINER@  @DATE@
