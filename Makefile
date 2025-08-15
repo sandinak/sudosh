@@ -101,8 +101,6 @@ all: $(TARGET) $(BINDIR)/path-validator
 # Pipeline regression test target
 pipeline-regression-test: $(PIPELINE_REGRESSION_TEST)
 
-$(PIPELINE_REGRESSION_TEST): $(OBJDIR)/test_pipeline_regression.o $(LIB_OBJECTS) $(TEST_SUPPORT_OBJECTS) | $(BINDIR)
-	$(CC) $< $(LIB_OBJECTS) $(TEST_SUPPORT_OBJECTS) -o $@ $(LDFLAGS)
 
 # Run pipeline regression tests
 test-pipeline-regression: $(PIPELINE_REGRESSION_TEST)
