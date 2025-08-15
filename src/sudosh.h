@@ -63,6 +63,9 @@ extern int verbose_mode;
 /* Global test mode flag */
 extern int test_mode;
 
+/* Last command exit status for prompt customization */
+extern int last_exit_status;
+
 /* Shell enhancements configuration */
 extern int rc_alias_import_enabled; /* default enabled; can be toggled via CLI or config */
 
@@ -79,7 +82,9 @@ extern int ansible_detection_verbose;
 #define MAX_COMMAND_LENGTH 4096
 #define MAX_USERNAME_LENGTH 256
 #define MAX_PASSWORD_LENGTH 256
+#ifndef SUDOSH_VERSION
 #define SUDOSH_VERSION "1.9.4"
+#endif
 #define INACTIVITY_TIMEOUT 300  /* 300 seconds (5 minutes) */
 
 /* File locking constants */
@@ -482,6 +487,9 @@ struct user_info *get_real_user_info(void);
 int is_whitespace_only(const char *str);
 char *safe_strdup(const char *str);
 
+/* History search helper for reverse-i-search (non-interactive core) */
+int history_search_last_index(const char *needle);
+
 /* Color support functions */
 struct color_config *init_color_config(void);
 void free_color_config(struct color_config *config);
@@ -518,6 +526,8 @@ int save_aliases_to_file(void);
 char *expand_aliases(const char *command);
 int validate_alias_name(const char *name);
 int validate_alias_value(const char *value);
+/* Iterate alias names matching a prefix; returns count found */
+int alias_iterate_names_with_prefix(const char *prefix, int (*cb)(const char *name, void *), void *ctx);
 
 /* Directory stack management */
 int init_directory_stack(void);

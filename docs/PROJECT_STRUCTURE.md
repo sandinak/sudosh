@@ -12,7 +12,7 @@ sudosh/
 ├── 📄 LICENSE                      # MIT License
 ├── 📄 Makefile                     # Build system
 ├── 📄 PROJECT_STRUCTURE.md         # This file
-├── 📄 RELEASE_NOTES_1.9.3.md      # Latest release notes
+├── 📂 docs/                        # All documentation (includes release notes, pipeline docs)
 │
 ├── 📂 src/                         # Source code
 │   ├── 📄 main.c                   # Main entry point
@@ -107,7 +107,7 @@ The following directories are generated during build and can be cleaned with `ma
 ### Release Documentation
 - **`CHANGELOG.md`** - Version history with technical details
 - **`docs/RELEASE_HISTORY.md`** - Comprehensive release notes
-- **`RELEASE_NOTES_1.9.3.md`** - Latest release details
+- **`docs/RELEASE_NOTES_1.9.3.md`** - Latest release details
 
 ## 🧪 Test Organization
 

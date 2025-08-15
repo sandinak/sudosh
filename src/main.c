@@ -431,6 +431,9 @@ int main_loop(void) {
             /* Execute command */
             result = execute_command(&cmd, user);
 
+            /* Update last exit status for prompt customization */
+            extern int last_exit_status; last_exit_status = result;
+
             /* Log command execution with target user info and Ansible context */
             if (target_user) {
                 char log_message[1024];
@@ -533,6 +536,7 @@ int main(int argc, char *argv[]) {
             printf("Options:\n");
             printf("  -h, --help              Show this help message\n");
             printf("      --version           Show version information\n");
+            printf("      --build-info        Show detailed build information\n");
             printf("  -v, --verbose           Enable verbose output\n");
             printf("  -l, --list              List available commands showing each permission source\n");
             printf("  -L, --log-session FILE  Log entire session to FILE\n");
@@ -566,6 +570,16 @@ int main(int argc, char *argv[]) {
             return EXIT_SUCCESS;
         } else if (strcmp(argv[i], "--version") == 0) {
             printf("sudosh %s\n", SUDOSH_VERSION);
+            return EXIT_SUCCESS;
+        } else if (strcmp(argv[i], "--build-info") == 0) {
+            const char *git = getenv("SUDOSH_BUILD_GIT");
+            const char *date = getenv("SUDOSH_BUILD_DATE");
+            const char *user = getenv("SUDOSH_BUILD_USER");
+            if (!git) git = "unknown";
+            if (!date) date = "unknown";
+            if (!user) user = "unknown";
+            printf("sudosh %s\n", SUDOSH_VERSION);
+            printf("build: git=%s date=%s by=%s\n", git, date, user);
             return EXIT_SUCCESS;
         } else if (strcmp(argv[i], "--verbose") == 0 || strcmp(argv[i], "-v") == 0) {
             verbose_mode = 1;

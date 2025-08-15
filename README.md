@@ -6,6 +6,9 @@
 [![Version](https://img.shields.io/badge/version-1.9.3-blue.svg)](https://github.com/sandinak/sudosh)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Security](https://img.shields.io/badge/security-enhanced-red.svg)](docs/ENHANCED_SECURITY_FEATURES.md)
+[![Build](https://github.com/sandinak/sudosh/actions/workflows/tests.yml/badge.svg)](https://github.com/sandinak/sudosh/actions/workflows/tests.yml)
+[![Packages](https://github.com/sandinak/sudosh/actions/workflows/package-builds.yml/badge.svg)](https://github.com/sandinak/sudosh/actions/workflows/package-builds.yml)
+[![codecov](https://codecov.io/gh/sandinak/sudosh/branch/main/graph/badge.svg)](https://codecov.io/gh/sandinak/sudosh)
 
 Sudosh is a comprehensive, secure interactive shell that provides elevated privileges with extensive logging, security protections, and audit capabilities. It's designed for system administrators who need secure, monitored access to privileged operations.
 
@@ -65,7 +68,7 @@ Sudosh is a comprehensive, secure interactive shell that provides elevated privi
 
 ### **Shell Enhancements**
 - 🔗 **Alias management** - Create and manage command aliases with security validation
-- 🌍 **Environment variables** - Secure modification of whitelisted environment variables
+- 🌍 **Environment variables** - Secure modification of whitelisted environment variables; safe inspection via printenv
 - 📁 **Directory stack** - pushd/popd/dirs commands for directory navigation
 - 🔍 **Command information** - which/type commands for command introspection
 - 💾 **Persistent storage** - Aliases automatically saved and restored between sessions
@@ -216,6 +219,7 @@ sudosh - Interactive sudo shell and command executor
 Options:
   -h, --help              Show help message
       --version           Show version information
+      --build-info        Show detailed build information (version, git, date, user)
   -v, --verbose           Enable verbose output
   -l, --list              List available commands showing each permission source separately
   -L, --log-session FILE  Log entire session to FILE

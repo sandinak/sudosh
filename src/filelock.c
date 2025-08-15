@@ -573,8 +573,7 @@ char *extract_file_argument(const char *command) {
         }
 
         /* Check for options that take arguments */
-        if (strcmp(token, "-i") == 0 || strcmp(token, "-e") == 0 ||
-            strcmp(token, "-f") == 0 || strcmp(token, "-n") == 0) {
+        if (strcmp(token, "-i") == 0 || strcmp(token, "-e") == 0 || strcmp(token, "-f") == 0) {
             /* These options might take arguments, but for sed -i, the next token might be the file */
             if (strcmp(token, "-i") == 0) {
                 /* For sed -i, check if next token starts with a quote or is a file */
@@ -588,8 +587,13 @@ char *extract_file_argument(const char *command) {
                 token = next_token;
                 continue;
             } else {
+                /* -e and -f consume the next argument */
                 skip_next = 1;
             }
+        }
+        /* Known no-argument flags for editors (e.g., vim -n) */
+        else if (strcmp(token, "-n") == 0) {
+            /* No argument consumed; continue scanning */
         }
         /* Skip other options */
         else if (token[0] == '-') {
