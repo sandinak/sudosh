@@ -101,7 +101,7 @@ all: $(TARGET) $(BINDIR)/path-validator
 # Pipeline regression test target
 pipeline-regression-test: $(PIPELINE_REGRESSION_TEST)
 
-$(PIPELINE_REGRESSION_TEST): $(OBJDIR)/$(TESTDIR)/test_pipeline_regression.o $(LIB_OBJECTS) $(TEST_SUPPORT_OBJECTS) | $(BINDIR)
+$(PIPELINE_REGRESSION_TEST): $(OBJDIR)/test_pipeline_regression.o $(LIB_OBJECTS) $(TEST_SUPPORT_OBJECTS) | $(BINDIR)
 	$(CC) $< $(LIB_OBJECTS) $(TEST_SUPPORT_OBJECTS) -o $@ $(LDFLAGS)
 
 # Run pipeline regression tests
@@ -114,6 +114,13 @@ $(BINDIR)/path-validator: src/path_validator.c | $(BINDIR)
 	$(CC) $(CFLAGS) -o $@ $<
 
 # Quick pipeline smoke test
+# Build the basic regression test binary if not present, then run script with smoke-only
+$(OBJDIR)/test_pipeline_regression.o: tests/test_pipeline_regression.c | $(OBJDIR)
+		$(CC) $(CFLAGS) -I$(SRCDIR) -I$(TESTDIR) -c $< -o $@
+
+$(PIPELINE_REGRESSION_TEST): $(OBJDIR)/test_pipeline_regression.o $(LIB_OBJECTS) $(TEST_SUPPORT_OBJECTS) | $(BINDIR)
+		$(CC) $^ -o $@ $(LDFLAGS)
+
 test-pipeline-smoke: $(PIPELINE_REGRESSION_TEST)
 	@echo "Running quick pipeline smoke test..."
 	@./scripts/run_pipeline_regression_tests.sh --smoke-only
