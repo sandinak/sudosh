@@ -161,6 +161,28 @@ void print_banner(void) {
  */
 void print_help(void) {
     printf("sudosh - Interactive sudo shell\n\n");
+
+    /* Show sudo CLI options if running in sudo compatibility mode */
+    if (sudo_compat_mode_flag) {
+        printf("Sudo-compatible CLI options (when invoked as 'sudo'):\n");
+        printf("  -h, --help              Show help message\n");
+        printf("  -V, --version           Show version information\n");
+        printf("  -v                      Validate/update authentication timestamp\n");
+        printf("  -k                      Invalidate cached authentication\n");
+        printf("  -l, --list              List available commands showing permission sources\n");
+        printf("  -n                      Non-interactive mode (no authentication prompts)\n");
+        printf("  -u USER, --user USER    Run commands as target USER\n");
+        printf("  -c COMMAND              Execute COMMAND and exit\n");
+        printf("  -L FILE                 Log entire session to FILE\n");
+        printf("  --verbose               Enable verbose output\n");
+        printf("  --rc-alias-import       Enable importing aliases from shell rc files\n");
+        printf("  --no-rc-alias-import    Disable importing aliases from shell rc files\n");
+        printf("  --ansible-detect        Enable Ansible session detection\n");
+        printf("  --no-ansible-detect     Disable Ansible session detection\n\n");
+        printf("Note: Some standard sudo options (-E, -H, -i, -s, -A, -S, -b, -p) are\n");
+        printf("      unsupported for security policy compliance.\n\n");
+    }
+
     printf("Available built-in commands:\n");
     printf("  help, ?       - Show this help message\n");
     printf("  commands      - List all available commands\n");
