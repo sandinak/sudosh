@@ -79,6 +79,7 @@ void log_error(const char *message);
 /**
  * Safe string duplication with null checking
  */
+__attribute__((unused))
 static inline char *sudosh_safe_strdup(const char *str) {
     if (!str) {
         return NULL;
@@ -97,6 +98,7 @@ static inline char *sudosh_safe_strdup(const char *str) {
 /**
  * Safe memory allocation with zero initialization
  */
+__attribute__((unused))
 static inline void *sudosh_safe_malloc(size_t size) {
     if (size == 0) {
         return NULL;
@@ -115,6 +117,7 @@ static inline void *sudosh_safe_malloc(size_t size) {
 /**
  * Safe memory reallocation
  */
+__attribute__((unused))
 static inline void *sudosh_safe_realloc(void *ptr, size_t size) {
     if (size == 0) {
         free(ptr);
@@ -134,6 +137,7 @@ static inline void *sudosh_safe_realloc(void *ptr, size_t size) {
 /**
  * Safe memory free with pointer nullification
  */
+__attribute__((unused))
 static inline void sudosh_safe_free(void **ptr) {
     if (ptr && *ptr) {
         free(*ptr);
@@ -146,6 +150,7 @@ static inline void sudosh_safe_free(void **ptr) {
 /**
  * Safe string copy with bounds checking
  */
+__attribute__((unused))
 static inline sudosh_error_t sudosh_safe_strcpy(char *dest, size_t dest_size, const char *src) {
     if (!dest || !src || dest_size == 0) {
         return SUDOSH_ERROR_INVALID_INPUT;
@@ -163,6 +168,7 @@ static inline sudosh_error_t sudosh_safe_strcpy(char *dest, size_t dest_size, co
 /**
  * Safe string concatenation with bounds checking
  */
+__attribute__((unused))
 static inline sudosh_error_t sudosh_safe_strcat(char *dest, size_t dest_size, const char *src) {
     if (!dest || !src || dest_size == 0) {
         return SUDOSH_ERROR_INVALID_INPUT;
@@ -182,6 +188,7 @@ static inline sudosh_error_t sudosh_safe_strcat(char *dest, size_t dest_size, co
 /**
  * Safe string formatting with bounds checking
  */
+__attribute__((unused))
 static inline sudosh_error_t sudosh_safe_snprintf(char *dest, size_t dest_size, const char *format, ...) {
     if (!dest || !format || dest_size == 0) {
         return SUDOSH_ERROR_INVALID_INPUT;
@@ -204,6 +211,7 @@ static inline sudosh_error_t sudosh_safe_snprintf(char *dest, size_t dest_size, 
 /**
  * Validate string length
  */
+__attribute__((unused))
 static inline sudosh_error_t sudosh_validate_string_length(const char *str, size_t max_length) {
     if (!str) {
         return SUDOSH_ERROR_NULL_POINTER;
@@ -219,6 +227,7 @@ static inline sudosh_error_t sudosh_validate_string_length(const char *str, size
 /**
  * Validate string contains only safe characters
  */
+__attribute__((unused))
 static inline sudosh_error_t sudosh_validate_safe_string(const char *str) {
     if (!str) {
         return SUDOSH_ERROR_NULL_POINTER;
@@ -238,6 +247,7 @@ static inline sudosh_error_t sudosh_validate_safe_string(const char *str) {
 /**
  * Log error with consistent formatting
  */
+__attribute__((unused))
 static inline void sudosh_log_error(const char *function, const char *message) {
     if (function && message) {
         syslog(LOG_ERR, "sudosh[%s]: %s", function, message);
@@ -247,6 +257,7 @@ static inline void sudosh_log_error(const char *function, const char *message) {
 /**
  * Log warning with consistent formatting
  */
+__attribute__((unused))
 static inline void sudosh_log_warning(const char *function, const char *message) {
     if (function && message) {
         syslog(LOG_WARNING, "sudosh[%s]: %s", function, message);
@@ -256,6 +267,7 @@ static inline void sudosh_log_warning(const char *function, const char *message)
 /**
  * Log info with consistent formatting
  */
+__attribute__((unused))
 static inline void sudosh_log_info(const char *function, const char *message) {
     if (function && message) {
         syslog(LOG_INFO, "sudosh[%s]: %s", function, message);

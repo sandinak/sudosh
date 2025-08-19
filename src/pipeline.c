@@ -50,7 +50,7 @@ int is_whitelisted_pipe_command(const char *command) {
         return 0;
     }
     
-    char *cmd_name = strtok(cmd_copy, " \t");
+    const char *cmd_name = strtok(cmd_copy, " \t");
     if (!cmd_name) {
         free(cmd_copy);
         return 0;
@@ -298,7 +298,7 @@ int is_secure_pager_command(const char *command) {
         return 0;
     }
 
-    char *cmd_name = strtok(cmd_copy, " \t");
+    const char *cmd_name = strtok(cmd_copy, " \t");
     if (!cmd_name) {
         free(cmd_copy);
         return 0;
