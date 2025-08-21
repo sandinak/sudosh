@@ -745,6 +745,11 @@ int main(int argc, char *argv[]) {
                 fprintf(stderr, "sudosh: option '%s' requires an argument\n", argv[i]);
                 fprintf(stderr, "Try '%s --help' for more information.\n", argv[0]);
                 return EXIT_FAILURE;
+            }
+            const char *cmd = argv[++i];
+            /* In sudo-compat mode we still enforce sudosh mitigations: no direct shells, redirection, or injection */
+            diag_logf("argv -c path: handing off to execute_single_command compat=%d", sudo_compat_mode);
+            return execute_single_command(cmd, target_user);
         } else if (strcmp(argv[i], "-p") == 0 || strcmp(argv[i], "--prompt") == 0) {
             /* Custom password prompt (sudo -p compatibility) */
             if (i + 1 >= argc) {
@@ -762,12 +767,6 @@ int main(int argc, char *argv[]) {
             fprintf(stderr, "sudosh: option '%s' is unsupported in sudo-compat mode (security policy)\n", argv[i]);
             fprintf(stderr, "See '%s --help' for supported options.\n", argv[0]);
             return EXIT_FAILURE;
-
-            }
-            const char *cmd = argv[++i];
-            /* In sudo-compat mode we still enforce sudosh mitigations: no direct shells, redirection, or injection */
-            diag_logf("argv -c path: handing off to execute_single_command compat=%d", sudo_compat_mode);
-            return execute_single_command(cmd, target_user);
         } else if (argv[i][0] != '-') {
             /* Non-option argument: treat as command to execute (sudo compat: bare 'sudo cmd') */
             /* Build command from remaining arguments */
