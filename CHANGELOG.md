@@ -5,7 +5,7 @@ All notable changes to sudosh will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.0.0] - 2025-08-21
+## [2.0.0] - 2025-08-21 - FINAL RELEASE
 
 ### 🚀 Major New Features
 
@@ -55,6 +55,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Seamless integration**: Drop-in replacement for sudo in many scenarios
 - **Enhanced debugging**: Better error reporting and troubleshooting
 - **Professional presentation**: Consistent formatting and clear messaging
+
+#### Final v2.0 Release Improvements
+- **Enhanced Security Model**: Conditional command blocking with proper authentication
+- **Enhanced Command Listing**: Flexible -l and -ll options for different detail levels
+- **Fork Bomb Protection**: Complete elimination of sudo dependencies
+- **Improved File Locking**: Smart file locking that only fails for editing commands
+- **Documentation Consolidation**: Comprehensive docs cleanup and organization
+- **Repository Cleanup**: Clean root directory and proper file organization
+- **Version Management**: Updated to v2.0.0 across all components
 
 ### 📋 Documentation Updates
 - **Comprehensive manpage**: Updated with all v2.0 features and examples

@@ -91,7 +91,7 @@ extern int sudo_compat_mode_flag;     /* argv[0]=="sudo" */
 #define MAX_USERNAME_LENGTH 256
 #define MAX_PASSWORD_LENGTH 256
 #ifndef SUDOSH_VERSION
-#define SUDOSH_VERSION "1.9.4"
+#define SUDOSH_VERSION "2.0.0"
 #endif
 #define INACTIVITY_TIMEOUT 300  /* 300 seconds (5 minutes) */
 

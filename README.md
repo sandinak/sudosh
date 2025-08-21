@@ -3,7 +3,7 @@
 **Author**: Branson Matheson <branson@sandsite.org>
 **Development**: This project was primarily developed using [Augment Code](https://www.augmentcode.com) AI assistance
 
-[![Version](https://img.shields.io/badge/version-1.9.3-blue.svg)](https://github.com/sandinak/sudosh)
+[![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)](https://github.com/sandinak/sudosh)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Security](https://img.shields.io/badge/security-enhanced-red.svg)](docs/ENHANCED_SECURITY_FEATURES.md)
 [![Build](https://github.com/sandinak/sudosh/actions/workflows/tests.yml/badge.svg)](https://github.com/sandinak/sudosh/actions/workflows/tests.yml)
@@ -34,6 +34,19 @@ Sudosh is a comprehensive, secure interactive shell that provides elevated privi
 - **Pipeline security** - Secure command pipelines with individual command validation
 - **Ansible detection** - Intelligent detection of Ansible automation sessions with specialized logging
 - **Package generation** - Professional RPM and DEB packages for easy distribution
+
+### **v2.0 New Features**
+- **Enhanced Security Model** - Conditional command blocking with proper authentication
+  - **Conditionally Blocked Commands** - System control, disk operations, network security, and communication commands allowed with proper sudo privileges
+  - **Always Blocked Commands** - Privilege escalation commands (su, sudo, pkexec) remain blocked for security
+  - **Smart Authorization** - Commands allowed with valid password authentication OR explicit sudo rules OR ALL commands privilege
+- **Enhanced Command Listing** - Flexible `-l` and `-ll` options for different detail levels
+  - **`-l` option** - Shows only sudo rules and permissions (basic output)
+  - **`-ll` option** - Shows sudo rules with detailed command categories (comprehensive output)
+  - **Summary Indicators** - Display "ANY" for password-required access, "ALL" for unrestricted access
+- **Fork Bomb Protection** - Complete elimination of sudo dependencies to prevent infinite recursion
+- **Improved File Locking** - Smart file locking that only fails for editing commands, warns for other operations
+- **Updated Documentation** - Comprehensive docs consolidation and cleanup
 
 ### **Security Features**
 - 🔒 **Shell command blocking** - Prevents bash, sh, python -c, etc.
