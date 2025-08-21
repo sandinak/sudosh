@@ -600,7 +600,6 @@ static void print_prompt(void) {
         while (*p && strlen(out) < sizeof(out) - 4) {
             if (*p == '%' && *(p+1)) {
                 p++;
-                char temp[512]; temp[0] = '\0';
                 switch (*p) {
                     case 'u': strncat(out, user_component, sizeof(out)-strlen(out)-1); break;
                     case 'h': strncat(out, short_hostname, sizeof(out)-strlen(out)-1); break;
