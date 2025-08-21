@@ -627,6 +627,12 @@ int contains_shell_operators(const char *input) {
     char quote_char = 0;
 
     for (const char *p = input; *p; p++) {
+        /* Handle escaped characters */
+        if (*p == '\\' && *(p+1)) {
+            p++; /* Skip the escaped character */
+            continue;
+        }
+
         if (!in_quotes && (*p == '"' || *p == '\'')) {
             in_quotes = 1;
             quote_char = *p;
@@ -721,6 +727,19 @@ int parse_command_with_redirection(const char *input, struct command_info *cmd) 
     if (!redirect_pos) {
         free(input_copy);
         return -1;
+    }
+
+    /* Check for multiple redirection operators (security issue) */
+    char *second_redirect = strchr(redirect_pos + 1, '>');
+    if (!second_redirect) {
+        second_redirect = strchr(redirect_pos + 1, '<');
+    }
+    if (second_redirect) {
+        /* Skip >> case (which is valid) */
+        if (!(redirect_pos[0] == '>' && redirect_pos[1] == '>')) {
+            free(input_copy);
+            return -1; /* Multiple redirection operators not allowed */
+        }
     }
 
     /* Save the redirect character before modifying the string */

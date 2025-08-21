@@ -338,6 +338,7 @@ int pam_conversation(int num_msg, const struct pam_message **msg,
                     struct pam_response **resp, void *appdata_ptr);
 #endif
 char *get_password(const char *prompt);
+void set_custom_password_prompt(const char *prompt);
 
 /* Authentication cache functions */
 int check_auth_cache(const char *username);

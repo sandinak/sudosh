@@ -1733,13 +1733,6 @@ int validate_command_for_pipeline(const char *command) {
         return 0;
     }
 
-    /* Check for command injection patterns */
-    if (strchr(command, ';') || strchr(command, '&') ||
-        strstr(command, "&&") || strstr(command, "||") || strchr(command, '`') ||
-        strstr(command, "$(")) {
-        return 0;
-    }
-
     /* Check for text processing commands that need quotes and $ for patterns */
     const char *trim = command;
     while (*trim == ' ' || *trim == '\t') trim++;
@@ -1757,6 +1750,20 @@ int validate_command_for_pipeline(const char *command) {
     }
 
     free(cmd_copy);
+
+    /* Check for command injection patterns (but allow for text processing commands) */
+    if (!is_text_processing_pipeline) {
+        if (strchr(command, ';') || strchr(command, '&') ||
+            strstr(command, "&&") || strstr(command, "||") || strchr(command, '`') ||
+            strstr(command, "$(")) {
+            return 0;
+        }
+    } else {
+        /* For text processing commands, use more sophisticated validation */
+        if (!validate_text_processing_command(command)) {
+            return 0;
+        }
+    }
 
     /* Block dangerous quoting/backslash patterns (except for text processing commands) */
     if (!is_text_processing_pipeline && (strchr(command, '\'') || strchr(command, '"') || strchr(command, '\\'))) {
@@ -2087,8 +2094,34 @@ int validate_text_processing_command(const char *command) {
         return 0;
     }
 
-    /* Block shell metacharacters that could be dangerous */
-    if (strchr(command, ';') || strchr(command, '&') || strstr(command, "||") || strstr(command, "&&")) {
+    /* Block shell metacharacters that could be dangerous (but allow them inside quotes) */
+    int in_quotes = 0;
+    char quote_char = 0;
+    for (const char *p = command; *p; p++) {
+        /* Handle escaped characters */
+        if (*p == '\\' && *(p+1)) {
+            p++; /* Skip the escaped character */
+            continue;
+        }
+
+        if (!in_quotes && (*p == '"' || *p == '\'')) {
+            in_quotes = 1;
+            quote_char = *p;
+        } else if (in_quotes && *p == quote_char) {
+            in_quotes = 0;
+            quote_char = 0;
+        } else if (!in_quotes) {
+            /* Check for dangerous metacharacters outside of quotes */
+            if (*p == ';' || *p == '&') {
+                fprintf(stderr, "sudosh: shell metacharacters in text processing command blocked\n");
+                return 0;
+            }
+        }
+    }
+
+    /* Check for dangerous operator sequences outside quotes */
+    if (strstr(command, "||") || strstr(command, "&&")) {
+        /* These need more sophisticated checking, but for now block them */
         fprintf(stderr, "sudosh: shell metacharacters in text processing command blocked\n");
         return 0;
     }

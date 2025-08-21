@@ -533,6 +533,7 @@ int main(int argc, char *argv[]) {
     diag_logf("main start argc=%d argv1=%s testmode_env=%s cached=%d", argc, (argc>1?argv[1]:"(none)"), tm?tm:"(null)", test_mode);
     int exit_code;
     char *session_logfile = NULL;
+    char *custom_prompt = NULL;
     int i;
 
     /* sudo-compat mode detection: if invoked as 'sudo', enable compatibility behavior */
@@ -590,6 +591,9 @@ int main(int argc, char *argv[]) {
             printf("  -L, --log-session FILE  Log entire session to FILE\n");
             printf("  -u, --user USER         Run commands as target USER\n");
             printf("  -c, --command COMMAND   Execute COMMAND and exit (like sudo -c)\n");
+            if (sudo_compat_mode) {
+                printf("  -p, --prompt PROMPT     Use custom password prompt\n");
+            }
             printf("      --rc-alias-import   Enable importing aliases from shell rc files (default)\n");
             printf("      --no-rc-alias-import Disable importing aliases from shell rc files\n");
             printf("      --ansible-detect    Enable Ansible session detection (default)\n");
@@ -741,11 +745,20 @@ int main(int argc, char *argv[]) {
                 fprintf(stderr, "sudosh: option '%s' requires an argument\n", argv[i]);
                 fprintf(stderr, "Try '%s --help' for more information.\n", argv[0]);
                 return EXIT_FAILURE;
+        } else if (strcmp(argv[i], "-p") == 0 || strcmp(argv[i], "--prompt") == 0) {
+            /* Custom password prompt (sudo -p compatibility) */
+            if (i + 1 >= argc) {
+                fprintf(stderr, "sudosh: option '%s' requires an argument\n", argv[i]);
+                fprintf(stderr, "Try '%s --help' for more information.\n", argv[0]);
+                return EXIT_FAILURE;
+            }
+            custom_prompt = argv[++i];
+            set_custom_password_prompt(custom_prompt);
         } else if (sudo_compat_mode && (
                    strcmp(argv[i], "-E") == 0 || strcmp(argv[i], "-H") == 0 ||
                    strcmp(argv[i], "-i") == 0 || strcmp(argv[i], "-s") == 0 ||
                    strcmp(argv[i], "-A") == 0 || strcmp(argv[i], "-S") == 0 ||
-                   strcmp(argv[i], "-b") == 0 || strcmp(argv[i], "-p") == 0)) {
+                   strcmp(argv[i], "-b") == 0)) {
             fprintf(stderr, "sudosh: option '%s' is unsupported in sudo-compat mode (security policy)\n", argv[i]);
             fprintf(stderr, "See '%s --help' for supported options.\n", argv[0]);
             return EXIT_FAILURE;
