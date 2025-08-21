@@ -17,26 +17,11 @@ When sudosh is aliased to `sudo`, users attempting shell commands now receive ed
 
 ```bash
 $ sudo bash
+sudosh: redirecting 'bash' to secure interactive shell
+sudosh: provides enhanced logging and security controls
+sudosh: see 'man sudosh' for details, 'help' for commands
 
-=== SUDOSH SHELL REDIRECTION ===
-You attempted to run: bash
-
-sudosh is aliased to 'sudo' on this system for enhanced security.
-Instead of launching bash directly, sudosh provides a secure
-interactive shell with comprehensive logging and security controls.
-
-Benefits of sudosh over bash:
-• Complete command logging and audit trail
-• Protection against dangerous operations
-• Enhanced tab completion and command history
-• Built-in security validation and guidance
-• Safe text processing with awk, sed, grep
-
-Dropping you into secure sudosh shell...
-Type 'help' for available commands or 'exit' to quit.
-================================
-
-sudosh:/home/user# 
+sudosh:/home/user#
 ```
 
 **Key Benefits:**

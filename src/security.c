@@ -694,26 +694,10 @@ int handle_shell_command_in_sudo_mode(const char *command) {
     snprintf(log_msg, sizeof(log_msg), "shell command '%s' redirected to interactive sudosh", cmd_name);
     log_security_violation(current_username, log_msg);
 
-    /* Print helpful message */
-    fprintf(stderr, "\n");
-    fprintf(stderr, "=== SUDOSH SHELL REDIRECTION ===\n");
-    fprintf(stderr, "You attempted to run: %s\n", command);
-    fprintf(stderr, "\n");
-    fprintf(stderr, "sudosh is aliased to 'sudo' on this system for enhanced security.\n");
-    fprintf(stderr, "Instead of launching %s directly, sudosh provides a secure\n", cmd_name);
-    fprintf(stderr, "interactive shell with comprehensive logging and security controls.\n");
-    fprintf(stderr, "\n");
-    fprintf(stderr, "Benefits of sudosh over %s:\n", cmd_name);
-    fprintf(stderr, "• Complete command logging and audit trail\n");
-    fprintf(stderr, "• Protection against dangerous operations\n");
-    fprintf(stderr, "• Enhanced tab completion and command history\n");
-    fprintf(stderr, "• Built-in security validation and guidance\n");
-    fprintf(stderr, "• Safe text processing with awk, sed, grep\n");
-    fprintf(stderr, "\n");
-    fprintf(stderr, "Dropping you into secure sudosh shell...\n");
-    fprintf(stderr, "Type 'help' for available commands or 'exit' to quit.\n");
-    fprintf(stderr, "================================\n");
-    fprintf(stderr, "\n");
+    /* Print concise helpful message */
+    fprintf(stderr, "sudosh: redirecting '%s' to secure interactive shell\n", cmd_name);
+    fprintf(stderr, "sudosh: provides enhanced logging and security controls\n");
+    fprintf(stderr, "sudosh: see 'man sudosh' for details, 'help' for commands\n");
 
     free(cmd_copy);
 

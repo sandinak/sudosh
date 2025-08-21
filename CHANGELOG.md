@@ -10,8 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### 🚀 Major New Features
 
 #### Intelligent Shell Redirection
-- **Smart sudo alias handling**: When sudosh is aliased to `sudo`, shell commands (bash, sh, zsh) now show educational messages and redirect to secure sudosh shell instead of being rejected
-- **Educational user experience**: Comprehensive explanations of sudosh benefits over direct shell access
+- **Smart sudo alias handling**: When sudosh is aliased to `sudo`, shell commands (bash, sh, zsh) now show concise informational messages and redirect to secure sudosh shell instead of being rejected
+- **Professional messaging**: Concise, informative messages with manpage references for details
 - **Seamless transition**: Users get working shell environment with enhanced security
 - **Complete audit logging**: All redirection attempts logged for security monitoring
 
