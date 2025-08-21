@@ -257,6 +257,14 @@ int execute_command(struct command_info *cmd, struct user_info *user) {
     char *file_to_edit = NULL;
     int file_lock_acquired = 0;
     if (is_editing_command(cmd->command)) {
+        /* Check if file locking system is available */
+        if (!is_file_locking_available()) {
+            fprintf(stderr, "sudosh: warning: file locking unavailable for editing command\n");
+            fprintf(stderr, "sudosh: cannot ensure exclusive file access\n");
+            free(command_path);
+            return -1;
+        }
+
         file_to_edit = extract_file_argument(cmd->command);
         if (file_to_edit) {
             if (acquire_file_lock(file_to_edit, user->username, getpid()) == 0) {

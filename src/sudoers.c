@@ -791,87 +791,16 @@ void list_available_commands(const char *username) {
     printf("Sudo privileges for %s on %s:\n", username, hostname);
     printf("=====================================\n\n");
 
-    /* First show Defaults entries using sudo -l */
-    char command[256];
-    snprintf(command, sizeof(command), "sudo -l -U %s 2>/dev/null", username);
+    /* Parse sudoers configuration */
+    sudoers_config = parse_sudoers_file(NULL);
 
-    FILE *fp = popen(command, "r");
-    if (fp) {
-        char buffer[1024];
-        int in_defaults = 0;
-        int found_defaults = 0;
-
-        while (fgets(buffer, sizeof(buffer), fp)) {
-            /* Check if we're in the Defaults section */
-            if (strstr(buffer, "Matching Defaults entries")) {
-                in_defaults = 1;
-                found_defaults = 1;
-                printf("Defaults Configuration:\n");
-                continue;
-            }
-
-            /* Stop at commands section */
-            if (strstr(buffer, "may run the following commands")) {
-                break;
-            }
-
-            /* Print Defaults entries */
-            if (in_defaults) {
-                /* Skip empty lines */
-                if (buffer[0] != '\n' && buffer[0] != '\r') {
-                    printf("    %s", buffer);
-                }
-            }
-        }
-        pclose(fp);
-
-        if (found_defaults) {
-            printf("\n");
-        }
-    }
-
-    /* Show LDAP/SSSD-based rules from sudo -l output */
-    printf("LDAP/SSSD-Based Rules (from sudo -l):\n");
-    fp = popen(command, "r");
-    if (fp) {
-        char buffer[1024];
-        int in_commands = 0;
-        int found_ldap_rules = 0;
-
-        while (fgets(buffer, sizeof(buffer), fp)) {
-            /* Check if we're in the commands section */
-            if (strstr(buffer, "may run the following commands")) {
-                in_commands = 1;
-                continue;
-            }
-
-            /* Parse command entries */
-            if (in_commands) {
-                char *trimmed = buffer;
-                while (*trimmed && isspace(*trimmed)) trimmed++;
-
-                if (*trimmed == '(' && strchr(trimmed, ')')) {
-                    /* This is a sudo rule entry */
-                    found_ldap_rules = 1;
-                    found_any_rules = 1;
-
-                    /* Remove newline */
-                    size_t len = strlen(buffer);
-                    if (len > 0 && buffer[len-1] == '\n') {
-                        buffer[len-1] = '\0';
-                    }
-
-                    printf("    %s  [Source: LDAP/SSSD]\n", trimmed);
-                }
-            }
-        }
-        pclose(fp);
-
-        if (!found_ldap_rules) {
-            printf("    No LDAP/SSSD-based rules found\n");
-        }
+    /* Show LDAP/SSSD-based rules using NSS/SSSD integration */
+    printf("LDAP/SSSD-Based Rules:\n");
+    if (check_sssd_privileges(username)) {
+        printf("    User has SSSD/LDAP-based sudo privileges  [Source: SSSD]\n");
+        found_any_rules = 1;
     } else {
-        printf("    Could not query LDAP/SSSD rules\n");
+        printf("    No LDAP/SSSD-based rules found\n");
     }
     printf("\n");
 
@@ -914,11 +843,29 @@ void list_available_commands(const char *username) {
                     printf("NOPASSWD: ");
                 }
 
-                /* Print commands */
+                /* Print commands with summary indicators */
                 if (spec->commands) {
+                    /* Check if user has ALL commands */
+                    int has_all_commands = 0;
                     for (int i = 0; spec->commands && spec->commands[i]; i++) {
-                        if (i > 0) printf(", ");
-                        printf("%s", spec->commands[i]);
+                        if (strcmp(spec->commands[i], "ALL") == 0) {
+                            has_all_commands = 1;
+                            break;
+                        }
+                    }
+
+                    if (has_all_commands) {
+                        if (spec->nopasswd) {
+                            printf("ALL");  /* Unrestricted access */
+                        } else {
+                            printf("ANY");  /* Any command with password */
+                        }
+                    } else {
+                        /* Show specific commands */
+                        for (int i = 0; spec->commands && spec->commands[i]; i++) {
+                            if (i > 0) printf(", ");
+                            printf("%s", spec->commands[i]);
+                        }
                     }
                 }
 
@@ -953,7 +900,7 @@ void list_available_commands(const char *username) {
             }
 
             if (is_member) {
-                printf("    Group '%s': (ALL) ALL  [Source: group membership]\n", admin_groups[i]);
+                printf("    Group '%s': (ALL) ANY  [Source: group membership]\n", admin_groups[i]);
             }
         }
     }
@@ -1069,8 +1016,8 @@ void list_available_commands(const char *username) {
  * Print safe commands section
  */
 void print_safe_commands_section(void) {
-    printf("Always Safe Commands (No sudo required):\n");
-    printf("=======================================\n");
+    printf("Always safe commands (no privilege required):\n");
+    printf("============================================\n");
     printf("These commands can always be executed without special permissions:\n\n");
 
     printf("System Information:\n");
@@ -1091,34 +1038,29 @@ void print_safe_commands_section(void) {
  * Print blocked commands section
  */
 void print_blocked_commands_section(void) {
+    printf("Command Security Controls:\n");
+    printf("=========================\n");
+    printf("Commands are categorized by security risk and access requirements:\n\n");
+
+    printf("Conditionally Blocked Commands (Require Sudo Privileges):\n");
+    printf("  System Control: init, shutdown, halt, reboot, poweroff, telinit\n");
+    printf("                  systemctl poweroff/reboot/halt/emergency/rescue\n");
+    printf("  Disk Operations: fdisk, parted, gparted, mkfs, fsck, dd, shred, wipe\n");
+    printf("                   mount, umount, swapon, swapoff\n");
+    printf("  Network Security: iptables, ip6tables, ufw, firewall-cmd\n");
+    printf("  Communication: wall, write, mesg\n\n");
+
     printf("Always Blocked Commands (Security Protection):\n");
-    printf("==============================================\n");
-    printf("These commands are blocked for security reasons:\n\n");
+    printf("  Privilege Escalation: su, sudo, pkexec, sudoedit\n");
+    printf("  Shell Operations: sh, bash, zsh, csh, tcsh, ksh, fish, dash\n");
+    printf("                    Interactive shells and shell-like interpreters\n\n");
 
-    printf("System Control:\n");
-    printf("  init, shutdown, halt, reboot, poweroff, telinit\n");
-    printf("  systemctl poweroff/reboot/halt/emergency/rescue\n\n");
-
-    printf("Disk Operations:\n");
-    printf("  fdisk, parted, gparted, mkfs, fsck, dd, shred, wipe\n");
-    printf("  mount, umount, swapon, swapoff\n\n");
-
-    printf("Network Security:\n");
-    printf("  iptables, ip6tables, ufw, firewall-cmd\n\n");
-
-    printf("Privilege Escalation:\n");
-    printf("  su, sudo, pkexec, sudoedit\n\n");
-
-    printf("Communication:\n");
-    printf("  wall, write, mesg\n\n");
-
-    printf("Shell Operations:\n");
-    printf("  sh, bash, zsh, csh, tcsh, ksh, fish, dash\n");
-    printf("  Interactive shells and shell-like interpreters\n\n");
-
-    printf("Notes:\n");
-    printf("• These restrictions apply regardless of sudo configuration\n");
-    printf("• Commands are blocked to prevent system damage and security bypasses\n");
-    printf("• Use specific administrative commands instead of broad system tools\n");
-    printf("• Some commands may be allowed through specific sudo rules\n");
+    printf("Access Requirements:\n");
+    printf("• Conditionally blocked commands are allowed if you have:\n");
+    printf("  - Valid password authentication AND sudo privileges, OR\n");
+    printf("  - Explicit sudo rules granting access to specific commands, OR\n");
+    printf("  - ALL commands privilege (unrestricted access)\n");
+    printf("• Always blocked commands are never permitted for security reasons\n");
+    printf("• Shell commands redirect to secure interactive shell when appropriate\n");
+    printf("• All command executions are logged for audit purposes\n");
 }

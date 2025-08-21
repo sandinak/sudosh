@@ -77,10 +77,9 @@ static int check_sssd_sudo_rules(const char *username) {
     }
     
     /* Try to query SSSD sudo rules using sss_sudo_cli if available */
-    snprintf(command, sizeof(command), 
-             "getent -s sss sudoers %s 2>/dev/null || "
-             "sudo -l -U %s 2>/dev/null | grep -q 'may run'", 
-             username, username);
+    snprintf(command, sizeof(command),
+             "getent -s sss sudoers %s 2>/dev/null",
+             username);
     
     fp = popen(command, "r");
     if (!fp) {

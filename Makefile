@@ -180,6 +180,9 @@ $(BINDIR)/test_%: $(OBJDIR)/$(TESTDIR)/integration/test_%.o $(LIB_OBJECTS) $(TES
 $(BINDIR)/test_%: $(OBJDIR)/$(TESTDIR)/security/test_%.o $(LIB_OBJECTS) $(TEST_SUPPORT_OBJECTS) | $(BINDIR)
 	$(CC) $^ -o $@ $(LDFLAGS)
 
+$(BINDIR)/test_%: $(OBJDIR)/$(TESTDIR)/regression/test_%.o $(LIB_OBJECTS) $(TEST_SUPPORT_OBJECTS) | $(BINDIR)
+	$(CC) $^ -o $@ $(LDFLAGS)
+
 # Special rule for pthread-dependent tests
 $(BINDIR)/test_security_race_conditions: $(OBJDIR)/$(TESTDIR)/security/test_security_race_conditions.o $(LIB_OBJECTS) $(TEST_SUPPORT_OBJECTS) | $(BINDIR)
 	$(CC) $^ -o $@ $(LDFLAGS) -lpthread

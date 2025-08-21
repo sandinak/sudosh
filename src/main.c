@@ -61,10 +61,10 @@ static int execute_single_command(const char *command_str, const char *target_us
     /* Initialize security measures */
     init_security();
 
-    /* Initialize file locking system */
+    /* Initialize file locking system - warn but don't fail */
     if (init_file_locking() != 0) {
-        fprintf(stderr, "sudosh: failed to initialize file locking system\n");
-        return EXIT_FAILURE;
+        fprintf(stderr, "sudosh: warning: file locking system unavailable\n");
+        /* Continue execution - file locking will be checked per-command */
     }
 
     /* Get current username using getpwuid for reliability */
@@ -443,6 +443,28 @@ int main_loop(void) {
                 }
             }
 
+            /* Check if this is a conditionally blocked command requiring authentication */
+            if (is_conditionally_blocked_command(command_line)) {
+                /* Check if user has authorization */
+                if (!check_conditionally_blocked_command_authorization(username, command_line)) {
+                    fprintf(stderr, "sudosh: command '%s' requires sudo privileges\n", command_line);
+                    free_command_info(&cmd);
+                    free(command_line);
+                    continue;
+                }
+
+                /* User has authorization, but check if authentication is needed */
+                if (!check_nopasswd_privileges_enhanced(username)) {
+                    /* User doesn't have NOPASSWD, require authentication */
+                    if (!authenticate_user_cached(username)) {
+                        fprintf(stderr, "sudosh: authentication required for command '%s'\n", command_line);
+                        free_command_info(&cmd);
+                        free(command_line);
+                        continue;
+                    }
+                }
+            }
+
             /* Execute command */
             result = execute_command(&cmd, user);
 
@@ -760,10 +782,10 @@ int main(int argc, char *argv[]) {
     /* Initialize security measures */
     init_security();
 
-    /* Initialize file locking system */
+    /* Initialize file locking system - warn but don't fail */
     if (init_file_locking() != 0) {
-        fprintf(stderr, "sudosh: failed to initialize file locking system\n");
-        return EXIT_FAILURE;
+        fprintf(stderr, "sudosh: warning: file locking system unavailable\n");
+        /* Continue execution - file locking will be checked per-command */
     }
 
     /* Run main program loop */

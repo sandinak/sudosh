@@ -14,6 +14,9 @@
 #include <errno.h>
 #include <dirent.h>
 
+/* Global variable to track file locking system status */
+static int file_locking_available = 0;
+
 /**
  * Initialize file locking system
  */
@@ -54,6 +57,9 @@ int init_file_locking(void) {
     /* Clean up any stale locks from previous runs */
     cleanup_stale_locks();
 
+    /* Mark file locking as available */
+    file_locking_available = 1;
+
     return 0;
 }
 
@@ -63,6 +69,13 @@ int init_file_locking(void) {
 void cleanup_file_locking(void) {
     /* Clean up any locks owned by this process */
     cleanup_stale_locks();
+}
+
+/**
+ * Check if file locking system is available
+ */
+int is_file_locking_available(void) {
+    return file_locking_available;
 }
 
 /**

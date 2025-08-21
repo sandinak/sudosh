@@ -706,32 +706,21 @@ int handle_shell_command_in_sudo_mode(const char *command) {
 }
 
 /**
- * Check if command is dangerous (like init, shutdown, etc.)
+ * Check if command is in system control group
  */
-int is_dangerous_command(const char *command) {
+int is_system_control_command(const char *command) {
     if (!command) return 0;
 
-    /* List of dangerous commands */
-    const char *dangerous[] = {
+    const char *system_control[] = {
         "init", "shutdown", "halt", "reboot", "poweroff",
         "systemctl poweroff", "systemctl reboot", "systemctl halt",
         "systemctl emergency", "systemctl rescue",
         "/sbin/init", "/sbin/shutdown", "/sbin/halt", "/sbin/reboot",
         "/usr/sbin/shutdown", "/usr/sbin/halt", "/usr/sbin/reboot",
         "telinit", "/sbin/telinit", "/usr/sbin/telinit",
-        "wall", "write", "mesg",
-        "fdisk", "parted", "gparted", "mkfs", "fsck",
-        "/sbin/fdisk", "/usr/sbin/fdisk", "/sbin/parted",
-        "dd", "shred", "wipe",
-        "iptables", "ip6tables", "ufw", "firewall-cmd",
-        "/sbin/iptables", "/usr/sbin/iptables",
-        "mount", "umount", "swapon", "swapoff",
-        "/bin/mount", "/usr/bin/mount", "/sbin/mount",
-        "su", "sudo", "pkexec",
         NULL
     };
 
-    /* Extract the command name */
     char *cmd_copy = strdup(command);
     if (!cmd_copy) return 0;
 
@@ -741,17 +730,14 @@ int is_dangerous_command(const char *command) {
         return 0;
     }
 
-    /* Check against dangerous command list */
-    for (int i = 0; dangerous[i]; i++) {
-        if (strcmp(cmd_name, dangerous[i]) == 0) {
+    for (int i = 0; system_control[i]; i++) {
+        if (strcmp(cmd_name, system_control[i]) == 0) {
             free(cmd_copy);
             return 1;
         }
-
-        /* Check if command starts with dangerous command followed by space or end */
-        size_t dangerous_len = strlen(dangerous[i]);
-        if (strncmp(command, dangerous[i], dangerous_len) == 0) {
-            char next_char = command[dangerous_len];
+        size_t cmd_len = strlen(system_control[i]);
+        if (strncmp(command, system_control[i], cmd_len) == 0) {
+            char next_char = command[cmd_len];
             if (next_char == '\0' || next_char == ' ' || next_char == '\t') {
                 free(cmd_copy);
                 return 1;
@@ -761,6 +747,192 @@ int is_dangerous_command(const char *command) {
 
     free(cmd_copy);
     return 0;
+}
+
+/**
+ * Check if command is in disk operations group
+ */
+int is_disk_operations_command(const char *command) {
+    if (!command) return 0;
+
+    const char *disk_ops[] = {
+        "fdisk", "parted", "gparted", "mkfs", "fsck",
+        "/sbin/fdisk", "/usr/sbin/fdisk", "/sbin/parted",
+        "dd", "shred", "wipe",
+        "mount", "umount", "swapon", "swapoff",
+        "/bin/mount", "/usr/bin/mount", "/sbin/mount",
+        NULL
+    };
+
+    char *cmd_copy = strdup(command);
+    if (!cmd_copy) return 0;
+
+    char *cmd_name = strtok(cmd_copy, " \t");
+    if (!cmd_name) {
+        free(cmd_copy);
+        return 0;
+    }
+
+    for (int i = 0; disk_ops[i]; i++) {
+        if (strcmp(cmd_name, disk_ops[i]) == 0) {
+            free(cmd_copy);
+            return 1;
+        }
+    }
+
+    free(cmd_copy);
+    return 0;
+}
+
+/**
+ * Check if command is in network security group
+ */
+int is_network_security_command(const char *command) {
+    if (!command) return 0;
+
+    const char *network_security[] = {
+        "iptables", "ip6tables", "ufw", "firewall-cmd",
+        "/sbin/iptables", "/usr/sbin/iptables",
+        NULL
+    };
+
+    char *cmd_copy = strdup(command);
+    if (!cmd_copy) return 0;
+
+    char *cmd_name = strtok(cmd_copy, " \t");
+    if (!cmd_name) {
+        free(cmd_copy);
+        return 0;
+    }
+
+    for (int i = 0; network_security[i]; i++) {
+        if (strcmp(cmd_name, network_security[i]) == 0) {
+            free(cmd_copy);
+            return 1;
+        }
+    }
+
+    free(cmd_copy);
+    return 0;
+}
+
+/**
+ * Check if command is in communication group
+ */
+int is_communication_command(const char *command) {
+    if (!command) return 0;
+
+    const char *communication[] = {
+        "wall", "write", "mesg",
+        NULL
+    };
+
+    char *cmd_copy = strdup(command);
+    if (!cmd_copy) return 0;
+
+    char *cmd_name = strtok(cmd_copy, " \t");
+    if (!cmd_name) {
+        free(cmd_copy);
+        return 0;
+    }
+
+    for (int i = 0; communication[i]; i++) {
+        if (strcmp(cmd_name, communication[i]) == 0) {
+            free(cmd_copy);
+            return 1;
+        }
+    }
+
+    free(cmd_copy);
+    return 0;
+}
+
+/**
+ * Check if command is in privilege escalation group (always blocked)
+ */
+int is_privilege_escalation_command(const char *command) {
+    if (!command) return 0;
+
+    const char *privilege_escalation[] = {
+        "su", "sudo", "pkexec",
+        NULL
+    };
+
+    char *cmd_copy = strdup(command);
+    if (!cmd_copy) return 0;
+
+    char *cmd_name = strtok(cmd_copy, " \t");
+    if (!cmd_name) {
+        free(cmd_copy);
+        return 0;
+    }
+
+    for (int i = 0; privilege_escalation[i]; i++) {
+        if (strcmp(cmd_name, privilege_escalation[i]) == 0) {
+            free(cmd_copy);
+            return 1;
+        }
+    }
+
+    free(cmd_copy);
+    return 0;
+}
+
+/**
+ * Check if command is in a conditionally blocked group (can be allowed with proper auth/privileges)
+ */
+int is_conditionally_blocked_command(const char *command) {
+    return is_system_control_command(command) ||
+           is_disk_operations_command(command) ||
+           is_network_security_command(command) ||
+           is_communication_command(command);
+}
+
+/**
+ * Check if command is dangerous (like init, shutdown, etc.)
+ */
+int is_dangerous_command(const char *command) {
+    if (!command) return 0;
+
+    /* Always blocked commands */
+    if (is_privilege_escalation_command(command)) {
+        return 1;
+    }
+
+    /* Conditionally blocked commands */
+    if (is_conditionally_blocked_command(command)) {
+        return 1;
+    }
+
+    return 0;
+}
+
+/**
+ * Check if user has authorization to run conditionally blocked commands
+ * Returns 1 if authorized, 0 if not
+ */
+int check_conditionally_blocked_command_authorization(const char *username, const char *command) {
+    if (!username || !command) {
+        return 0;
+    }
+
+    /* Check if user has ALL commands privilege (unrestricted access) */
+    if (check_sudo_privileges_enhanced(username)) {
+        /* Check if user has specific command permission or ALL permission */
+        if (check_command_permission(username, command) ||
+            check_command_permission(username, "ALL")) {
+            return 1;  /* User has explicit sudo rules for this command or ALL */
+        }
+    }
+
+    /* Check if user has valid authentication (password provided) */
+    /* This will be checked at the command execution level */
+    /* For now, if user has any sudo privileges, allow with authentication */
+    if (check_sudo_privileges_enhanced(username)) {
+        return 1;  /* User has sudo privileges, will require authentication */
+    }
+
+    return 0;  /* User has no sudo privileges */
 }
 
 /**
@@ -1408,8 +1580,32 @@ int validate_command_with_length(const char *command, size_t buffer_len) {
         return 0;
     }
 
-    /* Check for dangerous commands */
+    /* Check for dangerous commands with new security model */
     if (is_dangerous_command(command)) {
+        /* Always block privilege escalation commands */
+        if (is_privilege_escalation_command(command)) {
+            log_security_violation(current_username, "privilege escalation command blocked");
+            fprintf(stderr, "sudosh: privilege escalation commands (su, sudo, pkexec) are not permitted\n");
+            fprintf(stderr, "sudosh: use sudosh directly for administrative tasks\n");
+            return 0;
+        }
+
+        /* Check conditionally blocked commands */
+        if (is_conditionally_blocked_command(command)) {
+            /* Check if user has proper authorization */
+            if (check_conditionally_blocked_command_authorization(current_username, command)) {
+                char audit_msg[512];
+                snprintf(audit_msg, sizeof(audit_msg), "conditionally blocked command authorized: %s", command);
+                log_security_violation(current_username, audit_msg);
+                return 1;  /* Allow with proper authorization */
+            } else {
+                log_security_violation(current_username, "conditionally blocked command denied");
+                fprintf(stderr, "sudosh: command '%s' requires proper sudo privileges or authentication\n", command);
+                return 0;
+            }
+        }
+
+        /* Other dangerous commands (shouldn't reach here with current categorization) */
         log_security_violation(current_username, "dangerous command blocked");
         return 0;
     }
