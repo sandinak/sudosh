@@ -42,6 +42,10 @@ int rc_alias_import_enabled = 1;
 struct ansible_detection_info *global_ansible_info = NULL;
 struct ai_detection_info *global_ai_info = NULL;
 
+/* Sudo-compatibility (argv[0]=="sudo") and non-interactive (-n) flags */
+int sudo_compat_mode_flag = 0;
+int non_interactive_mode_flag = 0;
+
 /**
  * Execute a single command and exit (like sudo)
  */
@@ -117,7 +121,13 @@ static int execute_single_command(const char *command_str, const char *target_us
     /* Validate command early to honor security policy */
     int valid = validate_command(command_str);
     diag_logf("-c mode validate=%d for cmd='%s'", valid, command_str);
-    if (!valid) {
+    if (valid == 2) {
+        /* Special case: shell command in sudo mode - drop to interactive shell */
+        free_user_info(user);
+        free(username);
+        /* Start interactive shell instead of executing the command */
+        return main_loop();
+    } else if (!valid) {
         fprintf(stderr, "sudosh: command rejected for security reasons\n");
         free_user_info(user);
         free(username);
@@ -329,12 +339,17 @@ int main_loop(void) {
         /* Expand aliases */
         char *alias_expanded = expand_aliases(command_line);
         if (alias_expanded && strcmp(alias_expanded, command_line) != 0) {
-            /* Alias was expanded */
+            /* Alias was expanded successfully */
             free(command_line);
             command_line = alias_expanded;
         } else if (alias_expanded) {
             /* No expansion occurred, free the duplicate */
             free(alias_expanded);
+        } else {
+            /* Alias expansion failed due to security validation */
+            fprintf(stderr, "sudosh: alias expansion failed security validation\n");
+            free(command_line);
+            continue;
         }
 
         /* Log command to history */
@@ -498,6 +513,12 @@ int main(int argc, char *argv[]) {
     char *session_logfile = NULL;
     int i;
 
+    /* sudo-compat mode detection: if invoked as 'sudo', enable compatibility behavior */
+    const char *invoked = (argc > 0 ? argv[0] : NULL);
+    const char *slash = invoked ? strrchr(invoked, '/') : NULL;
+    const char *invoked_name = slash ? slash + 1 : invoked;
+    int sudo_compat_mode = (invoked_name && strcmp(invoked_name, "sudo") == 0);
+    sudo_compat_mode_flag = sudo_compat_mode;
     /* Early AI detection and blocking - must happen before any other processing */
     struct ai_detection_info *ai_info = detect_ai_session();
     if (ai_info && should_block_ai_session(ai_info)) {
@@ -533,6 +554,10 @@ int main(int argc, char *argv[]) {
         if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
             printf("Usage: %s [options] [command [args...]]\n\n", argv[0]);
             printf("sudosh - Interactive sudo shell and command executor\n\n");
+            if (sudo_compat_mode) {
+                printf("sudo-compat mode: basic sudo-style invocation supported (subset)\n");
+            }
+
             printf("Options:\n");
             printf("  -h, --help              Show this help message\n");
             printf("      --version           Show version information\n");
@@ -542,6 +567,25 @@ int main(int argc, char *argv[]) {
             printf("  -L, --log-session FILE  Log entire session to FILE\n");
             printf("  -u, --user USER         Run commands as target USER\n");
             printf("  -c, --command COMMAND   Execute COMMAND and exit (like sudo -c)\n");
+            printf("      --rc-alias-import   Enable importing aliases from shell rc files (default)\n");
+            printf("      --no-rc-alias-import Disable importing aliases from shell rc files\n");
+            printf("      --ansible-detect    Enable Ansible session detection (default)\n");
+            printf("      --no-ansible-detect Disable Ansible session detection\n");
+            printf("      --ansible-force     Force Ansible session mode\n");
+            printf("      --ansible-verbose   Enable verbose Ansible detection output\n\n");
+            printf("Command Execution:\n");
+            printf("  sudosh                  Start interactive shell (default)\n");
+            printf("  sudosh command          Execute command and exit\n");
+            printf("  sudosh -c \"command\"     Execute command and exit (explicit)\n");
+            printf("  sudosh -u user command  Execute command as specific user\n\n");
+            printf("sudosh provides both an interactive shell and direct command execution.\n");
+            printf("All commands are authenticated and logged to syslog.\n");
+            printf("Use -l to list available commands showing each permission source separately.\n");
+            printf("Use -L to also log the complete session to a file.\n");
+            printf("Use -v for verbose output including privilege detection details.\n");
+            printf("Use -u to run commands as a specific target user (requires sudoers permission).\n");
+            return EXIT_SUCCESS;
+
         } else if (strcmp(argv[i], "--rc-alias-import") == 0) {
             rc_alias_import_enabled = 1;
         } else if (strcmp(argv[i], "--no-rc-alias-import") == 0) {
@@ -554,21 +598,12 @@ int main(int argc, char *argv[]) {
             ansible_detection_force = 1;
         } else if (strcmp(argv[i], "--ansible-verbose") == 0) {
             ansible_detection_verbose = 1;
-            printf("      --rc-alias-import   Enable importing aliases from shell rc files (default)\n");
-            printf("      --no-rc-alias-import Disable importing aliases from shell rc files\n\n");
-            printf("Command Execution:\n");
-            printf("  sudosh                  Start interactive shell (default)\n");
-            printf("  sudosh command          Execute command and exit\n");
-            printf("  sudosh -c \"command\"      Execute command and exit (explicit)\n");
-            printf("  sudosh -u user command  Execute command as specific user\n\n");
-            printf("sudosh provides both an interactive shell and direct command execution.\n");
-            printf("All commands are authenticated and logged to syslog.\n");
-            printf("Use -l to list available commands showing each permission source separately.\n");
-            printf("Use -L to also log the complete session to a file.\n");
-            printf("Use -v for verbose output including privilege detection details.\n");
-            printf("Use -u to run commands as a specific target user (requires sudoers permission).\n");
-            return EXIT_SUCCESS;
         } else if (strcmp(argv[i], "--version") == 0) {
+            } else if (strcmp(argv[i], "-V") == 0 && sudo_compat_mode) {
+                /* sudo-compat: -V (version) */
+                printf("sudosh %s\n", SUDOSH_VERSION);
+                return EXIT_SUCCESS;
+
             printf("sudosh %s\n", SUDOSH_VERSION);
             return EXIT_SUCCESS;
         } else if (strcmp(argv[i], "--build-info") == 0) {
@@ -581,7 +616,33 @@ int main(int argc, char *argv[]) {
             printf("sudosh %s\n", SUDOSH_VERSION);
             printf("build: git=%s date=%s by=%s\n", git, date, user);
             return EXIT_SUCCESS;
-        } else if (strcmp(argv[i], "--verbose") == 0 || strcmp(argv[i], "-v") == 0) {
+        } else if (strcmp(argv[i], "-v") == 0 && sudo_compat_mode) {
+            /* sudo-compat: -v = validate/update timestamp (no command execution) */
+            char *username = get_current_username();
+            if (username) {
+                if (check_auth_cache(username)) {
+                    update_auth_cache(username);
+                    if (verbose_mode) printf("sudosh: refreshed authentication cache for %s\n", username);
+                } else {
+                    if (!non_interactive_mode_flag) {
+                        if (authenticate_user(username)) {
+                            update_auth_cache(username);
+                            if (verbose_mode) printf("sudosh: authenticated and cached for %s\n", username);
+                        } else {
+                            fprintf(stderr, "sudosh: authentication failed\n");
+                            free(username);
+                            return EXIT_AUTH_FAILURE;
+                        }
+                    } else {
+                        fprintf(stderr, "sudosh: non-interactive mode prevents authentication\n");
+                        free(username);
+                        return EXIT_AUTH_FAILURE;
+                    }
+                }
+                free(username);
+            }
+            return EXIT_SUCCESS;
+        } else if (strcmp(argv[i], "--verbose") == 0 || (strcmp(argv[i], "-v") == 0 && !sudo_compat_mode)) {
             verbose_mode = 1;
         } else if (strcmp(argv[i], "--list") == 0 || strcmp(argv[i], "-l") == 0) {
             /* List available commands and exit */
@@ -620,26 +681,48 @@ int main(int argc, char *argv[]) {
             ansible_detection_enabled = 1;  /* Force implies enabled */
         } else if (strcmp(argv[i], "--ansible-verbose") == 0) {
             ansible_detection_verbose = 1;
+        } else if (strcmp(argv[i], "-n") == 0) {
+            /* Non-interactive: refuse any auth prompt (compat with sudo -n) */
+            non_interactive_mode_flag = 1;
+        } else if (strcmp(argv[i], "-k") == 0) {
+            /* Invalidate cached authentication and exit */
+            char *username = get_current_username();
+            if (username) {
+                clear_auth_cache(username);
+                if (verbose_mode) printf("sudosh: cleared authentication cache for %s\n", username);
+                free(username);
+            }
+            return EXIT_SUCCESS;
         } else if (strcmp(argv[i], "-c") == 0) {
-            /* -c command: execute command and exit (like sudo -c) */
+            /* -c command: execute command and exit (sudo-compat: matches common sudo usage) */
             if (i + 1 >= argc) {
                 fprintf(stderr, "sudosh: option '%s' requires an argument\n", argv[i]);
                 fprintf(stderr, "Try '%s --help' for more information.\n", argv[0]);
                 return EXIT_FAILURE;
+        } else if (sudo_compat_mode && (
+                   strcmp(argv[i], "-E") == 0 || strcmp(argv[i], "-H") == 0 ||
+                   strcmp(argv[i], "-i") == 0 || strcmp(argv[i], "-s") == 0 ||
+                   strcmp(argv[i], "-A") == 0 || strcmp(argv[i], "-S") == 0 ||
+                   strcmp(argv[i], "-b") == 0 || strcmp(argv[i], "-p") == 0)) {
+            fprintf(stderr, "sudosh: option '%s' is unsupported in sudo-compat mode (security policy)\n", argv[i]);
+            fprintf(stderr, "See '%s --help' for supported options.\n", argv[0]);
+            return EXIT_FAILURE;
+
             }
-            /* Execute the command directly and exit */
-            diag_logf("argv -c path: handing off to execute_single_command");
-            return execute_single_command(argv[++i], target_user);
+            const char *cmd = argv[++i];
+            /* In sudo-compat mode we still enforce sudosh mitigations: no direct shells, redirection, or injection */
+            diag_logf("argv -c path: handing off to execute_single_command compat=%d", sudo_compat_mode);
+            return execute_single_command(cmd, target_user);
         } else if (argv[i][0] != '-') {
-            /* Non-option argument: treat as command to execute */
+            /* Non-option argument: treat as command to execute (sudo compat: bare 'sudo cmd') */
             /* Build command from remaining arguments */
             char command_buffer[4096] = {0};
             for (int j = i; j < argc; j++) {
-                if (j > i) strcat(command_buffer, " ");
+                if (j > i) strncat(command_buffer, " ", sizeof(command_buffer) - strlen(command_buffer) - 1);
                 strncat(command_buffer, argv[j], sizeof(command_buffer) - strlen(command_buffer) - 1);
             }
             /* Execute the command directly and exit */
-            diag_logf("argv non-option path: handing off to execute_single_command");
+            diag_logf("argv non-option path: handing off to execute_single_command compat=%d", sudo_compat_mode);
             return execute_single_command(command_buffer, target_user);
         } else {
             fprintf(stderr, "sudosh: unknown option '%s'\n", argv[i]);
@@ -669,18 +752,6 @@ int main(int argc, char *argv[]) {
             /* Apply shell enhancements related config */
             rc_alias_import_enabled = cfg->rc_alias_import_enabled;
             sudosh_config_free(cfg);
-    /* Load configuration file if present to toggle features */
-    sudosh_config_t *cfg = sudosh_config_init();
-    if (cfg) {
-        /* Try common config paths; optional */
-        const char *paths[] = { "/etc/sudosh.conf", "/usr/local/etc/sudosh.conf", NULL };
-        for (int pi = 0; paths[pi]; ++pi) {
-            sudosh_config_load(cfg, paths[pi]);
-        }
-        /* Apply shell enhancements related config */
-        rc_alias_import_enabled = cfg->rc_alias_import_enabled;
-        sudosh_config_free(cfg);
-    }
 
         }
         /* Session logging enabled silently - logged to syslog for audit */

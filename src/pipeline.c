@@ -16,8 +16,8 @@ static const char *whitelisted_pipe_commands[] = {
     "head", "tail", "tr", "wc", "nl", "cat", "tac", "rev",
     
     /* System information commands */
-    "ps", "ls", "df", "du", "who", "w", "id", "whoami", "date", 
-    "uptime", "uname", "hostname", "pwd", "env", "printenv",
+    "ps", "ls", "df", "du", "who", "w", "id", "whoami", "date",
+    "uptime", "uname", "hostname", "pwd", "env", "printenv", "echo",
     
     /* Pagers and viewers */
     "less", "more", "cat",
@@ -324,7 +324,7 @@ int is_secure_pager_command(const char *command) {
 
 
 /**
- * Execute pipeline with security isolation
+ * Execute pipeline with security isolation and comprehensive audit logging
  */
 int execute_pipeline(struct pipeline_info *pipeline, struct user_info *user) {
     (void)user;  /* Suppress unused parameter warning */
@@ -337,6 +337,9 @@ int execute_pipeline(struct pipeline_info *pipeline, struct user_info *user) {
     if (!validate_pipeline_security(pipeline)) {
         return -1;
     }
+
+    /* Log the start of pipeline execution */
+    log_pipeline_start(pipeline);
 
     /* Create pipes */
     for (int i = 0; i < pipeline->num_pipes; i++) {
@@ -392,6 +395,55 @@ int execute_pipeline(struct pipeline_info *pipeline, struct user_info *user) {
                 close(pipeline->pipe_fds[j]);
             }
 
+            /* Handle file redirection for this command */
+            if (cmd->redirect_type != REDIRECT_NONE && cmd->redirect_file) {
+                int redirect_fd;
+
+                switch (cmd->redirect_type) {
+                    case REDIRECT_OUTPUT:
+                        redirect_fd = open(cmd->redirect_file, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+                        if (redirect_fd == -1) {
+                            perror("open output file");
+                            exit(EXIT_FAILURE);
+                        }
+                        if (dup2(redirect_fd, STDOUT_FILENO) == -1) {
+                            perror("dup2 stdout");
+                            exit(EXIT_FAILURE);
+                        }
+                        close(redirect_fd);
+                        break;
+
+                    case REDIRECT_OUTPUT_APPEND:
+                        redirect_fd = open(cmd->redirect_file, O_WRONLY | O_CREAT | O_APPEND, 0644);
+                        if (redirect_fd == -1) {
+                            perror("open output file for append");
+                            exit(EXIT_FAILURE);
+                        }
+                        if (dup2(redirect_fd, STDOUT_FILENO) == -1) {
+                            perror("dup2 stdout append");
+                            exit(EXIT_FAILURE);
+                        }
+                        close(redirect_fd);
+                        break;
+
+                    case REDIRECT_INPUT:
+                        redirect_fd = open(cmd->redirect_file, O_RDONLY);
+                        if (redirect_fd == -1) {
+                            perror("open input file");
+                            exit(EXIT_FAILURE);
+                        }
+                        if (dup2(redirect_fd, STDIN_FILENO) == -1) {
+                            perror("dup2 stdin");
+                            exit(EXIT_FAILURE);
+                        }
+                        close(redirect_fd);
+                        break;
+
+                    default:
+                        break;
+                }
+            }
+
             /* Setup secure environment for pagers */
             if (is_secure_pager_command(cmd->argv[0])) {
                 setup_secure_pager_environment();
@@ -425,6 +477,9 @@ int execute_pipeline(struct pipeline_info *pipeline, struct user_info *user) {
         }
     }
 
+    /* Log pipeline completion */
+    log_pipeline_completion(pipeline, final_status);
+
     return final_status;
 }
 
@@ -448,4 +503,97 @@ void free_pipeline_info(struct pipeline_info *pipeline) {
     }
 
     memset(pipeline, 0, sizeof(struct pipeline_info));
+}
+
+/**
+ * Log the start of pipeline execution
+ */
+void log_pipeline_start(struct pipeline_info *pipeline) {
+    if (!pipeline) {
+        return;
+    }
+
+    char *username = get_current_username();
+    if (!username) {
+        username = "unknown";
+    }
+
+    /* Log overall pipeline start */
+    syslog(LOG_INFO, "PIPELINE_START: user=%s commands=%d", username, pipeline->num_commands);
+
+    /* Log each individual command in the pipeline */
+    for (int i = 0; i < pipeline->num_commands; i++) {
+        struct command_info *cmd = &pipeline->commands[i].cmd;
+        if (cmd && cmd->command) {
+            syslog(LOG_INFO, "PIPELINE_CMD[%d]: user=%s command=%s", i, username, cmd->command);
+
+            /* Also log to command history if available */
+            log_command_with_ansible_context(username, cmd->command, 1);
+        }
+    }
+}
+
+/**
+ * Log the completion of pipeline execution
+ */
+void log_pipeline_completion(struct pipeline_info *pipeline, int exit_code) {
+    if (!pipeline) {
+        return;
+    }
+
+    char *username = get_current_username();
+    if (!username) {
+        username = "unknown";
+    }
+
+    /* Log pipeline completion with exit code */
+    syslog(LOG_INFO, "PIPELINE_COMPLETE: user=%s commands=%d exit_code=%d",
+           username, pipeline->num_commands, exit_code);
+
+    /* Log individual command completions */
+    for (int i = 0; i < pipeline->num_commands; i++) {
+        struct command_info *cmd = &pipeline->commands[i].cmd;
+        if (cmd && cmd->command) {
+            syslog(LOG_INFO, "PIPELINE_CMD_COMPLETE[%d]: user=%s command=%s",
+                   i, username, cmd->command);
+        }
+    }
+}
+
+/**
+ * Enhanced pipeline validation with individual command permission checking
+ */
+int validate_pipeline_with_permissions(struct pipeline_info *pipeline, const char *username) {
+    if (!pipeline || !pipeline->commands || !username) {
+        return 0;
+    }
+
+    /* First do basic pipeline security validation */
+    if (!validate_pipeline_security(pipeline)) {
+        return 0;
+    }
+
+    /* Then check each command against user permissions */
+    for (int i = 0; i < pipeline->num_commands; i++) {
+        struct command_info *cmd = &pipeline->commands[i].cmd;
+
+        if (!cmd->argv || !cmd->argv[0] || !cmd->command) {
+            fprintf(stderr, "sudosh: invalid command in pipeline at position %d\n", i);
+            return 0;
+        }
+
+        /* Check if user has permission to run this specific command */
+        if (!check_command_permission(username, cmd->command)) {
+            fprintf(stderr, "sudosh: %s is not allowed to run '%s' in pipeline\n",
+                    username, cmd->command);
+            log_security_violation(username, "unauthorized command in pipeline");
+            return 0;
+        }
+
+        /* Log the permission check */
+        syslog(LOG_INFO, "PIPELINE_PERMISSION_CHECK: user=%s command=%s result=allowed",
+               username, cmd->command);
+    }
+
+    return 1;
 }

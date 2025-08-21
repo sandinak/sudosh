@@ -68,6 +68,34 @@
         } \
     } while(0)
 
+/* Simplified assertion macros for easier testing */
+#define ASSERT_TRUE(condition) \
+    do { \
+        if (!(condition)) { \
+            fprintf(stderr, "FAIL: %s:%d: Assertion failed: %s\n", __FILE__, __LINE__, #condition); \
+            test_failures++; \
+            return 0; \
+        } \
+    } while(0)
+
+#define ASSERT_FALSE(condition) \
+    do { \
+        if (condition) { \
+            fprintf(stderr, "FAIL: %s:%d: Assertion failed: expected false but got true: %s\n", __FILE__, __LINE__, #condition); \
+            test_failures++; \
+            return 0; \
+        } \
+    } while(0)
+
+#define ASSERT_EQUAL(expected, actual) \
+    do { \
+        if ((expected) != (actual)) { \
+            fprintf(stderr, "FAIL: %s:%d: Expected %d, got %d\n", __FILE__, __LINE__, (int)(expected), (int)(actual)); \
+            test_failures++; \
+            return 0; \
+        } \
+    } while(0)
+
 #define RUN_TEST(test_func) \
     do { \
         printf("Running %s... ", #test_func); \

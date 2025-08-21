@@ -486,6 +486,108 @@ struct sudoers_config *parse_sudoers_file(const char *filename) {
 }
 
 /**
+ * Check if a specific command is allowed for a user according to sudoers configuration
+ */
+int check_sudoers_command_permission(const char *username, const char *hostname, const char *command, struct sudoers_config *sudoers) {
+    struct sudoers_userspec *spec;
+    char *cmd_copy, *cmd_name, *saveptr;
+    int is_allowed = 0;
+
+    if (!username || !hostname || !command || !sudoers) {
+        return 0;
+    }
+
+    /* Extract just the command name (first word) for checking */
+    cmd_copy = strdup(command);
+    if (!cmd_copy) {
+        return 0;
+    }
+
+    cmd_name = strtok_r(cmd_copy, " \t", &saveptr);
+    if (!cmd_name) {
+        free(cmd_copy);
+        return 0;
+    }
+
+    /* Check each userspec */
+    for (spec = sudoers->userspecs; spec && !is_allowed; spec = spec->next) {
+        /* Check if this rule applies to the user */
+        int user_matches = 0;
+        if (spec->users) {
+            for (int i = 0; spec->users[i] && !user_matches; i++) {
+                if (strcmp(spec->users[i], username) == 0 ||
+                    strcmp(spec->users[i], "ALL") == 0) {
+                    user_matches = 1;
+                }
+            }
+        }
+
+        if (!user_matches) {
+            continue;
+        }
+
+        /* Check if this rule applies to the host */
+        int host_matches = 0;
+        if (spec->hosts) {
+            for (int i = 0; spec->hosts[i] && !host_matches; i++) {
+                if (strcmp(spec->hosts[i], hostname) == 0 ||
+                    strcmp(spec->hosts[i], "ALL") == 0) {
+                    host_matches = 1;
+                }
+            }
+        }
+
+        if (!host_matches) {
+            continue;
+        }
+
+        /* Check if the command is allowed */
+        if (spec->commands) {
+            for (int i = 0; spec->commands[i] && !is_allowed; i++) {
+                char *allowed_cmd = spec->commands[i];
+
+                /* Handle ALL commands */
+                if (strcmp(allowed_cmd, "ALL") == 0) {
+                    is_allowed = 1;
+                    break;
+                }
+
+                /* Handle exact command matches */
+                if (strcmp(allowed_cmd, cmd_name) == 0) {
+                    is_allowed = 1;
+                    break;
+                }
+
+                /* Handle full path matches */
+                if (allowed_cmd[0] == '/' && strcmp(allowed_cmd, command) == 0) {
+                    is_allowed = 1;
+                    break;
+                }
+
+                /* Handle wildcard patterns (basic support) */
+                if (strstr(allowed_cmd, "*")) {
+                    /* Simple wildcard matching - could be enhanced */
+                    char *pattern = strdup(allowed_cmd);
+                    if (pattern) {
+                        char *star = strchr(pattern, '*');
+                        if (star) {
+                            *star = '\0';
+                            if (strncmp(pattern, cmd_name, strlen(pattern)) == 0) {
+                                is_allowed = 1;
+                            }
+                        }
+                        free(pattern);
+                    }
+                }
+            }
+        }
+    }
+
+    free(cmd_copy);
+    return is_allowed;
+}
+
+/**
  * Free sudoers configuration
  */
 void free_sudoers_config(struct sudoers_config *config) {
@@ -951,8 +1053,72 @@ void list_available_commands(const char *username) {
         printf("User is not in any admin groups and has no explicit sudoers rules\n");
     }
 
+    /* Add safe commands and blocked commands sections */
+    printf("\n");
+    print_safe_commands_section();
+    printf("\n");
+    print_blocked_commands_section();
+
     /* Clean up */
     if (sudoers_config) {
         free_sudoers_config(sudoers_config);
     }
+}
+
+/**
+ * Print safe commands section
+ */
+void print_safe_commands_section(void) {
+    printf("Always Safe Commands (No sudo required):\n");
+    printf("=======================================\n");
+    printf("These commands can always be executed without special permissions:\n\n");
+
+    printf("System Information:\n");
+    printf("  ls, pwd, whoami, id, date, uptime, w, who\n\n");
+
+    printf("Text Processing:\n");
+    printf("  grep, egrep, fgrep, sed, awk, cut, sort, uniq\n");
+    printf("  head, tail, wc, cat, echo\n\n");
+
+    printf("Notes:\n");
+    printf("• These commands are always allowed regardless of sudo configuration\n");
+    printf("• Text processing commands support quotes, field references ($1, $2), and patterns\n");
+    printf("• Safe redirection to /tmp/, /var/tmp/, and home directories is allowed\n");
+    printf("• Dangerous operations (system() calls, shell escapes) are still blocked\n");
+}
+
+/**
+ * Print blocked commands section
+ */
+void print_blocked_commands_section(void) {
+    printf("Always Blocked Commands (Security Protection):\n");
+    printf("==============================================\n");
+    printf("These commands are blocked for security reasons:\n\n");
+
+    printf("System Control:\n");
+    printf("  init, shutdown, halt, reboot, poweroff, telinit\n");
+    printf("  systemctl poweroff/reboot/halt/emergency/rescue\n\n");
+
+    printf("Disk Operations:\n");
+    printf("  fdisk, parted, gparted, mkfs, fsck, dd, shred, wipe\n");
+    printf("  mount, umount, swapon, swapoff\n\n");
+
+    printf("Network Security:\n");
+    printf("  iptables, ip6tables, ufw, firewall-cmd\n\n");
+
+    printf("Privilege Escalation:\n");
+    printf("  su, sudo, pkexec, sudoedit\n\n");
+
+    printf("Communication:\n");
+    printf("  wall, write, mesg\n\n");
+
+    printf("Shell Operations:\n");
+    printf("  sh, bash, zsh, csh, tcsh, ksh, fish, dash\n");
+    printf("  Interactive shells and shell-like interpreters\n\n");
+
+    printf("Notes:\n");
+    printf("• These restrictions apply regardless of sudo configuration\n");
+    printf("• Commands are blocked to prevent system damage and security bypasses\n");
+    printf("• Use specific administrative commands instead of broad system tools\n");
+    printf("• Some commands may be allowed through specific sudo rules\n");
 }

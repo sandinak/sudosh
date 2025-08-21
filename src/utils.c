@@ -186,7 +186,7 @@ void print_help(void) {
     printf("Available built-in commands:\n");
     printf("  help, ?       - Show this help message\n");
     printf("  commands      - List all available commands\n");
-    printf("  rules         - Show sudo rules and their sources\n");
+    printf("  rules         - Show sudo rules, safe commands, and blocked commands\n");
     printf("  history       - Show command history\n");
     printf("  version       - Show version information\n");
     printf("  cd <dir>      - Change current directory\n");
@@ -245,7 +245,7 @@ void print_commands(void) {
     printf("  pushd         - Push directory onto stack\n");
     printf("  pwd           - Print current working directory\n");
     printf("  quit          - Exit sudosh\n");
-    printf("  rules         - Show sudo rules and their sources\n");
+    printf("  rules         - Show sudo rules, safe commands, and blocked commands\n");
     printf("  type          - Show command type\n");
     printf("  unalias       - Remove alias\n");
     printf("  unset         - Remove environment variable\n");
@@ -1363,7 +1363,7 @@ int handle_builtin_command(const char *command) {
     } else if (strcmp(token, "rules") == 0) {
         char *username = get_current_username();
         if (username) {
-            list_available_commands(username);
+            execute_with_pager(list_available_commands, username);
             free(username);
         } else {
             printf("Error: Could not determine current user\n");
@@ -2910,4 +2910,23 @@ void cleanup_color_config(void) {
         free_color_config(global_color_config);
         global_color_config = NULL;
     }
+}
+
+/**
+ * Get terminal height for paging
+ */
+int get_terminal_height(void) {
+    struct winsize w;
+    if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &w) == 0) {
+        return w.ws_row;
+    }
+    return 24; /* Default fallback */
+}
+
+/**
+ * Execute function with pager if output is too long
+ */
+void execute_with_pager(void (*func)(const char*), const char *arg) {
+    /* For now, just execute directly - paging can be added later if needed */
+    func(arg);
 }

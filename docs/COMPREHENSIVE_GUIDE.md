@@ -222,6 +222,8 @@ Options:
   -L, --log-session FILE  Log entire session to FILE
   -u, --user USER         Run commands as target USER
   -c, --command COMMAND   Execute COMMAND and exit (like sudo -c)
+      --rc-alias-import   Enable importing aliases from shell rc files (default)
+      --no-rc-alias-import Disable importing aliases from shell rc files
       --ansible-detect    Enable Ansible session detection (default)
       --no-ansible-detect Disable Ansible session detection
       --ansible-force     Force Ansible session mode

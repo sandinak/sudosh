@@ -149,6 +149,142 @@ int validate_alias_value(const char *value) {
 }
 
 /**
+ * Check for dangerous alias patterns that could be used for privilege escalation
+ */
+int check_dangerous_alias_patterns(const char *alias_name, const char *alias_value) {
+    if (!alias_name || !alias_value) {
+        return 1; /* Dangerous - invalid input */
+    }
+
+    /* Check for aliases that try to override critical commands */
+    const char *critical_commands[] = {
+        "sudo", "su", "passwd", "chown", "chmod", "chgrp",
+        "mount", "umount", "systemctl", "service", "init",
+        "reboot", "shutdown", "halt", "poweroff",
+        "iptables", "firewall-cmd", "ufw",
+        "crontab", "at", "batch",
+        "ssh", "scp", "rsync", "wget", "curl",
+        NULL
+    };
+
+    for (int i = 0; critical_commands[i]; i++) {
+        if (strcmp(alias_name, critical_commands[i]) == 0) {
+            return 1; /* Dangerous - trying to override critical command */
+        }
+    }
+
+    /* Check for aliases that try to execute privileged commands */
+    for (int i = 0; critical_commands[i]; i++) {
+        if (strstr(alias_value, critical_commands[i])) {
+            /* Check if it's a word boundary */
+            char *cmd_in_value = strstr(alias_value, critical_commands[i]);
+            if ((cmd_in_value == alias_value || !isalnum(*(cmd_in_value - 1))) &&
+                (!isalnum(*(cmd_in_value + strlen(critical_commands[i]))))) {
+                return 1; /* Dangerous - contains privileged command */
+            }
+        }
+    }
+
+    /* Check for aliases that try to modify the environment in dangerous ways */
+    const char *dangerous_env_patterns[] = {
+        "PATH=", "LD_PRELOAD=", "LD_LIBRARY_PATH=", "SHELL=",
+        "HOME=", "USER=", "LOGNAME=", "SUDO_",
+        "export PATH", "export LD_PRELOAD", "export LD_LIBRARY_PATH",
+        NULL
+    };
+
+    for (int i = 0; dangerous_env_patterns[i]; i++) {
+        if (strstr(alias_value, dangerous_env_patterns[i])) {
+            return 1; /* Dangerous - environment manipulation */
+        }
+    }
+
+    /* Check for aliases that try to execute code from unusual locations */
+    if (strstr(alias_value, "/tmp/") || strstr(alias_value, "/var/tmp/") ||
+        strstr(alias_value, "/dev/shm/") || strstr(alias_value, "~/.")) {
+        return 1; /* Dangerous - execution from temporary or hidden locations */
+    }
+
+    return 0; /* Safe */
+}
+
+/**
+ * Validate alias expansion safety during alias creation
+ */
+int validate_alias_expansion_safety(const char *alias_name, const char *alias_value) {
+    if (!alias_name || !alias_value) {
+        return 0;
+    }
+
+    /* Check for self-referential aliases */
+    if (strcmp(alias_name, alias_value) == 0) {
+        return 0;
+    }
+
+    /* Check for recursive references in the alias value */
+    if (strstr(alias_value, alias_name)) {
+        /* The alias value contains the alias name - check if it's a word boundary */
+        char *alias_in_value = strstr(alias_value, alias_name);
+
+        if ((alias_in_value == alias_value || !isalnum(*(alias_in_value - 1))) &&
+            (!isalnum(*(alias_in_value + strlen(alias_name))))) {
+            /* This would create a recursive alias */
+            return 0;
+        }
+    }
+
+    /* Test expansion with a dummy argument to see if it would be safe */
+    char test_command[MAX_ALIAS_VALUE_LENGTH + 64];
+    snprintf(test_command, sizeof(test_command), "%s test_arg", alias_name);
+
+    /* Temporarily add the alias to test expansion */
+    struct alias_entry temp_alias;
+    temp_alias.name = (char *)alias_name;
+    temp_alias.value = (char *)alias_value;
+    temp_alias.next = alias_list;
+
+    /* Temporarily modify the alias list */
+    struct alias_entry *old_head = alias_list;
+    alias_list = &temp_alias;
+
+    /* Test the expansion */
+    char *expanded = expand_aliases_internal(test_command);
+
+    /* Restore the original alias list */
+    alias_list = old_head;
+
+    if (!expanded) {
+        return 0;
+    }
+
+    /* Validate the expanded result */
+    int is_safe = validate_command(expanded);
+
+    /* Additional checks for the expanded command */
+    if (is_safe) {
+        /* Check that expansion doesn't introduce dangerous patterns */
+        if (strchr(expanded, ';') || strchr(expanded, '&') ||
+            strstr(expanded, "&&") || strstr(expanded, "||") ||
+            strchr(expanded, '`') || strstr(expanded, "$(")) {
+            is_safe = 0;
+        }
+
+        /* Check for dangerous commands in the expansion */
+        char *expanded_copy = strdup(expanded);
+        if (expanded_copy) {
+            char *first_cmd = strtok(expanded_copy, " \t");
+            if (first_cmd && (is_dangerous_command(first_cmd) || is_dangerous_system_operation(first_cmd))) {
+                is_safe = 0;
+            }
+            free(expanded_copy);
+        }
+    }
+
+    free(expanded);
+    return is_safe;
+}
+
+/**
  * Add or update an alias
  */
 int add_alias(const char *name, const char *value) {
@@ -166,6 +302,16 @@ int add_alias(const char *name, const char *value) {
     }
     /* Explicitly block dangerous system operations as aliases */
     if (is_dangerous_system_operation(value) || is_dangerous_command(value)) {
+        return 0;
+    }
+
+    /* SECURITY ENHANCEMENT: Check for dangerous alias patterns */
+    if (check_dangerous_alias_patterns(name, value)) {
+        return 0;
+    }
+
+    /* SECURITY ENHANCEMENT: Test the alias expansion to ensure it's safe */
+    if (!validate_alias_expansion_safety(name, value)) {
         return 0;
     }
 
@@ -476,6 +622,14 @@ int load_aliases_from_shell_rc_files(void) {
                     strstr(val, ">") || strstr(val, "|") || strstr(val, "&&") || strstr(val, ";")) {
                     continue;
                 }
+                /* SECURITY ENHANCEMENT: Check for dangerous patterns */
+                if (check_dangerous_alias_patterns(name, val)) {
+                    continue;
+                }
+                /* SECURITY ENHANCEMENT: Additional validation for expansion safety */
+                if (!validate_alias_expansion_safety(name, val)) {
+                    continue;
+                }
                 /* Add alias */
                 if (add_alias(name, val)) {
                     loaded_any = 1;
@@ -533,9 +687,9 @@ int save_aliases_to_file(void) {
 }
 
 /**
- * Expand aliases in a command
+ * Internal alias expansion without security validation (for testing during alias creation)
  */
-char *expand_aliases(const char *command) {
+char *expand_aliases_internal(const char *command) {
     if (!alias_system_initialized || !command) {
         return NULL;
     }
@@ -586,6 +740,164 @@ char *expand_aliases(const char *command) {
 
     free(command_copy);
     return expanded;
+}
+
+/**
+ * Expand aliases in a command with security validation
+ */
+char *expand_aliases(const char *command) {
+    if (!alias_system_initialized || !command) {
+        return NULL;
+    }
+
+    /* Create a copy of the command to work with */
+    char *command_copy = strdup(command);
+    if (!command_copy) {
+        return NULL;
+    }
+
+    /* Trim whitespace */
+    command_copy = trim_whitespace(command_copy);
+
+    /* Extract the first word (command name) */
+    char *space = strchr(command_copy, ' ');
+    char *first_word;
+    char *rest_of_command = "";
+
+    if (space) {
+        *space = '\0';
+        first_word = command_copy;
+        rest_of_command = space + 1;
+    } else {
+        first_word = command_copy;
+    }
+
+    /* Check if first word is an alias */
+    char *alias_value = get_alias_value(first_word);
+    if (!alias_value) {
+        /* No alias found, return original command */
+        free(command_copy);
+        return strdup(command);
+    }
+
+    /* Construct expanded command */
+    size_t expanded_len = strlen(alias_value) + strlen(rest_of_command) + 2;
+    char *expanded = malloc(expanded_len);
+    if (!expanded) {
+        free(command_copy);
+        return NULL;
+    }
+
+    if (strlen(rest_of_command) > 0) {
+        snprintf(expanded, expanded_len, "%s %s", alias_value, rest_of_command);
+    } else {
+        strcpy(expanded, alias_value);
+    }
+
+    /* SECURITY ENHANCEMENT: Validate the expanded command before returning it */
+    if (!validate_expanded_alias_command(expanded, first_word, alias_value)) {
+        fprintf(stderr, "sudosh: alias expansion '%s' -> '%s' failed security validation\n",
+                first_word, expanded);
+
+        /* Log the security violation with details */
+        char violation_msg[512];
+        char *username = get_current_username();
+        snprintf(violation_msg, sizeof(violation_msg),
+                "dangerous alias expansion blocked: %s -> %s", first_word, expanded);
+        log_security_violation(username, violation_msg);
+        free(username);
+
+        free(expanded);
+        free(command_copy);
+        return NULL;
+    }
+
+    /* Log successful alias expansion for audit trail */
+    if (strcmp(command, expanded) != 0) {
+        char audit_msg[512];
+        char *username = get_current_username();
+        snprintf(audit_msg, sizeof(audit_msg),
+                "alias expanded: %s -> %s", first_word, alias_value);
+        syslog(LOG_INFO, "ALIAS_EXPANSION: user=%s %s",
+               username ? username : "unknown", audit_msg);
+        free(username);
+    }
+
+    free(command_copy);
+    return expanded;
+}
+
+/**
+ * Validate expanded alias command for security
+ */
+int validate_expanded_alias_command(const char *expanded_command, const char *alias_name, const char *alias_value) {
+    if (!expanded_command || !alias_name || !alias_value) {
+        return 0;
+    }
+
+    /* First, validate the expanded command using the standard security validator */
+    if (!validate_command(expanded_command)) {
+        return 0;
+    }
+
+    /* Check for alias expansion loops (alias pointing to itself) */
+    if (strcmp(alias_name, alias_value) == 0) {
+        return 0;
+    }
+
+    /* Check for recursive alias expansion that could lead to infinite loops */
+    if (strstr(alias_value, alias_name)) {
+        /* The alias value contains the alias name - potential recursion */
+        char *alias_in_value = strstr(alias_value, alias_name);
+
+        /* Check if it's a word boundary (not part of another word) */
+        if ((alias_in_value == alias_value || !isalnum(*(alias_in_value - 1))) &&
+            (!isalnum(*(alias_in_value + strlen(alias_name))))) {
+            return 0;
+        }
+    }
+
+    /* Extract the first command from the expanded result for additional validation */
+    char *expanded_copy = strdup(expanded_command);
+    if (!expanded_copy) {
+        return 0;
+    }
+
+    char *first_cmd = strtok(expanded_copy, " \t");
+    if (first_cmd) {
+        /* Check if the expanded command is trying to execute dangerous commands */
+        if (is_dangerous_command(first_cmd) || is_dangerous_system_operation(first_cmd)) {
+            free(expanded_copy);
+            return 0;
+        }
+
+        /* Check if the expanded command contains shell metacharacters that weren't in the original alias */
+        if (strchr(expanded_command, ';') || strchr(expanded_command, '&') ||
+            strstr(expanded_command, "&&") || strstr(expanded_command, "||") ||
+            strchr(expanded_command, '`') || strstr(expanded_command, "$(")) {
+            free(expanded_copy);
+            return 0;
+        }
+
+        /* Check for redirection that wasn't validated during alias creation */
+        if (strchr(expanded_command, '>') || strchr(expanded_command, '<')) {
+            if (!validate_safe_redirection(expanded_command)) {
+                free(expanded_copy);
+                return 0;
+            }
+        }
+
+        /* Check for pipeline commands */
+        if (strchr(expanded_command, '|')) {
+            if (!validate_secure_pipeline(expanded_command)) {
+                free(expanded_copy);
+                return 0;
+            }
+        }
+    }
+
+    free(expanded_copy);
+    return 1;
 }
 
 /**

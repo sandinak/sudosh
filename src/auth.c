@@ -87,6 +87,12 @@ int pam_conversation(int num_msg, const struct pam_message **msg,
     struct pam_response *responses;
     int i;
 
+    /* Respect non-interactive (-n) behavior: refuse any prompt immediately */
+    extern int non_interactive_mode_flag;
+    if (non_interactive_mode_flag) {
+        return PAM_AUTH_ERR; /* No prompts allowed */
+    }
+
     if (num_msg <= 0 || num_msg > PAM_MAX_NUM_MSG) {
         return PAM_CONV_ERR;
     }
@@ -704,81 +710,20 @@ int authenticate_user(const char *username) {
 }
 
 /**
- * Enhanced sudo privilege checking using NSS, sudoers parsing, and SSSD
+ * Enhanced sudo privilege checking using NSS, sudoers parsing, and SSSD (no sudo dependency)
  */
 int check_sudo_privileges_enhanced(const char *username) {
-    struct nss_config *nss_config = NULL;
-    struct sudoers_config *sudoers_config = NULL;
-    struct nss_source *source;
-    int has_privileges = 0;
-    char hostname[256];
-
     /* Check for NULL or empty username */
     if (!username || *username == '\0') {
         return 0;
     }
 
-    /* Get hostname */
-    if (gethostname(hostname, sizeof(hostname)) != 0) {
-        strcpy(hostname, "localhost");
-    }
+    /* Use the new NSS-based checking that doesn't depend on sudo */
+    int has_privileges = check_sudo_privileges_nss(username);
 
-    /* Read NSS configuration */
-    nss_config = read_nss_config();
-    if (!nss_config) {
-        return check_sudo_privileges_fallback(username);
-    }
-
-    /* Check each sudoers source according to NSS configuration */
-    for (source = nss_config->sudoers_sources; source && !has_privileges; source = source->next) {
-        switch (source->type) {
-            case NSS_SOURCE_FILES:
-                /* Parse and check sudoers file with privilege escalation */
-                sudoers_config = parse_sudoers_file(NULL);
-                if (sudoers_config) {
-                    has_privileges = check_sudoers_privileges(username, hostname, sudoers_config);
-                    free_sudoers_config(sudoers_config);
-                    /* If we successfully parsed sudoers, don't fall back to sudo -l */
-                    if (has_privileges) {
-                        free_nss_config(nss_config);
-                        return has_privileges;
-                    }
-                }
-                break;
-
-            case NSS_SOURCE_SSSD:
-                /* Check SSSD for sudo privileges */
-                has_privileges = check_sssd_privileges(username);
-                break;
-
-            case NSS_SOURCE_LDAP:
-                /* LDAP support would go here */
-                break;
-
-            default:
-                continue;
-        }
-    }
-
-    free_nss_config(nss_config);
-
-    /* If no privileges found via NSS sources, try direct sudoers parsing */
+    /* If NSS-based checking fails, fall back to the old method as last resort */
     if (!has_privileges) {
-        /* Try to parse sudoers file directly (will escalate privileges if needed) */
-        struct sudoers_config *sudoers_config = parse_sudoers_file(NULL);
-        if (sudoers_config) {
-            char hostname[256];
-            if (gethostname(hostname, sizeof(hostname)) != 0) {
-                strcpy(hostname, "localhost");
-            }
-            has_privileges = check_sudoers_privileges(username, hostname, sudoers_config);
-            free_sudoers_config(sudoers_config);
-        }
-
-        /* If still no privileges, fall back to sudo -l method */
-        if (!has_privileges) {
-            has_privileges = check_sudo_privileges(username);
-        }
+        has_privileges = check_sudo_privileges_fallback(username);
     }
 
     return has_privileges;
@@ -1153,9 +1098,29 @@ int check_nopasswd_sudo_l(const char *username) {
 }
 
 /**
- * Check if user is allowed to run a specific command according to sudo configuration
+ * Check if user is allowed to run a specific command according to sudo configuration (no sudo dependency)
  */
 int check_command_permission(const char *username, const char *command) {
+    /* Check for NULL or empty parameters */
+    if (!username || *username == '\0' || !command || *command == '\0') {
+        return 0;
+    }
+
+    /* Use the new NSS-based command permission checking */
+    int is_allowed = check_command_permission_nss(username, command);
+
+    /* If NSS-based checking fails, fall back to the old sudo -l method as last resort */
+    if (!is_allowed) {
+        is_allowed = check_command_permission_sudo_fallback(username, command);
+    }
+
+    return is_allowed;
+}
+
+/**
+ * Fallback command permission checking using sudo -l (original implementation)
+ */
+int check_command_permission_sudo_fallback(const char *username, const char *command) {
     char sudo_command[512];
     FILE *fp;
     char buffer[1024];

@@ -61,10 +61,10 @@ char *expand_equals_expression(const char *arg) {
 }
 
 /**
- * Parse command line input into command structure
+ * Parse command line input into command structure with shell syntax awareness
  */
 int parse_command(const char *input, struct command_info *cmd) {
-    char *input_copy, *token, *saveptr;
+    char *input_copy;
     int argc = 0;
     int argv_size = 16;
 
@@ -75,10 +75,18 @@ int parse_command(const char *input, struct command_info *cmd) {
     /* Initialize command structure */
     memset(cmd, 0, sizeof(struct command_info));
 
-    /* Make a copy of input for tokenization */
+    /* Make a copy of input for parsing */
     input_copy = strdup(input);
     if (!input_copy) {
         return -1;
+    }
+
+    /* First, check for shell operators and handle them appropriately */
+    if (contains_shell_operators(input_copy)) {
+        /* This command contains shell operators that need special handling */
+        int result = parse_command_with_shell_operators(input_copy, cmd);
+        free(input_copy);
+        return result;
     }
 
     /* Allocate initial argv array */
@@ -88,31 +96,11 @@ int parse_command(const char *input, struct command_info *cmd) {
         return -1;
     }
 
-    /* Tokenize the command */
-    token = strtok_r(input_copy, " \t\n", &saveptr);
-    while (token != NULL) {
-        /* Resize argv if needed */
-        if (argc >= argv_size - 1) {
-            argv_size *= 2;
-            char **new_argv = realloc(cmd->argv, argv_size * sizeof(char *));
-            if (!new_argv) {
-                free_command_info(cmd);
-                free(input_copy);
-                return -1;
-            }
-            cmd->argv = new_argv;
-        }
-
-        /* Expand = expressions and store the token */
-        cmd->argv[argc] = expand_equals_expression(token);
-        if (!cmd->argv[argc]) {
-            free_command_info(cmd);
-            free(input_copy);
-            return -1;
-        }
-        argc++;
-
-        token = strtok_r(NULL, " \t\n", &saveptr);
+    /* Parse the command using shell-aware tokenization */
+    if (tokenize_command_line(input_copy, &cmd->argv, &argc, &argv_size) != 0) {
+        free_command_info(cmd);
+        free(input_copy);
+        return -1;
     }
 
     /* Null-terminate argv */
@@ -399,6 +387,55 @@ int execute_command(struct command_info *cmd, struct user_info *user) {
             }
         }
 
+        /* Handle redirection if specified */
+        if (cmd->redirect_type != REDIRECT_NONE && cmd->redirect_file) {
+            int redirect_fd;
+
+            switch (cmd->redirect_type) {
+                case REDIRECT_OUTPUT:
+                    redirect_fd = open(cmd->redirect_file, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+                    if (redirect_fd == -1) {
+                        perror("open output file");
+                        exit(EXIT_FAILURE);
+                    }
+                    if (dup2(redirect_fd, STDOUT_FILENO) == -1) {
+                        perror("dup2 stdout");
+                        exit(EXIT_FAILURE);
+                    }
+                    close(redirect_fd);
+                    break;
+
+                case REDIRECT_OUTPUT_APPEND:
+                    redirect_fd = open(cmd->redirect_file, O_WRONLY | O_CREAT | O_APPEND, 0644);
+                    if (redirect_fd == -1) {
+                        perror("open output file for append");
+                        exit(EXIT_FAILURE);
+                    }
+                    if (dup2(redirect_fd, STDOUT_FILENO) == -1) {
+                        perror("dup2 stdout append");
+                        exit(EXIT_FAILURE);
+                    }
+                    close(redirect_fd);
+                    break;
+
+                case REDIRECT_INPUT:
+                    redirect_fd = open(cmd->redirect_file, O_RDONLY);
+                    if (redirect_fd == -1) {
+                        perror("open input file");
+                        exit(EXIT_FAILURE);
+                    }
+                    if (dup2(redirect_fd, STDIN_FILENO) == -1) {
+                        perror("dup2 stdin");
+                        exit(EXIT_FAILURE);
+                    }
+                    close(redirect_fd);
+                    break;
+
+                default:
+                    break;
+            }
+        }
+
         /* Execute the command */
         execv(command_path, cmd->argv);
 
@@ -542,7 +579,14 @@ void free_command_info(struct command_info *cmd) {
         cmd->argv = NULL;
     }
 
+    if (cmd->redirect_file) {
+        free(cmd->redirect_file);
+        cmd->redirect_file = NULL;
+    }
+
     cmd->argc = 0;
+    cmd->redirect_type = REDIRECT_NONE;
+    cmd->redirect_append = 0;
 }
 
 /**
@@ -561,4 +605,255 @@ int is_empty_command(const char *command) {
     }
 
     return 1;
+}
+
+/**
+ * Check if command contains shell operators that need special handling
+ */
+int contains_shell_operators(const char *input) {
+    if (!input) {
+        return 0;
+    }
+
+    int in_quotes = 0;
+    char quote_char = 0;
+
+    for (const char *p = input; *p; p++) {
+        if (!in_quotes && (*p == '"' || *p == '\'')) {
+            in_quotes = 1;
+            quote_char = *p;
+        } else if (in_quotes && *p == quote_char) {
+            in_quotes = 0;
+            quote_char = 0;
+        } else if (!in_quotes) {
+            /* Check for shell operators outside of quotes */
+            if (*p == '>' || *p == '<' || *p == '|' || *p == ';' || *p == '&') {
+                return 1;
+            }
+            /* Check for command substitution */
+            if (*p == '`' || (*p == '$' && *(p+1) == '(')) {
+                return 1;
+            }
+        }
+    }
+
+    return 0;
+}
+
+/**
+ * Parse command with shell operators (redirection, pipes, etc.)
+ */
+int parse_command_with_shell_operators(const char *input, struct command_info *cmd) {
+    if (!input || !cmd) {
+        return -1;
+    }
+
+    /* Check for redirection operators */
+    if (strchr(input, '>') || strchr(input, '<')) {
+        return parse_command_with_redirection(input, cmd);
+    }
+
+    /* Check for pipe operators */
+    if (strchr(input, '|')) {
+        /* This should be handled by pipeline parsing, not regular command parsing */
+        fprintf(stderr, "sudosh: pipe operations should be handled by pipeline parser\n");
+        return -1;
+    }
+
+    /* Check for command chaining operators */
+    if (strchr(input, ';') || strstr(input, "&&") || strstr(input, "||")) {
+        fprintf(stderr, "sudosh: command chaining operators are not allowed for security reasons\n");
+        return -1;
+    }
+
+    /* Check for background execution */
+    if (strchr(input, '&')) {
+        fprintf(stderr, "sudosh: background execution is not allowed for security reasons\n");
+        return -1;
+    }
+
+    /* Check for command substitution */
+    if (strchr(input, '`') || strstr(input, "$(")) {
+        fprintf(stderr, "sudosh: command substitution is not allowed for security reasons\n");
+        return -1;
+    }
+
+    /* If we get here, there's an unhandled shell operator */
+    fprintf(stderr, "sudosh: unhandled shell operator in command\n");
+    return -1;
+}
+
+/**
+ * Parse command with redirection operators
+ */
+int parse_command_with_redirection(const char *input, struct command_info *cmd) {
+    char *input_copy, *redirect_pos;
+    char *command_part, *redirect_part;
+    int argc = 0;
+    int argv_size = 16;
+
+    if (!input || !cmd) {
+        return -1;
+    }
+
+    /* Initialize command structure */
+    memset(cmd, 0, sizeof(struct command_info));
+
+    input_copy = strdup(input);
+    if (!input_copy) {
+        return -1;
+    }
+
+    /* Find the redirection operator */
+    redirect_pos = strchr(input_copy, '>');
+    if (!redirect_pos) {
+        redirect_pos = strchr(input_copy, '<');
+    }
+
+    if (!redirect_pos) {
+        free(input_copy);
+        return -1;
+    }
+
+    /* Save the redirect character before modifying the string */
+    char redirect_char = *redirect_pos;
+
+    /* Split into command part and redirection part */
+    *redirect_pos = '\0';
+    command_part = input_copy;
+    redirect_part = redirect_pos + 1;
+
+    /* Check for >> (append) operator */
+    int is_append = 0;
+    if (redirect_char == '>' && *redirect_part == '>') {
+        is_append = 1;
+        redirect_part++;
+    }
+
+    /* Trim whitespace from both parts */
+    command_part = trim_whitespace_inplace(command_part);
+    redirect_part = trim_whitespace_inplace(redirect_part);
+
+    /* Validate the redirection target */
+    if (!validate_safe_redirection(input)) {
+        const char *error_msg = get_redirection_error_message(redirect_part);
+        fprintf(stderr, "sudosh: %s\n", error_msg);
+        fprintf(stderr, "sudosh: Safe redirection targets: /tmp/, /var/tmp/, or your home directory\n");
+        free(input_copy);
+        return -1;
+    }
+
+    /* Store redirection information */
+    if (is_append) {
+        cmd->redirect_type = REDIRECT_OUTPUT_APPEND;
+        cmd->redirect_append = 1;
+    } else if (redirect_char == '>') {
+        cmd->redirect_type = REDIRECT_OUTPUT;
+    } else if (redirect_char == '<') {
+        cmd->redirect_type = REDIRECT_INPUT;
+    }
+
+    cmd->redirect_file = strdup(redirect_part);
+    if (!cmd->redirect_file) {
+        free(input_copy);
+        return -1;
+    }
+
+    /* Parse the command part */
+    cmd->argv = malloc(argv_size * sizeof(char *));
+    if (!cmd->argv) {
+        free(input_copy);
+        return -1;
+    }
+
+    if (tokenize_command_line(command_part, &cmd->argv, &argc, &argv_size) != 0) {
+        free_command_info(cmd);
+        free(input_copy);
+        return -1;
+    }
+
+    /* Set argc and store original command */
+    cmd->argc = argc;
+    cmd->argv[argc] = NULL;
+    cmd->command = strdup(input);
+
+    free(input_copy);
+    return 0;
+}
+
+/**
+ * Tokenize command line with proper shell parsing
+ */
+int tokenize_command_line(const char *input, char ***argv, int *argc, int *argv_size) {
+    char *input_copy, *token, *saveptr;
+
+    if (!input || !argv || !argc || !argv_size) {
+        return -1;
+    }
+
+    input_copy = strdup(input);
+    if (!input_copy) {
+        return -1;
+    }
+
+    *argc = 0;
+
+    /* Tokenize the command */
+    token = strtok_r(input_copy, " \t\n", &saveptr);
+    while (token != NULL) {
+        /* Resize argv if needed */
+        if (*argc >= *argv_size - 1) {
+            *argv_size *= 2;
+            char **new_argv = realloc(*argv, *argv_size * sizeof(char *));
+            if (!new_argv) {
+                free(input_copy);
+                return -1;
+            }
+            *argv = new_argv;
+        }
+
+        /* Expand = expressions and store the token */
+        (*argv)[*argc] = expand_equals_expression(token);
+        if (!(*argv)[*argc]) {
+            free(input_copy);
+            return -1;
+        }
+        (*argc)++;
+
+        token = strtok_r(NULL, " \t\n", &saveptr);
+    }
+
+    free(input_copy);
+    return 0;
+}
+
+/**
+ * Trim whitespace in place
+ */
+char *trim_whitespace_inplace(char *str) {
+    char *end;
+
+    if (!str) {
+        return str;
+    }
+
+    /* Trim leading space */
+    while (isspace((unsigned char)*str)) {
+        str++;
+    }
+
+    if (*str == 0) {
+        return str;
+    }
+
+    /* Trim trailing space */
+    end = str + strlen(str) - 1;
+    while (end > str && isspace((unsigned char)*end)) {
+        end--;
+    }
+
+    /* Write new null terminator */
+    *(end + 1) = '\0';
+
+    return str;
 }

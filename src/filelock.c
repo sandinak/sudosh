@@ -71,11 +71,11 @@ void cleanup_file_locking(void) {
 char *resolve_canonical_path(const char *file_path) {
     char *canonical_path = NULL;
     char *resolved_path = NULL;
-    
+
     if (!file_path) {
         return NULL;
     }
-    
+
     /* Use realpath to resolve symlinks and relative paths */
     resolved_path = realpath(file_path, NULL);
     if (resolved_path) {
@@ -98,7 +98,7 @@ char *resolve_canonical_path(const char *file_path) {
             }
         }
     }
-    
+
     return canonical_path;
 }
 
@@ -109,14 +109,14 @@ static char *generate_lock_file_path(const char *canonical_path) {
     if (!canonical_path) {
         return NULL;
     }
-    
+
     /* Create a safe filename by replacing / with _ */
     size_t path_len = strlen(canonical_path);
     char *safe_name = malloc(path_len + 1);
     if (!safe_name) {
         return NULL;
     }
-    
+
     for (size_t i = 0; i < path_len; i++) {
         if (canonical_path[i] == '/') {
             safe_name[i] = '_';
@@ -125,35 +125,50 @@ static char *generate_lock_file_path(const char *canonical_path) {
         }
     }
     safe_name[path_len] = '\0';
-    
+
     /* Create full lock file path */
     size_t lock_path_len = strlen(LOCK_DIR) + strlen(safe_name) + strlen(LOCK_FILE_EXTENSION) + 2;
     char *lock_file_path = malloc(lock_path_len);
     if (lock_file_path) {
         snprintf(lock_file_path, lock_path_len, "%s/%s%s", LOCK_DIR, safe_name, LOCK_FILE_EXTENSION);
     }
-    
+
     free(safe_name);
     return lock_file_path;
 }
 
 /**
- * Write lock metadata to lock file
+ * Write lock metadata to an open lock file descriptor (safer than reopening by path)
  */
-static int write_lock_metadata(const char *lock_file_path, const char *canonical_path, 
-                              const char *username, pid_t pid) {
-    FILE *lock_file = fopen(lock_file_path, "w");
+static int write_lock_metadata_fd(int fd, const char *canonical_path,
+                                 const char *username, pid_t pid) {
+    if (fd < 0) return -1;
+
+    /* Ensure we are writing to a regular file we just created */
+    struct stat st;
+    if (fstat(fd, &st) != 0 || !S_ISREG(st.st_mode)) {
+        return -1;
+    }
+
+    /* Use FILE* wrapper for convenience */
+    FILE *lock_file = fdopen(dup(fd), "w");
     if (!lock_file) {
         return -1;
     }
-    
+
     time_t now = time(NULL);
-    
-    fprintf(lock_file, "file_path=%s\n", canonical_path);
-    fprintf(lock_file, "username=%s\n", username);
-    fprintf(lock_file, "pid=%d\n", (int)pid);
-    fprintf(lock_file, "timestamp=%ld\n", (long)now);
-    
+
+    if (fprintf(lock_file, "file_path=%s\n", canonical_path) < 0 ||
+        fprintf(lock_file, "username=%s\n", username) < 0 ||
+        fprintf(lock_file, "pid=%d\n", (int)pid) < 0 ||
+        fprintf(lock_file, "timestamp=%ld\n", (long)now) < 0) {
+        fclose(lock_file);
+        return -1;
+    }
+
+    fflush(lock_file);
+    /* Ensure metadata is on disk */
+    fsync(fileno(lock_file));
     fclose(lock_file);
     return 0;
 }
@@ -166,21 +181,21 @@ static struct file_lock_info *read_lock_metadata(const char *lock_file_path) {
     if (!lock_file) {
         return NULL;
     }
-    
+
     struct file_lock_info *lock_info = malloc(sizeof(struct file_lock_info));
     if (!lock_info) {
         fclose(lock_file);
         return NULL;
     }
-    
+
     memset(lock_info, 0, sizeof(struct file_lock_info));
     lock_info->lock_file_path = strdup(lock_file_path);
-    
+
     char line[512];
     while (fgets(line, sizeof(line), lock_file)) {
         /* Remove newline */
         line[strcspn(line, "\n")] = '\0';
-        
+
         if (strncmp(line, "file_path=", 10) == 0) {
             lock_info->file_path = strdup(line + 10);
         } else if (strncmp(line, "username=", 9) == 0) {
@@ -191,15 +206,15 @@ static struct file_lock_info *read_lock_metadata(const char *lock_file_path) {
             lock_info->timestamp = (time_t)atol(line + 10);
         }
     }
-    
+
     fclose(lock_file);
-    
+
     /* Validate that we got all required fields */
     if (!lock_info->file_path || !lock_info->username || lock_info->pid <= 0) {
         free_file_lock_info(lock_info);
         return NULL;
     }
-    
+
     return lock_info;
 }
 
@@ -210,7 +225,7 @@ static int is_process_running(pid_t pid) {
     if (pid <= 0) {
         return 0;
     }
-    
+
     /* Use kill(pid, 0) to check if process exists */
     if (kill(pid, 0) == 0) {
         return 1;  /* Process exists */
@@ -229,18 +244,18 @@ static int is_lock_stale(struct file_lock_info *lock_info) {
     if (!lock_info) {
         return 1;
     }
-    
+
     /* Check if process is still running */
     if (!is_process_running(lock_info->pid)) {
         return 1;
     }
-    
+
     /* Check timeout */
     time_t now = time(NULL);
     if (now - lock_info->timestamp > LOCK_TIMEOUT) {
         return 1;
     }
-    
+
     return 0;
 }
 
@@ -251,7 +266,7 @@ void free_file_lock_info(struct file_lock_info *lock_info) {
     if (!lock_info) {
         return;
     }
-    
+
     free(lock_info->file_path);
     free(lock_info->username);
     free(lock_info->lock_file_path);
@@ -266,25 +281,25 @@ int acquire_file_lock(const char *file_path, const char *username, pid_t pid) {
     char *lock_file_path = NULL;
     int lock_fd = -1;
     int result = -1;
-    
+
     if (!file_path || !username || pid <= 0) {
         return -1;
     }
-    
+
     /* Resolve canonical path */
     canonical_path = resolve_canonical_path(file_path);
     if (!canonical_path) {
         log_error("Failed to resolve canonical path for file locking");
         return -1;
     }
-    
+
     /* Generate lock file path */
     lock_file_path = generate_lock_file_path(canonical_path);
     if (!lock_file_path) {
         free(canonical_path);
         return -1;
     }
-    
+
     /* Check if file is already locked */
     struct file_lock_info *existing_lock = check_file_lock(canonical_path);
     if (existing_lock) {
@@ -294,14 +309,14 @@ int acquire_file_lock(const char *file_path, const char *username, pid_t pid) {
             char time_str[64];
             struct tm *tm_info = localtime(&existing_lock->timestamp);
             strftime(time_str, sizeof(time_str), "%Y-%m-%d %H:%M:%S", tm_info);
-            
+
             snprintf(error_msg, sizeof(error_msg),
                     "Error: %s is currently being edited by user '%s' since %s. Please try again later.",
                     canonical_path, existing_lock->username, time_str);
-            
+
             fprintf(stderr, "sudosh: %s\n", error_msg);
             log_security_violation(username, error_msg);
-            
+
             free_file_lock_info(existing_lock);
             free(canonical_path);
             free(lock_file_path);
@@ -314,9 +329,13 @@ int acquire_file_lock(const char *file_path, const char *username, pid_t pid) {
             free_file_lock_info(existing_lock);
         }
     }
-    
-    /* Create lock file with exclusive access */
+
+    /* Create lock file with exclusive access; avoid following symlinks */
+#if defined(O_NOFOLLOW)
+    lock_fd = open(lock_file_path, O_CREAT | O_EXCL | O_WRONLY | O_NOFOLLOW, 0644);
+#else
     lock_fd = open(lock_file_path, O_CREAT | O_EXCL | O_WRONLY, 0644);
+#endif
     if (lock_fd == -1) {
         if (errno == EEXIST) {
             /* Race condition - another process created the lock */
@@ -328,7 +347,7 @@ int acquire_file_lock(const char *file_path, const char *username, pid_t pid) {
         free(lock_file_path);
         return -1;
     }
-    
+
     /* Apply advisory lock */
     if (flock(lock_fd, LOCK_EX | LOCK_NB) != 0) {
         close(lock_fd);
@@ -338,11 +357,9 @@ int acquire_file_lock(const char *file_path, const char *username, pid_t pid) {
         free(lock_file_path);
         return -1;
     }
-    
-    /* Write metadata to lock file */
-    close(lock_fd);  /* Close fd, but keep file */
-    
-    if (write_lock_metadata(lock_file_path, canonical_path, username, pid) == 0) {
+
+    /* Write metadata to lock file safely */
+    if (write_lock_metadata_fd(lock_fd, canonical_path, username, pid) == 0) {
         char log_msg[512];
         snprintf(log_msg, sizeof(log_msg), "acquired file lock: %s", canonical_path);
         log_security_violation(username, log_msg);
@@ -351,7 +368,11 @@ int acquire_file_lock(const char *file_path, const char *username, pid_t pid) {
         unlink(lock_file_path);
         result = -1;
     }
-    
+
+    /* Ensure on-disk state and close */
+    fsync(lock_fd);
+    close(lock_fd);
+
     free(canonical_path);
     free(lock_file_path);
     return result;
@@ -382,26 +403,36 @@ int release_file_lock(const char *file_path, const char *username, pid_t pid) {
         return -1;
     }
 
-    /* Read lock metadata to verify ownership */
-    struct file_lock_info *lock_info = read_lock_metadata(lock_file_path);
-    if (lock_info) {
-        /* Verify that this user/process owns the lock */
-        if (strcmp(lock_info->username, username) == 0 && lock_info->pid == pid) {
-            /* Remove lock file */
-            if (unlink(lock_file_path) == 0) {
-                char log_msg[512];
-                snprintf(log_msg, sizeof(log_msg), "released file lock: %s", canonical_path);
-                log_security_violation(username, log_msg);
-                result = 0;
+    /* Read lock metadata to verify ownership with identity checks */
+#if defined(O_NOFOLLOW)
+    int fd = open(lock_file_path, O_RDONLY | O_NOFOLLOW);
+#else
+    int fd = open(lock_file_path, O_RDONLY);
+#endif
+    if (fd >= 0) {
+        struct stat st;
+        if (fstat(fd, &st) == 0 && S_ISREG(st.st_mode)) {
+            struct file_lock_info *lock_info = read_lock_metadata(lock_file_path);
+            if (lock_info) {
+                if (strcmp(lock_info->username, username) == 0 && lock_info->pid == pid) {
+                    if (unlink(lock_file_path) == 0) {
+                        char log_msg[512];
+                        snprintf(log_msg, sizeof(log_msg), "released file lock: %s", canonical_path);
+                        log_security_violation(username, log_msg);
+                        result = 0;
+                    }
+                }
+                free_file_lock_info(lock_info);
             }
         }
-        free_file_lock_info(lock_info);
+        close(fd);
     }
 
     free(canonical_path);
     free(lock_file_path);
     return result;
 }
+
 
 /**
  * Check if file is locked

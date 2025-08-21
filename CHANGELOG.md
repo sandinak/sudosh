@@ -5,6 +5,74 @@ All notable changes to sudosh will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - 2025-08-21
+
+### 🚀 Major New Features
+
+#### Intelligent Shell Redirection
+- **Smart sudo alias handling**: When sudosh is aliased to `sudo`, shell commands (bash, sh, zsh) now show educational messages and redirect to secure sudosh shell instead of being rejected
+- **Educational user experience**: Comprehensive explanations of sudosh benefits over direct shell access
+- **Seamless transition**: Users get working shell environment with enhanced security
+- **Complete audit logging**: All redirection attempts logged for security monitoring
+
+#### Enhanced Rules Command
+- **Comprehensive information display**: Shows sudo rules, safe commands, and blocked commands in organized sections
+- **Safe commands section**: Lists always-allowed commands (ls, grep, awk, sed, etc.) with detailed capabilities
+- **Blocked commands section**: Shows security-restricted commands with explanations and rationale
+- **Pager support framework**: Automatically handles long output for better readability
+- **Educational content**: Explains security boundaries and command capabilities
+
+#### Advanced Text Processing Support
+- **Full awk/sed support**: Complete support for awk and sed commands with field references ($1, $2) and patterns
+- **Enhanced quote handling**: Proper handling of quoted patterns and scripts in text processing commands
+- **Safe redirection**: Secure redirection to /tmp/, /var/tmp/, and home directories
+- **Security validation**: Blocks dangerous operations like system() calls and shell escapes
+- **Pipeline integration**: Works seamlessly with pipeline commands and redirection
+
+### 🔒 Security Enhancements
+
+#### Enhanced Command Validation
+- **Comprehensive security checks**: Improved validation for all command types
+- **Educational security messages**: Helpful explanations instead of simple rejections
+- **Maintained backward compatibility**: All existing security controls preserved
+- **Enhanced audit logging**: Complete trail of all user actions and security events
+
+#### Pipeline Security Improvements
+- **Enhanced validation**: Improved security checks for pipeline commands
+- **Safe command execution**: Better handling of complex command chains
+- **Redirection security**: Enhanced validation for file redirection operations
+
+### 🛠️ Technical Improvements
+
+#### Code Organization
+- **Comprehensive documentation**: All features documented in docs/ directory
+- **Enhanced test suite**: Comprehensive regression tests for all v2.0 features
+- **Clean build system**: No compilation warnings or errors
+- **Improved error handling**: Better error messages and edge case handling
+
+#### User Experience
+- **Intelligent error messages**: Context-aware help and guidance
+- **Seamless integration**: Drop-in replacement for sudo in many scenarios
+- **Enhanced debugging**: Better error reporting and troubleshooting
+- **Professional presentation**: Consistent formatting and clear messaging
+
+### 📋 Documentation Updates
+- **Comprehensive manpage**: Updated with all v2.0 features and examples
+- **Organized documentation**: All docs consolidated in docs/ directory with clear navigation
+- **Enhanced README**: Updated with v2.0 capabilities and usage examples
+- **Technical documentation**: Detailed implementation guides and architecture docs
+
+### 🔄 Backward Compatibility
+- **Preserved functionality**: All existing features work exactly as before
+- **No breaking changes**: Existing configurations and usage patterns unchanged
+- **Enhanced capabilities**: New features add value without disrupting existing workflows
+
+### 🧪 Testing & Quality
+- **Comprehensive test suite**: Full regression testing for all features
+- **Security testing**: Enhanced security validation and testing
+- **Clean compilation**: No warnings or errors in build process
+- **Quality assurance**: Thorough validation of all new functionality
+
 ## [1.9.3] - 2025-07-23
 
 ### Fixed

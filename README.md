@@ -29,6 +29,9 @@ Sudosh is a comprehensive, secure interactive shell that provides elevated privi
   - **CD command optimization** - Shows directories only for `cd` command
   - **Clean column formatting** - Multi-column display for better readability
 - **Executable filtering** - Tab completion shows only executables in command position
+- **Shell alias support** - Secure alias creation, expansion, and validation with comprehensive security controls
+- **Advanced redirection** - Full support for `>`, `>>`, `<` operators with security validation
+- **Pipeline security** - Secure command pipelines with individual command validation
 - **Ansible detection** - Intelligent detection of Ansible automation sessions with specialized logging
 - **Package generation** - Professional RPM and DEB packages for easy distribution
 
@@ -48,6 +51,11 @@ Sudosh is a comprehensive, secure interactive shell that provides elevated privi
   - **Fail-Safe Design**: Defaults to blocking when AI automation detection is uncertain
   - **Environment-Based Detection**: Identifies AI tools through environment variables and execution context
 - 🛡️ **CVE vulnerability protection** - Audited against major bash CVEs (2014-2024)
+- 🔄 **Secure Shell Features** - Advanced shell functionality with security controls
+  - **Alias System**: Secure alias creation and expansion with validation
+  - **Redirection Support**: Full `>`, `>>`, `<` redirection with safety checks
+  - **Pipeline Security**: Multi-command pipelines with individual validation
+  - **Enhanced Error Messages**: Detailed feedback for blocked operations
   - **CVE-2023-22809**: Sudoedit privilege escalation protection
   - **CVE-2022-3715**: Bash heap buffer overflow mitigation
   - **CVE-2019-9924**: Restricted shell bypass prevention
@@ -225,10 +233,36 @@ Options:
   -L, --log-session FILE  Log entire session to FILE
   -u, --user USER         Run commands as target USER
   -c, --command COMMAND   Execute COMMAND and exit (like sudo -c)
+      --rc-alias-import   Enable importing aliases from shell rc files (default)
+      --no-rc-alias-import Disable importing aliases from shell rc files
       --ansible-detect    Enable Ansible session detection (default)
       --no-ansible-detect Disable Ansible session detection
       --ansible-force     Force Ansible session mode
       --ansible-verbose   Enable verbose Ansible detection output
+
+Sudo-compat mode (when invoked as 'sudo'):
+  Supported:
+    -V                     Print version (maps to --version)
+    -v                     Validate/update auth timestamp (touch cache)
+    -k                     Invalidate cached auth and exit
+    -n                     Non-interactive; fail if auth would prompt
+    <cmd>                  Execute single command (with sudosh validation)
+    -u USER <cmd>          Run as target user
+  Notes:
+    - All sudosh protections remain enforced (no direct shells, sanitized env, pipeline/redirection limits)
+    - Many sudo flags are intentionally unsupported for security (e.g., -E, -H, -i, -s)
+    - Use --verbose (not -v) for verbose logging outside compat -v behavior
+
+### Sudo-compat mode quick examples
+- sudo -V → prints version
+- sudo -v → validates/refreshes auth timestamp
+- sudo -k → invalidates auth cache
+- sudo -n -v → fails if authentication would be required (no prompts)
+- sudo ls -la → executes single command with sudosh validation
+- sudo -u postgres psql → executes as target user with sudosh validation
+
+Note: Shells (bash/sh/zsh), direct redirection/pipes, and other restricted operations remain blocked under sudosh policies.
+
 
 Command Execution:
   sudosh                  Start interactive shell (default)
@@ -313,6 +347,89 @@ pushd /tmp             # Push directory onto stack and change to it
 popd                   # Pop directory from stack and change to it
 dirs                   # Show directory stack
 ```
+
+## 🔄 **Advanced Shell Features**
+
+### **Secure Alias System**
+Sudosh provides a comprehensive alias system with security validation:
+
+```bash
+# Create safe aliases
+sudosh:/home/user## alias ll='ls -la'
+sudosh:/home/user## alias grep='grep --color=auto'
+
+# Aliases are validated for security
+sudosh:/home/user## alias danger='rm -rf /'
+sudosh: Alias contains dangerous command 'rm' and is not allowed
+
+# View all aliases
+sudosh:/home/user## alias
+ll='ls -la'
+grep='grep --color=auto'
+
+# Aliases work in pipelines and with redirection
+sudosh:/home/user## ll | grep txt > /tmp/text_files.txt
+```
+
+**Alias Security Features:**
+- **Dangerous command blocking** - Prevents aliases containing `sudo`, `rm -rf`, etc.
+- **Environment protection** - Blocks aliases that modify `PATH`, `LD_PRELOAD`, etc.
+- **Recursive detection** - Prevents self-referential and infinite loop aliases
+- **Expansion validation** - Tests alias expansion for safety before allowing creation
+- **Shell RC integration** - Safely imports aliases from `.bashrc`, `.zshrc` with validation
+
+### **Advanced Redirection Support**
+Full support for shell redirection with comprehensive security controls:
+
+```bash
+# Output redirection
+sudosh:/home/user## echo "data" > /tmp/output.txt
+sudosh:/home/user## ls -la > /tmp/listing.txt
+
+# Append redirection
+sudosh:/home/user## date >> /tmp/log.txt
+sudosh:/home/user## echo "more data" >> /tmp/output.txt
+
+# Input redirection
+sudosh:/home/user## sort < /tmp/unsorted.txt
+sudosh:/home/user## wc -l < /etc/passwd
+
+# Pipeline with redirection (the enhanced feature)
+sudosh:/home/user## cat /etc/passwd | grep root > /tmp/root_users.txt
+sudosh:/home/user## ps aux | grep nginx | head -5 > /tmp/nginx_procs.txt
+```
+
+**Redirection Security Features:**
+- **Safe directory validation** - Only allows redirection to `/tmp/`, `/var/tmp/`, home directories
+- **System directory protection** - Blocks redirection to `/etc/`, `/usr/`, `/bin/`, `/var/log/`, etc.
+- **Detailed error messages** - Specific feedback for each blocked directory type:
+  ```bash
+  sudosh:/home/user## echo "test" > /bin/malicious
+  sudosh: Redirection to system binaries directory (/bin/) is not allowed for security reasons
+  sudosh: Safe redirection targets: /tmp/, /var/tmp/, or your home directory
+  ```
+- **Pipeline integration** - Redirection works seamlessly with multi-command pipelines
+- **Comprehensive logging** - All redirection operations are audited
+
+### **Secure Pipeline Processing**
+Enhanced pipeline support with individual command validation:
+
+```bash
+# Multi-command pipelines
+sudosh:/home/user## ps aux | grep nginx | sort | head -10
+
+# Pipelines with redirection
+sudosh:/home/user## cat /var/log/syslog | grep error | tail -20 > /tmp/recent_errors.txt
+
+# Complex data processing
+sudosh:/home/user## find /tmp -name "*.log" | xargs grep "ERROR" | sort | uniq > /tmp/error_summary.txt
+```
+
+**Pipeline Security Features:**
+- **Individual command validation** - Each command in the pipeline is security-checked
+- **Safe command chaining** - Prevents dangerous command combinations
+- **Redirection validation** - Pipeline output redirection follows same security rules
+- **Memory management** - Efficient handling of large pipeline operations
 
 ## 🔐 **Security Model**
 
@@ -801,7 +918,40 @@ make security-tests
 
 ## 📋 **Changelog**
 
-### **Version 1.9.3** (Latest) - Critical Bugfix
+### **Version 1.9.4** (Latest) - Advanced Shell Features & Security Enhancements
+
+**🚀 MAJOR NEW FEATURES:**
+
+**🔄 Secure Alias System**
+- **Complete alias support** with creation, expansion, and validation
+- **Security validation** prevents dangerous aliases (`sudo`, `rm -rf`, environment manipulation)
+- **Recursive detection** blocks self-referential and infinite loop aliases
+- **Shell RC integration** safely imports aliases from `.bashrc`, `.zshrc` with validation
+- **Pipeline compatibility** aliases work seamlessly with pipelines and redirection
+
+**🔀 Advanced Redirection Support**
+- **Full redirection operators** support for `>`, `>>`, `<` with security validation
+- **Pipeline redirection** fixed critical bug where `cat file | grep pattern > output` failed
+- **Enhanced error messages** specific feedback for each blocked directory type:
+  - `/bin/` → "Redirection to system binaries directory is not allowed"
+  - `/etc/` → "Redirection to system configuration directory is not allowed"
+  - `/var/log/` → "Redirection to system log directory is not allowed"
+- **Comprehensive directory protection** added `/bin/`, `/sbin/`, `/opt/`, `/lib/` to blocked list
+- **Safe target validation** only allows `/tmp/`, `/var/tmp/`, home directories
+
+**🛡️ Enhanced Security Controls**
+- **Detailed error messages** replace generic "not allowed" with specific explanations
+- **Comprehensive audit logging** all alias and redirection operations logged
+- **Defense in depth** multiple validation layers for aliases and redirection
+- **Regression prevention** comprehensive test suite prevents future issues
+
+**🧪 Testing & Quality Assurance**
+- **7 new test functions** for redirection parsing and validation
+- **8 new test functions** for alias validation and security
+- **Integration tests** verify real-world usage scenarios
+- **Regression tests** prevent reoccurrence of fixed issues
+
+### **Version 1.9.3** - Critical Bugfix
 
 **🚨 Critical Tab Completion Fix**
 - Fixed prefix duplication bug where `rm 10<tab>` would incorrectly expand to `rm 1010.58.98.229`
@@ -857,11 +1007,18 @@ make security-tests
 - **Maintains principle of least privilege**: Users now limited to commands explicitly allowed in their sudoers configuration
 
 **🆕 NEW FEATURES:**
-- **Added 'rules' built-in command**: Shows detailed sudo rules and their sources for the current user
-  - Displays the same information as `sudo -l` but from within the interactive shell
-  - Shows direct sudoers rules, group-based privileges, and system-wide group rules
-  - Includes source file attribution for complete transparency
-  - Accessible via the `rules` command in the sudosh prompt
+- **Enhanced 'rules' built-in command**: Comprehensive command execution information display
+  - **Sudo Rules**: Shows detailed sudo rules and their sources (same as `sudo -l`)
+  - **Safe Commands**: Lists always-allowed commands (ls, grep, awk, sed, etc.) with capabilities
+  - **Blocked Commands**: Shows security-restricted commands with explanations
+  - **Source Attribution**: Includes complete transparency for rule sources
+  - **Pager Support**: Automatically pages long output for better readability
+  - **Educational Content**: Explains security boundaries and command capabilities
+- **Intelligent Shell Redirection**: Smart handling when sudosh is aliased to sudo
+  - **Educational Messages**: Helpful explanations instead of rejection for shell commands
+  - **Automatic Redirection**: Drops users into secure sudosh shell instead of blocking
+  - **Benefits Explanation**: Shows advantages of sudosh over direct shell access
+  - **Audit Logging**: All redirection attempts logged for security monitoring
 
 **🔧 ENHANCED ERROR MESSAGES:**
 - **Improved I/O redirection error messages**: Now provides detailed explanation of security risks

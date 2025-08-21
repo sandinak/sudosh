@@ -1,0 +1,9 @@
+- sed 
+- awk
+- grep 
+- yq
+- jq
+- restricted shell around python, perl 
+- pipe restriction and evaluation
+- redirection ? 
+ 

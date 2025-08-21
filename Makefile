@@ -70,7 +70,7 @@ SOURCES = main.c auth.c command.c logging.c security.c utils.c nss.c sudoers.c s
 OBJECTS = $(SOURCES:%.c=$(OBJDIR)/%.o)
 
 # Test files (now organized in subdirectories)
-TEST_SOURCES = $(wildcard $(TESTDIR)/unit/test_*.c) $(wildcard $(TESTDIR)/integration/test_*.c) $(wildcard $(TESTDIR)/security/test_*.c)
+TEST_SOURCES = $(wildcard $(TESTDIR)/unit/test_*.c) $(wildcard $(TESTDIR)/integration/test_*.c) $(wildcard $(TESTDIR)/security/test_*.c) $(wildcard $(TESTDIR)/regression/test_*.c)
 TEST_OBJECTS = $(TEST_SOURCES:$(TESTDIR)/%.c=$(OBJDIR)/$(TESTDIR)/%.o)
 # Derive test binary names from source filenames regardless of subdirectory
 TEST_NAMES = $(notdir $(TEST_SOURCES))
@@ -197,6 +197,39 @@ test: $(LIB_OBJECTS) tests
 		$$test || exit 1; \
 	done
 	@echo "All tests passed!"
+
+# Run security enhancement tests
+test-enhancements: $(TARGET)
+	@echo "Running security enhancement tests..."
+	@cd tests && chmod +x run_enhancement_tests.sh && ./run_enhancement_tests.sh
+
+# Run all tests including enhancements
+test-all: test test-enhancements
+
+# Run v2.0 regression tests
+test-v2: $(TARGET)
+	@echo "Running v2.0 feature regression tests..."
+	@if [ -f "$(BINDIR)/test_v2_0_features" ]; then \
+		echo "Running comprehensive v2.0 regression tests..."; \
+		$(BINDIR)/test_v2_0_features || exit 1; \
+	else \
+		echo "v2.0 regression test not found, building..."; \
+		$(MAKE) tests && $(BINDIR)/test_v2_0_features || exit 1; \
+	fi
+	@if [ -f "$(BINDIR)/test_shell_redirection" ]; then \
+		echo "Running shell redirection tests..."; \
+		$(BINDIR)/test_shell_redirection || exit 1; \
+	fi
+	@if [ -f "$(BINDIR)/test_enhanced_rules_command" ]; then \
+		echo "Running enhanced rules command tests..."; \
+		$(BINDIR)/test_enhanced_rules_command || exit 1; \
+	fi
+	@if [ -f "$(BINDIR)/test_awk_sed_support" ]; then \
+		echo "Running awk/sed support tests..."; \
+		$(BINDIR)/test_awk_sed_support || exit 1; \
+	fi
+	@echo "All v2.0 regression tests passed!"
+	@echo "All tests completed."
 
 # Run unit tests only
 unit-test: tests

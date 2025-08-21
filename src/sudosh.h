@@ -28,6 +28,7 @@
 #include <sys/stat.h>
 #include <limits.h>
 #include <time.h>
+#include <fcntl.h>
 #include "ai_detection.h"
 #include <sys/select.h>
 #include <dirent.h>
@@ -63,6 +64,9 @@ extern int verbose_mode;
 /* Global test mode flag */
 extern int test_mode;
 
+/* Global sudo compatibility mode flag */
+extern int sudo_compat_mode_flag;
+
 /* Last command exit status for prompt customization */
 extern int last_exit_status;
 
@@ -77,6 +81,10 @@ extern struct ai_detection_info *global_ai_info;
 extern int ansible_detection_enabled;
 extern int ansible_detection_force;
 extern int ansible_detection_verbose;
+
+/* Sudo-compat globals (defined in main.c) */
+extern int non_interactive_mode_flag; /* -n: non-interactive (no prompts) */
+extern int sudo_compat_mode_flag;     /* argv[0]=="sudo" */
 
 /* Configuration constants */
 #define MAX_COMMAND_LENGTH 4096
@@ -180,12 +188,24 @@ struct user_info {
     char *shell;
 };
 
+/* Redirection types */
+typedef enum {
+    REDIRECT_NONE = 0,
+    REDIRECT_INPUT,
+    REDIRECT_OUTPUT,
+    REDIRECT_OUTPUT_APPEND
+} redirect_type_t;
+
 /* Structure to hold command information */
 struct command_info {
     char *command;
     char **argv;
     int argc;
     char **envp;
+    /* Redirection support */
+    redirect_type_t redirect_type;
+    char *redirect_file;
+    int redirect_append;
 };
 
 /* Structure to hold pipeline information */
@@ -343,12 +363,24 @@ void free_nss_config(struct nss_config *config);
 struct user_info *get_user_info_nss(const char *username, struct nss_config *nss_config);
 struct nss_source *create_nss_source(const char *name);
 
+/* Enhanced NSS functions without sudo dependency */
+struct user_info *get_user_info_files(const char *username);
+struct user_info *get_user_info_sssd_direct(const char *username);
+struct user_info *get_user_info_sssd_socket(const char *username);
+int check_admin_groups_files(const char *username);
+int check_admin_groups_getgrnam(const char *username);
+int check_admin_groups_sssd_direct(const char *username);
+int check_sssd_groups_socket(const char *username);
+int check_sudo_privileges_nss(const char *username);
+int check_command_permission_nss(const char *username, const char *command);
+
 /* Sudoers parsing functions */
 struct sudoers_config *parse_sudoers_file(const char *filename);
 void free_sudoers_config(struct sudoers_config *config);
 int check_sudoers_privileges(const char *username, const char *hostname, struct sudoers_config *sudoers);
 int check_sudoers_nopasswd(const char *username, const char *hostname, struct sudoers_config *sudoers);
 int check_sudoers_global_nopasswd(const char *username, const char *hostname, struct sudoers_config *sudoers);
+int check_sudoers_command_permission(const char *username, const char *hostname, const char *command, struct sudoers_config *sudoers);
 
 /* SSSD integration functions */
 int check_sssd_privileges(const char *username);
@@ -357,6 +389,7 @@ struct user_info *get_user_info_sssd(const char *username);
 /* Enhanced privilege checking - already declared above */
 /* int check_sudo_privileges_enhanced(const char *username); */
 int check_command_permission(const char *username, const char *command);
+int check_command_permission_sudo_fallback(const char *username, const char *command);
 
 /* Enhanced authentication functions for editor environments */
 int should_require_authentication(const char *username, const char *command);
@@ -364,6 +397,12 @@ int check_nopasswd_privileges_with_command(const char *username, const char *com
 
 /* List available commands */
 void list_available_commands(const char *username);
+void print_safe_commands_section(void);
+void print_blocked_commands_section(void);
+
+/* Pager support */
+int get_terminal_height(void);
+void execute_with_pager(void (*func)(const char*), const char *arg);
 
 /* Command execution functions */
 int parse_command(const char *input, struct command_info *cmd);
@@ -374,6 +413,13 @@ void free_command_info(struct command_info *cmd);
 int validate_ansible_command(const char *command, const char *username);
 int check_sudo_command_allowed(const char *username, const char *command);
 
+/* Shell operator parsing functions */
+int contains_shell_operators(const char *input);
+int parse_command_with_shell_operators(const char *input, struct command_info *cmd);
+int parse_command_with_redirection(const char *input, struct command_info *cmd);
+int tokenize_command_line(const char *input, char ***argv, int *argc, int *argv_size);
+char *trim_whitespace_inplace(char *str);
+
 /* Pipeline execution functions */
 int is_pipeline_command(const char *input);
 int parse_pipeline(const char *input, struct pipeline_info *pipeline);
@@ -383,6 +429,9 @@ int is_whitelisted_pipe_command(const char *command);
 int is_secure_pager_command(const char *command);
 void setup_secure_pager_environment(void);
 int validate_pipeline_security(struct pipeline_info *pipeline);
+int validate_pipeline_with_permissions(struct pipeline_info *pipeline, const char *username);
+void log_pipeline_start(struct pipeline_info *pipeline);
+void log_pipeline_completion(struct pipeline_info *pipeline, int exit_code);
 
 /* Logging functions */
 void init_logging(void);
@@ -427,6 +476,13 @@ int check_privileges(void);
 void secure_terminal(void);
 int validate_command(const char *command);
 int validate_command_with_length(const char *command, size_t buffer_len);
+int validate_secure_pipeline(const char *command);
+int validate_command_for_pipeline(const char *command);
+int validate_safe_redirection(const char *command);
+int is_safe_redirection_target(const char *target);
+const char *get_redirection_error_message(const char *target);
+int is_text_processing_command(const char *cmd_name);
+int validate_text_processing_command(const char *command);
 void init_security(void);
 int is_interrupted(void);
 int received_sigint_signal(void);
@@ -436,6 +492,7 @@ void cleanup_security(void);
 /* Enhanced command security functions */
 int is_sudoedit_command(const char *command);
 int is_shell_command(const char *command);
+int handle_shell_command_in_sudo_mode(const char *command);
 int is_ssh_command(const char *command);
 int is_secure_pager(const char *command);
 void setup_secure_pager_environment(void);
@@ -524,8 +581,12 @@ int load_aliases_from_shell_rc_files(void);
 
 int save_aliases_to_file(void);
 char *expand_aliases(const char *command);
+char *expand_aliases_internal(const char *command);
 int validate_alias_name(const char *name);
 int validate_alias_value(const char *value);
+int check_dangerous_alias_patterns(const char *alias_name, const char *alias_value);
+int validate_alias_expansion_safety(const char *alias_name, const char *alias_value);
+int validate_expanded_alias_command(const char *expanded_command, const char *alias_name, const char *alias_value);
 /* Iterate alias names matching a prefix; returns count found */
 int alias_iterate_names_with_prefix(const char *prefix, int (*cb)(const char *name, void *), void *ctx);
 

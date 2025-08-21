@@ -1,20 +1,23 @@
-.TH SUDOSH 1 "December 2024" "sudosh @VERSION@" "User Commands"
+.TH SUDOSH 1 "August 2025" "sudosh @VERSION@" "User Commands"
 .SH NAME
-sudosh \- secure interactive sudo shell with comprehensive logging and CVE protection
+sudosh \- secure interactive sudo shell with intelligent redirection, enhanced logging, and comprehensive security protections
 .SH SYNOPSIS
 .B sudosh
-[\fIOPTION\fR]...
+[\fIOPTION\fR]... [\fICOMMAND\fR [\fIARGS\fR]...]
 .br
 .B sudosh
-[\fB\-L\fR \fIFILE\fR] [\fB\-h\fR] [\fB\-v\fR] [\fB\-l\fR]
+[\fB\-L\fR \fIFILE\fR] [\fB\-h\fR] [\fB\-v\fR] [\fB\-l\fR] [\fB\-c\fR \fICOMMAND\fR]
 .SH DESCRIPTION
 .B sudosh
-is a secure interactive sudo shell that provides a command prompt for executing privileged commands with comprehensive logging to syslog. It uses PAM (Pluggable Authentication Modules) for secure user authentication and logs all commands in the same format as sudo.
+is a secure interactive sudo shell that provides both interactive sessions and single-command execution with comprehensive logging, intelligent shell redirection, and advanced security protections. It uses PAM (Pluggable Authentication Modules) for secure user authentication and logs all commands in the same format as sudo.
 
-Unlike traditional sudo which executes single commands, sudosh provides an interactive shell session where multiple commands can be executed with elevated privileges while maintaining full audit trails and advanced security protections.
+.B sudosh v2.0
+introduces intelligent shell redirection when aliased to 'sudo', enhanced text processing with awk/sed support, comprehensive rules display, and improved pipeline security. It can serve as a drop-in replacement for sudo in many scenarios while providing superior security controls and audit capabilities.
+
+Unlike traditional sudo which executes single commands, sudosh provides an interactive shell session where multiple commands can be executed with elevated privileges while maintaining full audit trails and advanced security protections. When users attempt shell commands through sudo aliases, sudosh provides educational guidance and seamlessly transitions them to a secure interactive environment.
 
 .B sudosh
-includes protection against recent CVE vulnerabilities including CVE-2023-22809 (sudoedit privilege escalation), CVE-2022-3715 (bash heap buffer overflow), and various Shellshock variants. It features enhanced environment sanitization, null byte injection detection, and comprehensive command validation to prevent security exploits.
+includes protection against recent CVE vulnerabilities including CVE-2023-22809 (sudoedit privilege escalation), CVE-2022-3715 (bash heap buffer overflow), and various Shellshock variants. It features enhanced environment sanitization, null byte injection detection, comprehensive command validation, and intelligent security messaging to prevent exploits while educating users.
 
 .SH OPTIONS
 .TP
@@ -24,12 +27,14 @@ Display help message and exit.
 .BR \-\-version
 Display version information and exit.
 .TP
-.TP
 .BR \-\-build\-info
 Display detailed build information and exit. Shows the version, git commit, build date (UTC), and build user. Useful for support and reproducibility.
-
+.TP
 .BR \-v ", " \-\-verbose
 Enable verbose output including privilege detection details.
+.TP
+.BR \-c " \fICOMMAND\fR"
+Execute the specified command and exit. This allows sudosh to be used as a drop-in replacement for sudo in many scenarios. When sudosh is aliased to 'sudo' and users attempt shell commands (bash, sh, zsh, etc.), intelligent redirection provides educational guidance and transitions to interactive mode.
 .TP
 .BR \-l ", " \-\-list
 List available commands from sudoers configuration with comprehensive source attribution. This option provides detailed analysis of sudo permissions similar to \fBsudo -l\fR but with enhanced source tracking. The output includes:
@@ -65,10 +70,37 @@ Force Ansible session mode regardless of detection results. This option enables 
 .BR \-\-ansible\-verbose
 Enable verbose output for Ansible detection. This provides detailed information about the detection process, including confidence levels and detection methods used.
 
+.SS Sudo Compatibility Mode
+When invoked as \fBsudo\fP (i.e., the program name is \fBsudo\fP), sudosh enables a
+"sudo-compat" mode that accepts a subset of sudo-style options while retaining sudosh
+security policies (no direct shells, sanitized environment, restricted redirection/pipelines).
+.TP
+.BR -V
+Print version (same as --version) and exit.
+.TP
+.BR -v
+Validate/update authentication timestamp (refresh cache) and exit.
+.TP
+.BR -k
+Invalidate cached authentication and exit.
+.TP
+.BR -n
+Non-interactive mode. Refuse authentication prompts and fail if authentication would be required.
+.TP
+.B \fIcommand\fP
+Execute single command under sudosh validation.
+.TP
+.BR -u " \fIUSER\fP " \fIcommand...\fP
+Run command as target user under sudosh validation.
+.PP
+Many sudo flags are intentionally unsupported for security (-E, -H, -i, -s, etc.).
+Use \fB--verbose\fP (not \fB-v\fP) to enable verbose logging while in compat mode.
+
+
 .SH USAGE
 .SH ENHANCED FEATURES
 .B sudosh
-version 1.9.3 introduces several enhanced features for improved security and usability:
+version 2.0 introduces major enhancements for improved security, usability, and intelligent automation handling:
 
 .SS Permission Analysis
 The \fB\-l\fR option provides comprehensive sudo permission analysis with detailed source attribution. Unlike standard \fBsudo -l\fR, sudosh shows exactly which file grants each permission, making it easy to troubleshoot and audit sudo configurations.
@@ -104,6 +136,94 @@ Critical fix for directory path completion behavior:
 \fBEnhanced\fR: Works with absolute paths (/etc/) and relative paths (src/)
 .IP \(bu 2
 \fBRobust\fR: Handles edge cases (spaces, tabs, complex nested paths)
+
+.SS Secure Alias System
+Comprehensive alias support with security validation:
+.IP \(bu 2
+\fBAlias Creation\fR: Create secure aliases with \fBalias name='command'\fR
+.IP \(bu 2
+\fBSecurity Validation\fR: Prevents dangerous aliases containing \fBsudo\fR, \fBrm -rf\fR, environment manipulation
+.IP \(bu 2
+\fBRecursion Detection\fR: Blocks self-referential and infinite loop aliases
+.IP \(bu 2
+\fBShell RC Integration\fR: Safely imports aliases from \fI.bashrc\fR, \fI.zshrc\fR with validation
+.IP \(bu 2
+\fBPipeline Compatibility\fR: Aliases work seamlessly with pipelines and redirection
+
+.SS Advanced Redirection Support
+Full shell redirection with comprehensive security controls:
+.IP \(bu 2
+\fBOutput Redirection\fR: \fBcommand > file\fR and \fBcommand >> file\fR (append)
+.IP \(bu 2
+\fBInput Redirection\fR: \fBcommand < file\fR
+.IP \(bu 2
+\fBPipeline Redirection\fR: \fBcat file | grep pattern > output\fR
+.IP \(bu 2
+\fBSecurity Validation\fR: Only allows redirection to safe directories (\fI/tmp/\fR, \fI/var/tmp/\fR, home directories)
+.IP \(bu 2
+\fBDetailed Error Messages\fR: Specific feedback for blocked directory types:
+.RS
+.IP \(bu 2
+\fI/bin/\fR → "Redirection to system binaries directory is not allowed"
+.IP \(bu 2
+\fI/etc/\fR → "Redirection to system configuration directory is not allowed"
+.IP \(bu 2
+\fI/var/log/\fR → "Redirection to system log directory is not allowed"
+.RE
+.IP \(bu 2
+\fBComprehensive Protection\fR: Blocks redirection to \fI/bin/\fR, \fI/sbin/\fR, \fI/etc/\fR, \fI/usr/\fR, \fI/var/log/\fR, \fI/opt/\fR, \fI/lib/\fR
+
+.SS Enhanced Pipeline Processing
+Secure multi-command pipelines with individual validation:
+.IP \(bu 2
+\fBMulti-Command Support\fR: \fBps aux | grep nginx | sort | head -10\fR
+.IP \(bu 2
+\fBIndividual Validation\fR: Each command in the pipeline is security-checked
+.IP \(bu 2
+\fBRedirection Integration\fR: Pipeline output redirection follows same security rules
+.IP \(bu 2
+\fBMemory Management\fR: Efficient handling of large pipeline operations
+
+.SS Intelligent Shell Redirection
+When sudosh is aliased to 'sudo', smart handling of shell command attempts:
+.IP \(bu 2
+\fBEducational Messages\fR: Instead of rejecting shell commands, provides helpful explanations
+.IP \(bu 2
+\fBAutomatic Redirection\fR: Drops users into secure sudosh shell instead of blocking
+.IP \(bu 2
+\fBBenefits Explanation\fR: Shows advantages of sudosh over direct shell access
+.IP \(bu 2
+\fBAudit Logging\fR: All redirection attempts logged for security monitoring
+.IP \(bu 2
+\fBPreserved Security\fR: Normal sudosh behavior maintained when not aliased as sudo
+
+.SS Enhanced Text Processing (v2.0)
+Advanced support for text processing commands with security controls:
+.IP \(bu 2
+\fBawk/sed Support\fR: Full support for awk and sed commands with field references ($1, $2) and patterns
+.IP \(bu 2
+\fBQuote Handling\fR: Proper handling of quoted patterns and scripts
+.IP \(bu 2
+\fBSafe Redirection\fR: Secure redirection to /tmp/, /var/tmp/, and home directories
+.IP \(bu 2
+\fBSecurity Validation\fR: Blocks dangerous operations like system() calls and shell escapes
+.IP \(bu 2
+\fBPipeline Integration\fR: Works seamlessly with pipeline commands and redirection
+
+.SS Enhanced Rules Command (v2.0)
+Comprehensive command execution information display:
+.IP \(bu 2
+\fBSudo Rules\fR: Shows detailed sudo rules and their sources (same as sudo -l)
+.IP \(bu 2
+\fBSafe Commands\fR: Lists always-allowed commands (ls, grep, awk, sed, etc.) with capabilities
+.IP \(bu 2
+\fBBlocked Commands\fR: Shows security-restricted commands with explanations
+.IP \(bu 2
+\fBSource Attribution\fR: Includes complete transparency for rule sources
+.IP \(bu 2
+\fBPager Support\fR: Automatically pages long output for better readability
+.IP \(bu 2
+\fBEducational Content\fR: Explains security boundaries and command capabilities
 
 .SS Improved Compatibility
 Better handling of different sudoers file formats and locations, including support for macOS-specific paths like \fI/private/etc/sudoers.d\fR.
@@ -167,7 +287,7 @@ Show available commands and usage examples. Both \fBhelp\fR and \fB?\fR display 
 List all available commands, including built-in commands and system commands found in PATH.
 .TP
 .B rules
-Show detailed sudo rules and their sources for the current user. Displays the same information as \fBsudosh -l\fR but from within the interactive shell. Shows direct sudoers rules, group-based privileges, and system-wide group rules with source file attribution.
+Show comprehensive command execution information including detailed sudo rules and their sources, always-safe commands that require no special permissions, and always-blocked commands that are restricted for security. Displays the same sudo information as \fBsudosh -l\fR but from within the interactive shell, plus additional sections showing direct sudoers rules, group-based privileges, system-wide group rules with source file attribution, safe commands (ls, grep, awk, sed, etc.), and blocked commands (shutdown, mount, iptables, etc.) with security explanations.
 .TP
 .B history
 Show numbered command history from ~/.sudosh_history. Use with !<number> to execute previous commands.
@@ -239,17 +359,85 @@ sudosh:/var/log# help
 sudosh:/var/log# exit
 .fi
 .TP
+Command-line execution (v2.0):
+.nf
+# Execute single commands (drop-in sudo replacement)
+sudosh ls -la /root
+sudosh systemctl status nginx
+sudosh -c "apt update && apt upgrade"
+
+# When aliased to sudo, intelligent handling
+alias sudo=sudosh
+sudo ls -la          # Works normally
+sudo bash            # Shows educational message and drops to sudosh shell
+sudo systemctl restart nginx  # Works normally
+.fi
+.TP
 Use shell enhancement features:
 .nf
+# Secure alias system
 sudosh:/home/user# alias ll='ls -la'
-sudosh:/home/user# alias grep='grep --color=always'
+sudosh:/home/user# alias grep='grep --color=auto'
+sudosh:/home/user# alias
+ll='ls -la'
+grep='grep --color=auto'
 sudosh:/home/user# ll /etc
+
+# Advanced redirection support
+sudosh:/home/user# echo "data" > /tmp/output.txt
+sudosh:/home/user# date >> /tmp/log.txt
+sudosh:/home/user# sort < /tmp/unsorted.txt
+sudosh:/home/user# cat /etc/passwd | grep root > /tmp/root_users.txt
+
+# Pipeline with redirection (enhanced feature)
+sudosh:/home/user# ps aux | grep nginx | head -5 > /tmp/nginx_procs.txt
+sudosh:/home/user# find /tmp -name "*.log" | xargs grep "ERROR" > /tmp/errors.txt
+
+# Enhanced text processing (v2.0)
+sudosh:/home/user# echo hello world | awk '{print $1}'
+hello
+sudosh:/home/user# echo hello | sed 's/hello/hi/'
+hi
+sudosh:/home/user# ps aux | awk 'NR>1 {print $1}' | sort | uniq > /tmp/users.txt
+sudosh:/home/user# cat /etc/passwd | sed 's/:.*$//' | sort > /tmp/usernames.txt
+
+# Enhanced rules command (v2.0)
+sudosh:/home/user# rules
+[Shows comprehensive sudo rules, safe commands, and blocked commands with paging]
+
+# Other shell features
 sudosh:/home/user# export EDITOR=vim
 sudosh:/home/user# pushd /var/log
 sudosh:/var/log# popd
 sudosh:/home/user# which ls
 sudosh:/home/user# type ll
 sudosh:/home/user# dirs
+.fi
+
+Intelligent shell redirection when sudosh is aliased to sudo:
+.nf
+# User attempts to run bash through sudo alias
+$ sudo bash
+
+=== SUDOSH SHELL REDIRECTION ===
+You attempted to run: bash
+
+sudosh is aliased to 'sudo' on this system for enhanced security.
+Instead of launching bash directly, sudosh provides a secure
+interactive shell with comprehensive logging and security controls.
+
+Benefits of sudosh over bash:
+• Complete command logging and audit trail
+• Protection against dangerous operations
+• Enhanced tab completion and command history
+• Built-in security validation and guidance
+• Safe text processing with awk, sed, grep
+
+Dropping you into secure sudosh shell...
+Type 'help' for available commands or 'exit' to quit.
+================================
+
+sudosh:/home/user#
 .fi
 .TP
 Start sudosh with session logging:
@@ -449,9 +637,29 @@ sudosh provides bash/zsh-like shell enhancements with comprehensive security val
 .IP \(bu 4
 .B Alias Security
 - Alias names must be valid identifiers (alphanumeric and underscore only)
-- Alias values are validated to prevent command injection, variable substitution, and shell metacharacters
-- Built-in command names cannot be aliased to prevent hijacking
+- Comprehensive validation prevents dangerous aliases containing \fBsudo\fR, \fBrm -rf\fR, environment manipulation
+- Critical command override protection blocks aliasing of \fBsudo\fR, \fBpasswd\fR, \fBsu\fR, \fBchmod\fR, etc.
+- Environment manipulation detection blocks \fBPATH=\fR, \fBLD_PRELOAD=\fR, \fBexport PATH\fR patterns
+- Recursive alias detection prevents self-referential and infinite loop aliases
+- Expansion safety testing validates alias expansion before allowing creation
+- Shell RC integration safely imports aliases from \fI.bashrc\fR, \fI.zshrc\fR with validation
+- Dangerous location blocking prevents execution from \fI/tmp/\fR, \fI~/.hidden\fR, \fI/dev/shm/\fR
 - Aliases are stored securely in the user's home directory
+.IP \(bu 4
+.B Redirection Security
+- Safe directory validation only allows redirection to \fI/tmp/\fR, \fI/var/tmp/\fR, home directories
+- System directory protection blocks redirection to \fI/etc/\fR, \fI/usr/\fR, \fI/bin/\fR, \fI/sbin/\fR, \fI/var/log/\fR, \fI/opt/\fR, \fI/lib/\fR
+- Enhanced error messages provide specific feedback for each blocked directory type:
+.RS
+.IP \(bu 2
+\fI/bin/\fR → "Redirection to system binaries directory (/bin/) is not allowed for security reasons"
+.IP \(bu 2
+\fI/etc/\fR → "Redirection to system configuration directory (/etc/) is not allowed for security reasons"
+.IP \(bu 2
+\fI/var/log/\fR → "Redirection to system log directory (/var/log/) is not allowed for security reasons"
+.RE
+- Pipeline redirection integration ensures redirection security applies to complex pipelines
+- Comprehensive audit logging tracks all redirection operations
 .IP \(bu 4
 .B Environment Variable Security
 - Only whitelisted environment variables can be modified (EDITOR, PAGER, LANG, etc.)
@@ -493,16 +701,36 @@ sudosh implements intelligent "gut check" warnings that distinguish between safe
 .B Shell commands: bash, sh, zsh, csh
 - Direct shell access is not permitted
 .IP \(bu 4
-.B Pipes and redirection: |, >, >>, <
-- Only single commands are supported; file redirection is blocked for security
+.B Dangerous shell operations: ;, &&, ||, &, `cmd`, $(cmd)
+- Command chaining, logical operators, background execution, and command substitution are blocked for security
 
-.B Dangerous Operations (Warning Required):
+.B Dangerous Operations (Blocked with Enhanced Error Messages):
 .IP \(bu 4
-.B Output redirection to system directories
-- Commands like "echo text > /etc/passwd" or "cat file >> /etc/hosts"
+.B Redirection to system directories
+- Redirection to system directories is blocked with specific error messages:
+.nf
+sudosh:/home/user# echo "test" > /bin/malicious
+sudosh: Redirection to system binaries directory (/bin/) is not allowed for security reasons
+sudosh: Safe redirection targets: /tmp/, /var/tmp/, or your home directory
+
+sudosh:/home/user# echo "data" > /etc/config
+sudosh: Redirection to system configuration directory (/etc/) is not allowed for security reasons
+sudosh: Safe redirection targets: /tmp/, /var/tmp/, or your home directory
+
+sudosh:/home/user# echo "log" >> /var/log/system.log
+sudosh: Redirection to system log directory (/var/log/) is not allowed for security reasons
+sudosh: Safe redirection targets: /tmp/, /var/tmp/, or your home directory
+.fi
 .IP \(bu 4
-.B Pipes to dangerous commands
-- Commands like "cat /etc/passwd | rm /etc/hosts"
+.B Dangerous alias creation
+- Alias creation is blocked with specific error messages:
+.nf
+sudosh:/home/user# alias sudo='ls'
+sudosh: Alias contains dangerous command 'sudo' and is not allowed
+
+sudosh:/home/user# alias setpath='PATH=/tmp:$PATH'
+sudosh: Alias contains environment manipulation and is not allowed
+.fi
 
 .B Dangerous System Commands:
 .IP \(bu 4

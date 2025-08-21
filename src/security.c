@@ -8,6 +8,7 @@
  */
 
 #include "sudosh.h"
+#include <limits.h>
 
 /* Global variables for signal handling */
 static volatile sig_atomic_t interrupted = 0;
@@ -496,12 +497,32 @@ int is_safe_command(const char *command) {
         "uptime", "/usr/bin/uptime", "/bin/uptime",
         "w", "/usr/bin/w", "/bin/w",
         "who", "/usr/bin/who", "/bin/who",
+        "echo", "/bin/echo", "/usr/bin/echo",
+        /* Text processing commands with security controls */
+        "grep", "/bin/grep", "/usr/bin/grep",
+        "egrep", "/bin/egrep", "/usr/bin/egrep",
+        "fgrep", "/bin/fgrep", "/usr/bin/fgrep",
+        "sed", "/bin/sed", "/usr/bin/sed",
+        "awk", "/bin/awk", "/usr/bin/awk", "/usr/bin/gawk",
+        "cut", "/bin/cut", "/usr/bin/cut",
+        "sort", "/bin/sort", "/usr/bin/sort",
+        "uniq", "/bin/uniq", "/usr/bin/uniq",
+        "head", "/bin/head", "/usr/bin/head",
+        "tail", "/bin/tail", "/usr/bin/tail",
+        "wc", "/bin/wc", "/usr/bin/wc",
+        "cat", "/bin/cat", "/usr/bin/cat",
         NULL
     };
 
     /* Check if it's a safe command */
     for (int i = 0; safe_commands[i]; i++) {
         if (strcmp(cmd_name, safe_commands[i]) == 0) {
+            /* For text processing commands, do additional security validation */
+            if (is_text_processing_command(cmd_name)) {
+                int is_secure = validate_text_processing_command(command);
+                free(cmd_copy);
+                return is_secure;
+            }
             free(cmd_copy);
             return 1;
         }
@@ -643,6 +664,61 @@ int is_shell_command(const char *command) {
 
     free(cmd_copy);
     return 0;
+}
+
+/**
+ * Handle shell command when sudosh is invoked in sudo compatibility mode
+ * Returns 2 to indicate we should drop to interactive shell
+ */
+int handle_shell_command_in_sudo_mode(const char *command) {
+    if (!command) return 0;
+
+    /* Extract the shell name for the message */
+    char *cmd_copy = strdup(command);
+    if (!cmd_copy) return 0;
+
+    char *cmd_name = strtok(cmd_copy, " \t");
+    if (!cmd_name) {
+        free(cmd_copy);
+        return 0;
+    }
+
+    /* Get just the basename if it's a full path */
+    char *basename_shell = strrchr(cmd_name, '/');
+    if (basename_shell) {
+        cmd_name = basename_shell + 1;
+    }
+
+    /* Log the attempt */
+    char log_msg[256];
+    snprintf(log_msg, sizeof(log_msg), "shell command '%s' redirected to interactive sudosh", cmd_name);
+    log_security_violation(current_username, log_msg);
+
+    /* Print helpful message */
+    fprintf(stderr, "\n");
+    fprintf(stderr, "=== SUDOSH SHELL REDIRECTION ===\n");
+    fprintf(stderr, "You attempted to run: %s\n", command);
+    fprintf(stderr, "\n");
+    fprintf(stderr, "sudosh is aliased to 'sudo' on this system for enhanced security.\n");
+    fprintf(stderr, "Instead of launching %s directly, sudosh provides a secure\n", cmd_name);
+    fprintf(stderr, "interactive shell with comprehensive logging and security controls.\n");
+    fprintf(stderr, "\n");
+    fprintf(stderr, "Benefits of sudosh over %s:\n", cmd_name);
+    fprintf(stderr, "• Complete command logging and audit trail\n");
+    fprintf(stderr, "• Protection against dangerous operations\n");
+    fprintf(stderr, "• Enhanced tab completion and command history\n");
+    fprintf(stderr, "• Built-in security validation and guidance\n");
+    fprintf(stderr, "• Safe text processing with awk, sed, grep\n");
+    fprintf(stderr, "\n");
+    fprintf(stderr, "Dropping you into secure sudosh shell...\n");
+    fprintf(stderr, "Type 'help' for available commands or 'exit' to quit.\n");
+    fprintf(stderr, "================================\n");
+    fprintf(stderr, "\n");
+
+    free(cmd_copy);
+
+    /* Return special code to indicate we should drop to interactive shell */
+    return 2;
 }
 
 /**
@@ -1152,23 +1228,36 @@ int validate_command_with_length(const char *command, size_t buffer_len) {
     int is_date = (strncmp(trim, "date", 4) == 0) && (trim[4] == '\0' || trim[4] == ' ');
     int is_printenv = (strncmp(trim, "printenv", 8) == 0) && (trim[8] == '\0' || trim[8] == ' ');
 
+    /* Check for text processing commands that need quotes for patterns */
+    int is_text_processing = 0;
+    if ((strncmp(trim, "awk", 3) == 0 && (trim[3] == '\0' || trim[3] == ' ')) ||
+        (strncmp(trim, "gawk", 4) == 0 && (trim[4] == '\0' || trim[4] == ' ')) ||
+        (strncmp(trim, "sed", 3) == 0 && (trim[3] == '\0' || trim[3] == ' ')) ||
+        (strncmp(trim, "grep", 4) == 0 && (trim[4] == '\0' || trim[4] == ' ')) ||
+        (strncmp(trim, "egrep", 5) == 0 && (trim[5] == '\0' || trim[5] == ' ')) ||
+        (strncmp(trim, "fgrep", 5) == 0 && (trim[5] == '\0' || trim[5] == ' '))) {
+        is_text_processing = 1;
+    }
+
     /* Block any percent usage (format specifiers or encoded sequences) */
     if (strchr(command, '%')) {
         log_security_violation(current_username, "% character detected (format/encoding) in command");
         return 0;
     }
 
-    /* Block any environment expansion, except allow with printenv */
-    if (strchr(command, '$')) {
-        if (!is_printenv) {
+    /* Block any environment expansion, except allow with printenv and text processing commands */
+    /* Skip this check for pipeline commands as they will be validated by pipeline validator */
+    if (strchr(command, '$') && !strchr(command, '|')) {
+        if (!is_printenv && !is_text_processing) {
             log_security_violation(current_username, "environment expansion detected in command");
             return 0;
         }
 
     }
 
-    /* Disallow dangerous quoting/backslash; allow quotes/backslash in simple echo usage */
-    if (!is_echo && (strchr(command, '\'') || strchr(command, '"') || strchr(command, '\\'))) {
+    /* Disallow dangerous quoting/backslash; allow quotes/backslash in echo and text processing commands */
+    /* Skip this check for pipeline commands as they will be validated by pipeline validator */
+    if (!is_echo && !is_text_processing && !strchr(command, '|') && (strchr(command, '\'') || strchr(command, '"') || strchr(command, '\\'))) {
         log_security_violation(current_username, "special quoting detected in command");
         return 0;
     }
@@ -1219,24 +1308,59 @@ int validate_command_with_length(const char *command, size_t buffer_len) {
         return 0;
     }
 
-    /* Block any pipeline usage */
+    /* Check pipeline usage - allow secure pipelines */
     if (strchr(command, '|')) {
-        log_security_violation(current_username, "pipeline usage blocked for security reasons");
-        /* Enhanced user guidance for pipes */
-        fprintf(stderr, "sudosh: pipes (|) are blocked for security reasons\n");
-        fprintf(stderr, "sudosh: pipelines can chain commands and bypass security controls\n");
-        fprintf(stderr, "sudosh: run commands individually to ensure proper auditing\n");
-        return 0;
+        /* Parse and validate the pipeline */
+        if (!validate_secure_pipeline(command)) {
+            log_security_violation(current_username, "insecure pipeline usage blocked");
+            /* Enhanced user guidance for pipes */
+            fprintf(stderr, "sudosh: insecure pipeline blocked\n");
+            fprintf(stderr, "sudosh: only whitelisted commands are allowed in pipelines\n");
+            fprintf(stderr, "sudosh: all commands in pipeline must be individually authorized\n");
+            return 0;
+        }
+        /* Pipeline is secure, allow it to proceed */
     }
 
-    /* Check for redirection operators */
+    /* Check for redirection operators - allow safe redirection */
     if (strchr(command, '>') || strchr(command, '<')) {
-        log_security_violation(current_username, "file redirection blocked for security reasons");
-        /* Enhanced user guidance for I/O redirection */
-        fprintf(stderr, "sudosh: I/O redirection is blocked for security reasons\n");
-        fprintf(stderr, "sudosh: redirection could overwrite critical system files\n");
-        fprintf(stderr, "sudosh: it may be used to bypass file permissions\n");
-        return 0;
+        if (!validate_safe_redirection(command)) {
+            log_security_violation(current_username, "unsafe file redirection blocked");
+
+            /* Extract the redirection target for detailed error message */
+            char *redirect_pos = strchr(command, '>');
+            if (!redirect_pos) {
+                redirect_pos = strchr(command, '<');
+            }
+
+            if (redirect_pos) {
+                char *target = redirect_pos + 1;
+                if (*target == '>') target++; /* Skip >> */
+                while (*target && (*target == ' ' || *target == '\t')) target++; /* Skip whitespace */
+
+                if (*target) {
+                    /* Extract just the target (stop at whitespace) */
+                    char target_copy[256];
+                    int i = 0;
+                    while (target[i] && target[i] != ' ' && target[i] != '\t' && target[i] != '\n' && i < 255) {
+                        target_copy[i] = target[i];
+                        i++;
+                    }
+                    target_copy[i] = '\0';
+
+                    const char *error_msg = get_redirection_error_message(target_copy);
+                    fprintf(stderr, "sudosh: %s\n", error_msg);
+                } else {
+                    fprintf(stderr, "sudosh: unsafe redirection blocked\n");
+                }
+            } else {
+                fprintf(stderr, "sudosh: unsafe redirection blocked\n");
+            }
+
+            fprintf(stderr, "sudosh: Safe redirection targets: /tmp/, /var/tmp/, or your home directory\n");
+            return 0;
+        }
+        /* Redirection is safe, allow it to proceed */
     }
 
     /* Enhanced security checks */
@@ -1254,11 +1378,19 @@ int validate_command_with_length(const char *command, size_t buffer_len) {
         return 0;
     }
 
-    /* Block shell commands */
+    /* Handle shell commands with special sudo compatibility mode behavior */
     if (is_shell_command(command)) {
-        log_security_violation(current_username, "shell command blocked");
-        fprintf(stderr, "sudosh: shell commands are not permitted\n");
-        return 0;
+        /* Check if we're in sudo compatibility mode (sudosh aliased to sudo) */
+        extern int sudo_compat_mode_flag;
+        if (sudo_compat_mode_flag) {
+            /* Provide helpful message and indicate we should drop to interactive shell */
+            return handle_shell_command_in_sudo_mode(command);
+        } else {
+            /* Normal sudosh behavior - block shell commands */
+            log_security_violation(current_username, "shell command blocked");
+            fprintf(stderr, "sudosh: shell commands are not permitted\n");
+            return 0;
+        }
     }
 
     /* Block SSH commands */
@@ -1349,4 +1481,438 @@ void cleanup_security(void) {
         free(current_username);
         current_username = NULL;
     }
+}
+
+/**
+ * Validate that a pipeline contains only secure, authorized commands
+ */
+int validate_secure_pipeline(const char *command) {
+    struct pipeline_info pipeline;
+    int result = 1;  /* Start with success, set to 0 on failure */
+
+    if (!command) {
+        return 0;
+    }
+
+    /* Parse the pipeline */
+    if (parse_pipeline(command, &pipeline) != 0) {
+        return 0;
+    }
+
+    /* Validate each command in the pipeline against user permissions */
+    for (int i = 0; i < pipeline.num_commands; i++) {
+        struct command_info *cmd = &pipeline.commands[i].cmd;
+
+        if (!cmd->argv || !cmd->argv[0]) {
+            result = 0;
+            break;
+        }
+
+        /* Check if command is whitelisted for pipeline use */
+        if (!is_whitelisted_pipe_command(cmd->argv[0])) {
+            fprintf(stderr, "sudosh: command '%s' is not whitelisted for pipeline use\n", cmd->argv[0]);
+            result = 0;
+            break;
+        }
+
+        /* Check if user has permission to run this specific command */
+        if (!check_command_permission(current_username, cmd->command)) {
+            fprintf(stderr, "sudosh: %s is not allowed to run '%s' in pipeline\n",
+                    current_username, cmd->command);
+            log_security_violation(current_username, "unauthorized command in pipeline");
+            result = 0;
+            break;
+        }
+
+        /* Additional security validation for the command (but skip pipeline check to avoid recursion) */
+        if (!validate_command_for_pipeline(cmd->command)) {
+            fprintf(stderr, "sudosh: command '%s' failed security validation in pipeline\n", cmd->command);
+            result = 0;
+            break;
+        }
+    }
+
+    /* Clean up */
+    free_pipeline_info(&pipeline);
+
+    return result;
+}
+
+/**
+ * Validate command for pipeline use (similar to validate_command but without pipeline check)
+ */
+int validate_command_for_pipeline(const char *command) {
+    if (!command) {
+        return 0;
+    }
+
+    /* Basic security checks without pipeline validation */
+
+    /* Check for path traversal attempts */
+    if (strstr(command, "../") || strstr(command, "..\\")) {
+        return 0;
+    }
+
+    /* Check for command injection patterns */
+    if (strchr(command, ';') || strchr(command, '&') ||
+        strstr(command, "&&") || strstr(command, "||") || strchr(command, '`') ||
+        strstr(command, "$(")) {
+        return 0;
+    }
+
+    /* Check for text processing commands that need quotes and $ for patterns */
+    const char *trim = command;
+    while (*trim == ' ' || *trim == '\t') trim++;
+
+    /* Extract the command name (first word) for text processing detection */
+    char *cmd_copy = strdup(trim);
+    if (!cmd_copy) {
+        return 0;
+    }
+
+    char *cmd_name = strtok(cmd_copy, " \t");
+    int is_text_processing_pipeline = 0;
+    if (cmd_name && is_text_processing_command(cmd_name)) {
+        is_text_processing_pipeline = 1;
+    }
+
+    free(cmd_copy);
+
+    /* Block dangerous quoting/backslash patterns (except for text processing commands) */
+    if (!is_text_processing_pipeline && (strchr(command, '\'') || strchr(command, '"') || strchr(command, '\\'))) {
+        return 0;
+    }
+
+    /* Block $ character (except for text processing commands) */
+    if (!is_text_processing_pipeline && strchr(command, '$')) {
+        return 0;
+    }
+
+    /* Block environment manipulation */
+
+    if (strncmp(trim, "env", 3) == 0 && (trim[3] == '\0' || trim[3] == ' ')) {
+        return 0;
+    }
+
+    if (strncmp(trim, "export", 6) == 0 && (trim[6] == '\0' || trim[6] == ' ')) {
+        return 0;
+    }
+
+    return 1;
+}
+
+/**
+ * Validate that redirection is safe (only to allowed directories)
+ */
+int validate_safe_redirection(const char *command) {
+    if (!command) {
+        return 0;
+    }
+
+    /* Find redirection operators */
+    char *redirect_pos = NULL;
+    char *cmd_copy = strdup(command);
+    if (!cmd_copy) {
+        return 0;
+    }
+
+    /* Look for output redirection operators */
+    char *gt = strchr(cmd_copy, '>');
+    char *lt = strchr(cmd_copy, '<');
+
+    if (gt) {
+        redirect_pos = gt;
+    } else if (lt) {
+        /* Input redirection is generally safer, but still validate */
+        redirect_pos = lt;
+    }
+
+    if (!redirect_pos) {
+        free(cmd_copy);
+        return 1; /* No redirection found */
+    }
+
+    /* Extract the target file/path */
+    char *target = redirect_pos + 1;
+
+    /* Skip additional > for >> */
+    if (*target == '>') {
+        target++;
+    }
+
+    /* Skip whitespace */
+    while (*target && (*target == ' ' || *target == '\t')) {
+        target++;
+    }
+
+    if (!*target) {
+        free(cmd_copy);
+        return 0; /* No target specified */
+    }
+
+    /* Extract just the filename/path (stop at whitespace) */
+    char *end = target;
+    while (*end && *end != ' ' && *end != '\t' && *end != '\n') {
+        end++;
+    }
+    *end = '\0';
+
+    /* Check if target is in a safe directory */
+    int is_safe = is_safe_redirection_target(target);
+
+    free(cmd_copy);
+    return is_safe;
+}
+
+/**
+ * Check if a redirection target is in a safe directory
+ */
+int is_safe_redirection_target(const char *target) {
+    if (!target) {
+        return 0;
+    }
+
+    /* Resolve relative paths and home directory */
+    char resolved_path[PATH_MAX];
+    char *real_target = NULL;
+
+    /* Handle tilde expansion */
+    if (target[0] == '~') {
+        char *home = getenv("HOME");
+        if (home) {
+            snprintf(resolved_path, sizeof(resolved_path), "%s%s", home, target + 1);
+            real_target = resolved_path;
+        } else {
+            return 0; /* Can't resolve home directory */
+        }
+    } else {
+        real_target = (char *)target;
+    }
+
+    /* List of safe directory prefixes */
+    const char *safe_prefixes[] = {
+        "/tmp/",
+        "/var/tmp/",
+        "/home/",
+        "/Users/",  /* macOS home directories */
+        NULL
+    };
+
+    /* Check if target starts with a safe prefix */
+    for (int i = 0; safe_prefixes[i]; i++) {
+        if (strncmp(real_target, safe_prefixes[i], strlen(safe_prefixes[i])) == 0) {
+            return 1;
+        }
+    }
+
+    /* Check if it's in current user's home directory */
+    char *home = getenv("HOME");
+    if (home && strncmp(real_target, home, strlen(home)) == 0) {
+        return 1;
+    }
+
+    /* Block redirection to system directories */
+    const char *dangerous_prefixes[] = {
+        "/etc/",
+        "/usr/",
+        "/bin/",
+        "/sbin/",
+        "/var/log/",
+        "/var/lib/",
+        "/var/run/",
+        "/sys/",
+        "/proc/",
+        "/dev/",
+        "/boot/",
+        "/root/",
+        "/opt/",
+        "/lib/",
+        "/lib64/",
+        NULL
+    };
+
+    for (int i = 0; dangerous_prefixes[i]; i++) {
+        if (strncmp(real_target, dangerous_prefixes[i], strlen(dangerous_prefixes[i])) == 0) {
+            return 0;
+        }
+    }
+
+    /* If it's a relative path in current directory, allow it */
+    if (real_target[0] != '/') {
+        return 1;
+    }
+
+    /* Default to safe for other cases */
+    return 1;
+}
+
+/**
+ * Get a descriptive error message for unsafe redirection targets
+ */
+const char *get_redirection_error_message(const char *target) {
+    if (!target) {
+        return "Invalid redirection target";
+    }
+
+    /* Resolve relative paths and home directory */
+    char resolved_path[PATH_MAX];
+    char *real_target = NULL;
+
+    /* Handle tilde expansion */
+    if (target[0] == '~') {
+        char *home = getenv("HOME");
+        if (home) {
+            snprintf(resolved_path, sizeof(resolved_path), "%s%s", home, target + 1);
+            real_target = resolved_path;
+        } else {
+            return "Cannot resolve home directory for redirection target";
+        }
+    } else {
+        real_target = (char *)target;
+    }
+
+    /* Check specific dangerous directory types and provide targeted messages */
+    if (strncmp(real_target, "/etc/", 5) == 0) {
+        return "Redirection to system configuration directory (/etc/) is not allowed for security reasons";
+    }
+    if (strncmp(real_target, "/usr/", 5) == 0) {
+        return "Redirection to system programs directory (/usr/) is not allowed for security reasons";
+    }
+    if (strncmp(real_target, "/bin/", 5) == 0) {
+        return "Redirection to system binaries directory (/bin/) is not allowed for security reasons";
+    }
+    if (strncmp(real_target, "/sbin/", 6) == 0) {
+        return "Redirection to system administration binaries directory (/sbin/) is not allowed for security reasons";
+    }
+    if (strncmp(real_target, "/var/log/", 9) == 0) {
+        return "Redirection to system log directory (/var/log/) is not allowed for security reasons";
+    }
+    if (strncmp(real_target, "/var/lib/", 9) == 0) {
+        return "Redirection to system library directory (/var/lib/) is not allowed for security reasons";
+    }
+    if (strncmp(real_target, "/var/run/", 9) == 0) {
+        return "Redirection to system runtime directory (/var/run/) is not allowed for security reasons";
+    }
+    if (strncmp(real_target, "/sys/", 5) == 0) {
+        return "Redirection to system filesystem (/sys/) is not allowed for security reasons";
+    }
+    if (strncmp(real_target, "/proc/", 6) == 0) {
+        return "Redirection to process filesystem (/proc/) is not allowed for security reasons";
+    }
+    if (strncmp(real_target, "/dev/", 5) == 0) {
+        return "Redirection to device directory (/dev/) is not allowed for security reasons";
+    }
+    if (strncmp(real_target, "/boot/", 6) == 0) {
+        return "Redirection to boot directory (/boot/) is not allowed for security reasons";
+    }
+    if (strncmp(real_target, "/root/", 6) == 0) {
+        return "Redirection to root user directory (/root/) is not allowed for security reasons";
+    }
+    if (strncmp(real_target, "/opt/", 5) == 0) {
+        return "Redirection to optional software directory (/opt/) is not allowed for security reasons";
+    }
+    if (strncmp(real_target, "/lib/", 5) == 0 || strncmp(real_target, "/lib64/", 7) == 0) {
+        return "Redirection to system library directory (/lib/) is not allowed for security reasons";
+    }
+
+    /* Check for absolute paths that aren't in safe directories */
+    if (real_target[0] == '/') {
+        return "Redirection to system directories is not allowed. Use /tmp/, /var/tmp/, or your home directory instead";
+    }
+
+    /* Generic message for other unsafe targets */
+    return "Redirection target is not in a safe directory. Use /tmp/, /var/tmp/, or your home directory instead";
+}
+
+/**
+ * Check if command is a text processing command that needs additional validation
+ */
+int is_text_processing_command(const char *cmd_name) {
+    if (!cmd_name) {
+        return 0;
+    }
+
+    /* Remove path if present */
+    const char *basename_cmd = strrchr(cmd_name, '/');
+    if (basename_cmd) {
+        cmd_name = basename_cmd + 1;
+    }
+
+    const char *text_commands[] = {
+        "grep", "egrep", "fgrep", "sed", "awk", "gawk", NULL
+    };
+
+    for (int i = 0; text_commands[i]; i++) {
+        if (strcmp(cmd_name, text_commands[i]) == 0) {
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+/**
+ * Validate text processing commands to prevent shell escapes
+ */
+int validate_text_processing_command(const char *command) {
+    if (!command) {
+        return 0;
+    }
+
+    /* Check for dangerous patterns that could lead to shell escapes */
+
+    /* Block shell escape patterns in sed */
+    if (strstr(command, "sed") && (strstr(command, "e ") || strstr(command, "w ") ||
+                                   strstr(command, "r ") || strstr(command, "W ") ||
+                                   strstr(command, "R "))) {
+        fprintf(stderr, "sudosh: sed command with shell escape patterns blocked\n");
+        return 0;
+    }
+
+    /* Block system() calls in awk */
+    if (strstr(command, "awk") && (strstr(command, "system(") || strstr(command, "system "))) {
+        fprintf(stderr, "sudosh: awk command with system() calls blocked\n");
+        return 0;
+    }
+
+    /* Block file operations in awk that could write to dangerous locations */
+    if (strstr(command, "awk") && (strstr(command, "print >") || strstr(command, "printf >"))) {
+        /* Check if the output redirection is safe */
+        if (!validate_safe_redirection(command)) {
+            fprintf(stderr, "sudosh: awk command with unsafe file output blocked\n");
+            return 0;
+        }
+    }
+
+    /* Block dangerous grep options */
+    if (strstr(command, "grep") && strstr(command, "--include=")) {
+        /* Check for dangerous include patterns */
+        if (strstr(command, "/etc/") || strstr(command, "/var/") || strstr(command, "/usr/")) {
+            fprintf(stderr, "sudosh: grep with dangerous include pattern blocked\n");
+            return 0;
+        }
+    }
+
+    /* Block execution flags in grep */
+    if (strstr(command, "grep") && (strstr(command, " -e ") || strstr(command, "--exec"))) {
+        fprintf(stderr, "sudosh: grep with execution flags blocked\n");
+        return 0;
+    }
+
+    /* General validation for all text processing commands */
+
+    /* Block command substitution */
+    if (strchr(command, '`') || strstr(command, "$(")) {
+        fprintf(stderr, "sudosh: command substitution in text processing command blocked\n");
+        return 0;
+    }
+
+    /* Block shell metacharacters that could be dangerous */
+    if (strchr(command, ';') || strchr(command, '&') || strstr(command, "||") || strstr(command, "&&")) {
+        fprintf(stderr, "sudosh: shell metacharacters in text processing command blocked\n");
+        return 0;
+    }
+
+    /* Allow the command if it passes all checks */
+    return 1;
 }

@@ -9,3 +9,7 @@ int test_mode = 1;
 /* Shell enhancements default for tests */
 int rc_alias_import_enabled = 1;
 
+
+/* Sudo-compat flags defaults for tests */
+int sudo_compat_mode_flag = 0;
+int non_interactive_mode_flag = 0;

@@ -1,53 +1,95 @@
-# Sudosh Documentation
+# Sudosh v2.0 Documentation
 
-This directory contains comprehensive documentation for sudosh, covering installation, usage, deployment, and integration.
+This directory contains comprehensive documentation for sudosh v2.0, a secure interactive sudo shell with enhanced logging, security protections, and audit capabilities.
 
-## 📚 Documentation Index
+## 📚 **Documentation Index**
 
-### 🚀 Getting Started
-- **[COMPREHENSIVE_GUIDE.md](COMPREHENSIVE_GUIDE.md)** - Complete feature overview and usage guide
-- **[DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md)** - Production deployment and CI/CD integration ⭐ NEW
-- **[TESTING_GUIDE.md](TESTING_GUIDE.md)** - Comprehensive testing procedures and validation
+### **🚀 Getting Started**
+- [**README.md**](../README.md) - Main project overview and quick start
+- [**DEPLOYMENT_GUIDE.md**](DEPLOYMENT_GUIDE.md) - Installation and deployment instructions
+- [**COMPREHENSIVE_GUIDE.md**](COMPREHENSIVE_GUIDE.md) - Complete user and administrator guide
+- [**TESTING_GUIDE.md**](TESTING_GUIDE.md) - Testing procedures and validation
 
-### 🔧 Integration Guides
-- **[ANSIBLE_INTEGRATION.md](ANSIBLE_INTEGRATION.md)** - Complete Ansible integration with plugins ⭐ NEW
-- **[ANSIBLE_BECOME_METHOD.md](ANSIBLE_BECOME_METHOD.md)** - Ansible become method integration (legacy)
+### **🆕 New Features (v2.0)**
+- [**SUDO_SHELL_REDIRECTION_SUMMARY.md**](SUDO_SHELL_REDIRECTION_SUMMARY.md) - Intelligent shell redirection when aliased to sudo
+- [**RULES_COMMAND_ENHANCEMENT_SUMMARY.md**](RULES_COMMAND_ENHANCEMENT_SUMMARY.md) - Enhanced rules command with safe/blocked commands
+- [**AWK_SED_SUPPORT_SUMMARY.md**](AWK_SED_SUPPORT_SUMMARY.md) - Advanced text processing with awk/sed support
+- [**ALIAS_VALIDATION_ENHANCEMENT.md**](ALIAS_VALIDATION_ENHANCEMENT.md) - Enhanced alias validation and security
+- [**REDIRECTION_FIX_COMPLETE.md**](REDIRECTION_FIX_COMPLETE.md) - I/O redirection implementation details
+- [**REDIRECTION_PARSING_FIX.md**](REDIRECTION_PARSING_FIX.md) - Redirection parsing enhancements
 
-### 📦 Distribution & Packaging
-- **[PACKAGING.md](PACKAGING.md)** - Package creation and distribution guide
+### **🔒 Security & Testing**
+- [**SECURITY_ENHANCEMENTS.md**](SECURITY_ENHANCEMENTS.md) - Security improvements and protections
+- [**PIPELINE_SECURITY.md**](PIPELINE_SECURITY.md) - Pipeline security and validation
+- [**TEST_SUITE_SUMMARY.md**](TEST_SUITE_SUMMARY.md) - Comprehensive test suite overview
+- [**SECURITY_TESTING_SUMMARY.md**](SECURITY_TESTING_SUMMARY.md) - Security testing results
+- [**PIPELINE_REGRESSION_TESTING.md**](PIPELINE_REGRESSION_TESTING.md) - Pipeline regression testing
 
-### 🔒 Security Documentation
-- **[SECURITY_TESTING_SUMMARY.md](SECURITY_TESTING_SUMMARY.md)** - Security testing results and analysis
+### **🔧 Integration & Deployment**
+- [**ANSIBLE_INTEGRATION.md**](ANSIBLE_INTEGRATION.md) - Ansible integration and detection
+- [**ANSIBLE_BECOME_METHOD.md**](ANSIBLE_BECOME_METHOD.md) - Ansible become method configuration
+- [**PACKAGING.md**](PACKAGING.md) - Package creation and distribution
+- [**SHELL_FEATURES_AND_PLAN.md**](SHELL_FEATURES_AND_PLAN.md) - Shell enhancement features
 
-### 🛠️ Feature Implementation
-- **[ENHANCED_WHICH_IMPLEMENTATION.md](ENHANCED_WHICH_IMPLEMENTATION.md)** - Enhanced 'which' command implementation details
+### **🏗️ Technical Documentation**
+- [**PROJECT_STRUCTURE.md**](PROJECT_STRUCTURE.md) - Codebase organization and architecture
+- [**PROJECT_STRUCTURE_REORGANIZATION.md**](PROJECT_STRUCTURE_REORGANIZATION.md) - Structure improvements
+- [**COMPREHENSIVE_UPDATE_SUMMARY.md**](COMPREHENSIVE_UPDATE_SUMMARY.md) - Complete feature update summary
+- [**ENHANCED_WHICH_IMPLEMENTATION.md**](ENHANCED_WHICH_IMPLEMENTATION.md) - Enhanced 'which' command details
 
-### 🏗️ Project Structure
-- **[PROJECT_STRUCTURE_REORGANIZATION.md](PROJECT_STRUCTURE_REORGANIZATION.md)** - Project reorganization and structure improvements
+### **📋 Release Information**
+- [**CHANGELOG.md**](../CHANGELOG.md) - Version history and changes
+- [**RELEASE_HISTORY.md**](RELEASE_HISTORY.md) - Detailed release information
+- [**RELEASE_NOTES_1.9.3.md**](RELEASE_NOTES_1.9.3.md) - Previous release notes
+- [**RELEASE_COMPLETE_v1.9.0.md**](RELEASE_COMPLETE_v1.9.0.md) - v1.9.0 release summary
 
-### 📋 Release Information
-- **[RELEASE_HISTORY.md](RELEASE_HISTORY.md)** - Version history and changelog
+### **🛠️ Development & Maintenance**
+- [**CONTRIBUTING.md**](../CONTRIBUTING.md) - Contribution guidelines
+- [**ENHANCEMENT_SUMMARY.md**](ENHANCEMENT_SUMMARY.md) - Development enhancements
+- [**CLEANUP_SUMMARY.md**](CLEANUP_SUMMARY.md) - Code cleanup and maintenance
 
-## 🎯 Quick Start Guide
+## 🎯 **Quick Navigation**
 
-### For New Users
-1. **[COMPREHENSIVE_GUIDE.md](COMPREHENSIVE_GUIDE.md)** - Start here for overview and basic usage
-2. **[TESTING_GUIDE.md](TESTING_GUIDE.md)** - Validate your installation works correctly
-3. **[DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md)** - Deploy in production environments
+### **For Users**
+1. Start with [README.md](../README.md) for overview
+2. Follow [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md) for installation
+3. Read [COMPREHENSIVE_GUIDE.md](COMPREHENSIVE_GUIDE.md) for usage
+4. Check [v2.0 New Features](#-new-features-v20) for latest capabilities
 
-### For Ansible Users
-1. **[ANSIBLE_INTEGRATION.md](ANSIBLE_INTEGRATION.md)** - Complete integration guide with plugins
-2. **[DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md)** - CI/CD integration examples
+### **For Administrators**
+1. Review [SECURITY_ENHANCEMENTS.md](SECURITY_ENHANCEMENTS.md) for security improvements
+2. Check [ANSIBLE_INTEGRATION.md](ANSIBLE_INTEGRATION.md) for automation
+3. Follow [TESTING_GUIDE.md](TESTING_GUIDE.md) for validation
+4. Study [PIPELINE_SECURITY.md](PIPELINE_SECURITY.md) for security controls
 
-### For Developers
-1. **[TESTING_GUIDE.md](TESTING_GUIDE.md)** - Run comprehensive test suites
-2. **[PACKAGING.md](PACKAGING.md)** - Create distribution packages
-3. **[SECURITY_TESTING_SUMMARY.md](SECURITY_TESTING_SUMMARY.md)** - Security validation
+### **For Developers**
+1. Study [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) for architecture
+2. Review [CONTRIBUTING.md](../CONTRIBUTING.md) for guidelines
+3. Check [TEST_SUITE_SUMMARY.md](TEST_SUITE_SUMMARY.md) for testing
+4. Follow [PACKAGING.md](PACKAGING.md) for distribution
 
-## 🌟 Key Features Covered
+## 🌟 **Version 2.0 Highlights**
 
-### Command-Line Execution ⭐ NEW
-- **Drop-in sudo replacement** - Use `sudosh command args` like `sudo command args`
+### **Major New Features**
+- **🔄 Intelligent Shell Redirection**: Smart handling when sudosh is aliased to sudo
+- **📋 Enhanced Rules Command**: Comprehensive display of safe/blocked commands with paging
+- **⚙️ Advanced Text Processing**: Full awk/sed support with security controls
+- **🔒 Improved Pipeline Security**: Enhanced validation and safe command execution
+- **✅ Enhanced Alias Validation**: Improved alias security and validation
+
+### **Security Enhancements**
+- **🛡️ Comprehensive Command Validation**: Enhanced security checks and protections
+- **📊 Audit Logging**: Complete trail of all user actions and security events
+- **📚 Educational Security Messages**: Helpful explanations instead of simple rejections
+- **🔄 Maintained Backward Compatibility**: All existing functionality preserved
+
+### **User Experience Improvements**
+- **🎯 Intelligent Error Messages**: Context-aware help and guidance
+- **📖 Educational Content**: Learn security best practices through usage
+- **⚡ Seamless Integration**: Drop-in replacement for sudo in many scenarios
+- **🔍 Enhanced Debugging**: Better error reporting and troubleshooting
+
+## 🚀 **Command-Line Execution**
 - **Enhanced security** - All AI detection and security features apply
 - **Comprehensive logging** - Every command execution logged with context
 - **CI/CD friendly** - Non-interactive mode perfect for automation
