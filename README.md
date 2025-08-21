@@ -130,6 +130,8 @@ make
 sudo make install
 ```
 
+**Note**: Installation automatically creates a `sudo -> sudosh` symlink in `/usr/local/bin` to enable intelligent shell redirection. This allows sudosh to provide enhanced security when users run shell commands through sudo.
+
 ### **Package Installation**
 
 #### **RPM-based Systems (RHEL, CentOS, Fedora, openSUSE)**

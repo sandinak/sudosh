@@ -294,22 +294,27 @@ install: $(TARGET) sudosh.1
 	install -d $(DESTDIR)/var/run/sudosh/locks
 	install -m 4755 $(TARGET) $(DESTDIR)$(BINDIR_INSTALL)/sudosh
 	install -m 644 sudosh.1 $(DESTDIR)$(MANDIR)/sudosh.1
+	@echo "Creating sudo -> sudosh symlink for intelligent shell redirection..."
+	ln -sf sudosh $(DESTDIR)$(BINDIR_INSTALL)/sudo
 	@echo "sudosh installed to $(DESTDIR)$(BINDIR_INSTALL)/sudosh"
 	@echo "Manual page installed to $(DESTDIR)$(MANDIR)/sudosh.1"
 	@echo "Runtime directories created: /var/run/sudosh/locks"
+	@echo "sudo -> sudosh symlink created: $(DESTDIR)$(BINDIR_INSTALL)/sudo"
 	@echo "Note: The binary has been installed with setuid root permissions"
 
 # Uninstall target
 uninstall:
 	@echo "Removing sudosh..."
-	@if [ "$(shell id -u)" != "0" ]; then \
+	@if [ "$(shell id -u)" != "0" ] && [ -z "$(DESTDIR)" ]; then \
 		echo "Error: Uninstallation requires root privileges. Run with sudo."; \
 		exit 1; \
 	fi
-	rm -f $(BINDIR_INSTALL)/sudosh
-	rm -f $(MANDIR)/sudosh.1
-	rm -rf /var/run/sudosh
+	rm -f $(DESTDIR)$(BINDIR_INSTALL)/sudosh
+	rm -f $(DESTDIR)$(BINDIR_INSTALL)/sudo
+	rm -f $(DESTDIR)$(MANDIR)/sudosh.1
+	rm -rf $(DESTDIR)/var/run/sudosh
 	@echo "sudosh removed from $(BINDIR_INSTALL)"
+	@echo "sudo symlink removed from $(BINDIR_INSTALL)"
 	@echo "Manual page removed from $(MANDIR)"
 	@echo "Runtime directories removed: /var/run/sudosh"
 

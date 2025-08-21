@@ -931,7 +931,9 @@ make
 sudo make install
 .fi
 
-This installs the binary to /usr/local/bin/sudosh with setuid root permissions.
+This installs the binary to /usr/local/bin/sudosh with setuid root permissions
+and automatically creates a sudo -> sudosh symlink to enable intelligent shell
+redirection when users run shell commands through sudo.
 
 .SH VIEWING LOGS
 To view sudosh logs:
