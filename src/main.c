@@ -585,7 +585,8 @@ int main(int argc, char *argv[]) {
             printf("      --version           Show version information\n");
             printf("      --build-info        Show detailed build information\n");
             printf("  -v, --verbose           Enable verbose output\n");
-            printf("  -l, --list              List available commands showing each permission source\n");
+            printf("  -l, --list              List available sudo rules and permissions\n");
+            printf("  -ll                     List sudo rules with detailed command categories\n");
             printf("  -L, --log-session FILE  Log entire session to FILE\n");
             printf("  -u, --user USER         Run commands as target USER\n");
             printf("  -c, --command COMMAND   Execute COMMAND and exit (like sudo -c)\n");
@@ -602,7 +603,7 @@ int main(int argc, char *argv[]) {
             printf("  sudosh -u user command  Execute command as specific user\n\n");
             printf("sudosh provides both an interactive shell and direct command execution.\n");
             printf("All commands are authenticated and logged to syslog.\n");
-            printf("Use -l to list available commands showing each permission source separately.\n");
+            printf("Use -l to list sudo rules and permissions, -ll for detailed command categories.\n");
             printf("Use -L to also log the complete session to a file.\n");
             printf("Use -v for verbose output including privilege detection details.\n");
             printf("Use -u to run commands as a specific target user (requires sudoers permission).\n");
@@ -677,7 +678,26 @@ int main(int argc, char *argv[]) {
             /* Initialize logging for any security violations */
             init_logging();
 
-            list_available_commands(username);
+            /* Check if this is -ll for detailed output */
+            if (strcmp(argv[i], "-ll") == 0) {
+                list_available_commands_detailed(username);
+            } else {
+                list_available_commands_basic(username);
+            }
+            free(username);
+            return EXIT_SUCCESS;
+        } else if (strcmp(argv[i], "-ll") == 0) {
+            /* List available commands with detailed categories and exit */
+            char *username = get_current_username();
+            if (!username) {
+                fprintf(stderr, "sudosh: unable to determine current user\n");
+                return EXIT_FAILURE;
+            }
+
+            /* Initialize logging for any security violations */
+            init_logging();
+
+            list_available_commands_detailed(username);
             free(username);
             return EXIT_SUCCESS;
         } else if (strcmp(argv[i], "--log-session") == 0 || strcmp(argv[i], "-L") == 0) {

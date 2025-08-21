@@ -397,6 +397,8 @@ int check_nopasswd_privileges_with_command(const char *username, const char *com
 
 /* List available commands */
 void list_available_commands(const char *username);
+void list_available_commands_basic(const char *username);
+void list_available_commands_detailed(const char *username);
 void print_safe_commands_section(void);
 void print_blocked_commands_section(void);
 

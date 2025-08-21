@@ -768,7 +768,187 @@ int check_sudoers_global_nopasswd(const char *username, const char *hostname, st
 }
 
 /**
- * List available commands for a user from sudoers configuration
+ * List available commands for a user - basic version (just rules)
+ * Shows sudo rules and permissions without command categories
+ */
+void list_available_commands_basic(const char *username) {
+    struct sudoers_config *sudoers_config = NULL;
+    char hostname[256];
+    int found_any_rules = 0;
+    int found_direct_sudoers = 0;
+    int found_group_privileges = 0;
+
+    if (!username) {
+        printf("Error: No username provided\n");
+        return;
+    }
+
+    /* Get hostname */
+    if (gethostname(hostname, sizeof(hostname)) != 0) {
+        strcpy(hostname, "localhost");
+    }
+
+    printf("Sudo privileges for %s on %s:\n", username, hostname);
+    printf("=====================================\n\n");
+
+    /* Parse sudoers configuration */
+    sudoers_config = parse_sudoers_file(NULL);
+
+    /* Show LDAP/SSSD-based rules using NSS/SSSD integration */
+    printf("LDAP/SSSD-Based Rules:\n");
+    if (check_sssd_privileges(username)) {
+        printf("    User has SSSD/LDAP-based sudo privileges  [Source: SSSD]\n");
+        found_any_rules = 1;
+    } else {
+        printf("    No LDAP/SSSD-based rules found\n");
+    }
+    printf("\n");
+
+    /* Show direct sudoers rules */
+    printf("Direct Sudoers Rules (from /etc/sudoers):\n");
+    sudoers_config = parse_sudoers_file(NULL);
+    if (sudoers_config) {
+        struct sudoers_userspec *spec = sudoers_config->userspecs;
+        int found_direct_rules = 0;
+
+        while (spec) {
+            /* Check if this rule applies to the user */
+            if (user_matches_spec(username, spec)) {
+                found_direct_rules = 1;
+                found_direct_sudoers = 1;
+                found_any_rules = 1;
+
+                /* Print the rule with source indication */
+                printf("    ");
+
+                /* Print hosts */
+                if (spec->hosts) {
+                    for (int i = 0; spec->hosts && spec->hosts[i]; i++) {
+                        if (i > 0) printf(", ");
+                        printf("%s", spec->hosts[i]);
+                    }
+                }
+
+                printf(" = ");
+
+                /* Print runas user */
+                if (spec->runas_user) {
+                    printf("(%s) ", spec->runas_user);
+                } else {
+                    printf("(root) ");
+                }
+
+                /* Print NOPASSWD if applicable */
+                if (spec->nopasswd) {
+                    printf("NOPASSWD: ");
+                }
+
+                /* Print commands with summary indicators */
+                if (spec->commands) {
+                    /* Check if user has ALL commands */
+                    int has_all_commands = 0;
+                    for (int i = 0; spec->commands && spec->commands[i]; i++) {
+                        if (strcmp(spec->commands[i], "ALL") == 0) {
+                            has_all_commands = 1;
+                            break;
+                        }
+                    }
+
+                    if (has_all_commands) {
+                        if (spec->nopasswd) {
+                            printf("ALL");  /* Unrestricted access */
+                        } else {
+                            printf("ANY");  /* Any command with password */
+                        }
+                    } else {
+                        /* Show specific commands */
+                        for (int i = 0; spec->commands && spec->commands[i]; i++) {
+                            if (i > 0) printf(", ");
+                            printf("%s", spec->commands[i]);
+                        }
+                    }
+                }
+
+                printf("  [Source: %s]\n", spec->source_file ? spec->source_file : "sudoers file");
+            }
+            spec = spec->next;
+        }
+
+        if (!found_direct_rules) {
+            printf("    No direct sudoers rules found for user %s\n", username);
+        }
+    } else {
+        printf("    Error: Could not parse sudoers configuration\n");
+    }
+    printf("\n");
+
+    /* Show group-based privileges */
+    printf("Group-Based Privileges:\n");
+    const char *admin_groups[] = {"wheel", "sudo", "admin", NULL};
+
+    for (int i = 0; admin_groups[i]; i++) {
+        struct group *grp = getgrnam(admin_groups[i]);
+        if (grp && grp->gr_mem) {
+            int is_member = 0;
+            for (char **member = grp->gr_mem; member && *member; member++) {
+                if (*member && strcmp(*member, username) == 0) {
+                    is_member = 1;
+                    found_group_privileges = 1;
+                    found_any_rules = 1;
+                    break;
+                }
+            }
+
+            if (is_member) {
+                printf("    Group '%s': (ALL) ANY  [Source: group membership]\n", admin_groups[i]);
+            }
+        }
+    }
+
+    if (!found_group_privileges) {
+        printf("    User %s is not a member of any admin groups (wheel, sudo, admin)\n", username);
+    }
+    printf("\n");
+
+    /* Summary */
+    if (found_any_rules) {
+        printf("Summary:\n");
+        if (found_direct_sudoers) {
+            printf("✓ User has direct sudoers rules\n");
+        }
+        if (found_group_privileges) {
+            printf("✓ User has privileges through group membership\n");
+        }
+        printf("User %s is authorized to run sudo commands on %s\n", username, hostname);
+    } else {
+        printf("Summary:\n");
+        printf("✗ User %s has no sudo privileges on %s\n", username, hostname);
+        printf("User is not in any admin groups and has no explicit sudoers rules\n");
+    }
+
+    /* Clean up */
+    if (sudoers_config) {
+        free_sudoers_config(sudoers_config);
+    }
+}
+
+/**
+ * List available commands for a user - detailed version (rules + command categories)
+ * Shows each permission source separately with detailed attribution and command categories
+ */
+void list_available_commands_detailed(const char *username) {
+    /* Call the basic version first */
+    list_available_commands_basic(username);
+
+    /* Add detailed command categories */
+    printf("\n");
+    print_safe_commands_section();
+    printf("\n");
+    print_blocked_commands_section();
+}
+
+/**
+ * List available commands for a user from sudoers configuration (legacy function)
  * Shows each permission source separately with detailed attribution
  */
 void list_available_commands(const char *username) {
