@@ -1363,7 +1363,7 @@ int handle_builtin_command(const char *command) {
     } else if (strcmp(token, "rules") == 0) {
         char *username = get_current_username();
         if (username) {
-            execute_with_pager(list_available_commands, username);
+            execute_with_pager(list_available_commands_detailed, username);
             free(username);
         } else {
             printf("Error: Could not determine current user\n");
