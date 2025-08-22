@@ -489,6 +489,82 @@ struct sudoers_config *parse_sudoers_file(const char *filename) {
 }
 
 /**
+ * Check if string matches pattern (simple wildcard support)
+ */
+static int match_pattern(const char *pattern, const char *string) {
+    if (!pattern || !string) {
+        return 0;
+    }
+
+    if (strcmp(pattern, "ALL") == 0) {
+        return 1;
+    }
+
+    return strcmp(pattern, string) == 0;
+}
+
+/**
+ * Check if user matches userspec
+ */
+static int user_matches_spec(const char *username, struct sudoers_userspec *spec) {
+    if (!username || !spec || !spec->users) {
+        return 0;
+    }
+
+    for (int i = 0; spec->users[i]; i++) {
+        if (match_pattern(spec->users[i], username)) {
+            return 1;
+        }
+
+        /* Check for group membership (groups start with %) */
+        if (spec->users[i][0] == '%') {
+            const char *group_name = spec->users[i] + 1;
+
+            /* First try getgrnam() for local groups */
+            struct group *grp = getgrnam(group_name);
+            if (grp && grp->gr_mem) {
+                for (char **member = grp->gr_mem; *member; member++) {
+                    if (strcmp(*member, username) == 0) {
+                        return 1;
+                    }
+                }
+            }
+
+            /* For LDAP/SSSD groups, getgrnam() might not populate gr_mem correctly.
+             * Use getgrouplist() to check if user is in the group */
+            struct passwd *pwd = getpwnam(username);
+            if (pwd) {
+                gid_t *groups;
+                int ngroups = 0;
+
+                /* First call to get the number of groups */
+                if (getgrouplist(username, pwd->pw_gid, NULL, &ngroups) == -1) {
+                    groups = malloc(ngroups * sizeof(gid_t));
+                    if (groups) {
+                        /* Second call to get the actual groups */
+                        if (getgrouplist(username, pwd->pw_gid, groups, &ngroups) != -1) {
+                            /* Check if any of the user's groups match the target group */
+                            struct group *target_grp = getgrnam(group_name);
+                            if (target_grp) {
+                                for (int j = 0; j < ngroups; j++) {
+                                    if (groups[j] == target_grp->gr_gid) {
+                                        free(groups);
+                                        return 1;
+                                    }
+                                }
+                            }
+                        }
+                        free(groups);
+                    }
+                }
+            }
+        }
+    }
+
+    return 0;
+}
+
+/**
  * Check if a specific command is allowed for a user according to sudoers configuration
  */
 int check_sudoers_command_permission(const char *username, const char *hostname, const char *command, struct sudoers_config *sudoers) {
@@ -514,18 +590,8 @@ int check_sudoers_command_permission(const char *username, const char *hostname,
 
     /* Check each userspec */
     for (spec = sudoers->userspecs; spec && !is_allowed; spec = spec->next) {
-        /* Check if this rule applies to the user */
-        int user_matches = 0;
-        if (spec->users) {
-            for (int i = 0; spec->users[i] && !user_matches; i++) {
-                if (strcmp(spec->users[i], username) == 0 ||
-                    strcmp(spec->users[i], "ALL") == 0) {
-                    user_matches = 1;
-                }
-            }
-        }
-
-        if (!user_matches) {
+        /* Check if this rule applies to the user (including group membership) */
+        if (!user_matches_spec(username, spec)) {
             continue;
         }
 
@@ -609,49 +675,8 @@ void free_sudoers_config(struct sudoers_config *config) {
     free(config);
 }
 
-/**
- * Check if string matches pattern (simple wildcard support)
- */
-static int match_pattern(const char *pattern, const char *string) {
-    if (!pattern || !string) {
-        return 0;
-    }
 
-    if (strcmp(pattern, "ALL") == 0) {
-        return 1;
-    }
 
-    return strcmp(pattern, string) == 0;
-}
-
-/**
- * Check if user matches userspec
- */
-static int user_matches_spec(const char *username, struct sudoers_userspec *spec) {
-    if (!username || !spec || !spec->users) {
-        return 0;
-    }
-
-    for (int i = 0; spec->users[i]; i++) {
-        if (match_pattern(spec->users[i], username)) {
-            return 1;
-        }
-
-        /* Check for group membership (groups start with %) */
-        if (spec->users[i][0] == '%') {
-            struct group *grp = getgrnam(spec->users[i] + 1);
-            if (grp && grp->gr_mem) {
-                for (char **member = grp->gr_mem; *member; member++) {
-                    if (strcmp(*member, username) == 0) {
-                        return 1;
-                    }
-                }
-            }
-        }
-    }
-
-    return 0;
-}
 
 /**
  * Check sudoers privileges for user
