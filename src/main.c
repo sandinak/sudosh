@@ -416,7 +416,7 @@ int main_loop(void) {
             } else {
                 char log_message[1024];
                 snprintf(log_message, sizeof(log_message), "pipeline: %s", command_line);
-                log_command_with_ansible_context(username, log_message, result);
+                log_command_with_ansible_context(username, log_message, (result == 0));
             }
 
             /* Clean up pipeline structure */
