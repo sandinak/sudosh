@@ -1039,6 +1039,26 @@ int check_command_permission(const char *username, const char *command) {
         return 1;
     }
 
+    /* Check if this is a whitelisted pipeline command - these are inherently safer */
+    extern int is_whitelisted_pipe_command(const char *command);
+    if (is_whitelisted_pipe_command(command)) {
+        /* For whitelisted pipeline commands, check if user has general sudo access */
+        char hostname[256];
+        if (gethostname(hostname, sizeof(hostname)) != 0) {
+            strcpy(hostname, "localhost");
+        }
+
+        /* Check if user has NOPASSWD ALL privileges */
+        struct sudoers_config *sudoers_config = parse_sudoers_file(NULL);
+        if (sudoers_config && check_sudoers_global_nopasswd(username, hostname, sudoers_config)) {
+            free_sudoers_config(sudoers_config);
+            return 1;  /* Allow whitelisted commands for users with broad sudo access */
+        }
+        if (sudoers_config) {
+            free_sudoers_config(sudoers_config);
+        }
+    }
+
     /* Use the new NSS-based command permission checking */
     int is_allowed = check_command_permission_nss(username, command);
 
