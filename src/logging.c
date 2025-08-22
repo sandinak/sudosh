@@ -25,6 +25,9 @@ static char **history_buffer = NULL;
 static int history_count = 0;
 static int history_capacity = 0;
 
+/* Global variable for duplicate command detection */
+static char *last_logged_command = NULL;
+
 /**
  * Initialize syslog for sudosh
  */
@@ -431,6 +434,15 @@ void log_command_history(const char *command) {
         return;
     }
 
+    /* Skip consecutive duplicate commands */
+    if (last_logged_command && strcmp(command, last_logged_command) == 0) {
+        return;
+    }
+
+    /* Update last command */
+    free(last_logged_command);
+    last_logged_command = strdup(command);
+
     time(&now);
     tm_info = localtime(&now);
     strftime(timestamp, sizeof(timestamp), "%Y-%m-%d %H:%M:%S", tm_info);
@@ -440,9 +452,21 @@ void log_command_history(const char *command) {
 }
 
 /**
+ * Clean up static variables from command history functions
+ */
+void cleanup_command_history_state(void) {
+    /* Clean up the last logged command tracking */
+    free(last_logged_command);
+    last_logged_command = NULL;
+}
+
+/**
  * Close command history logging
  */
 void close_command_history(void) {
+    /* Clean up static variables from log_command_history */
+    cleanup_command_history_state();
+
     if (history_logging_enabled && history_file) {
         fclose(history_file);
         history_file = NULL;
@@ -569,6 +593,12 @@ void add_to_history_buffer(const char *command) {
             return;
         }
         history_count = 0;
+    }
+
+    /* Skip consecutive duplicate commands */
+    if (history_count > 0 && history_buffer[history_count - 1] &&
+        strcmp(command, history_buffer[history_count - 1]) == 0) {
+        return;
     }
 
     /* Expand buffer if needed */

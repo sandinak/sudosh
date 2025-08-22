@@ -461,6 +461,7 @@ void close_session_logging(void);
 int init_command_history(const char *username);
 void log_command_history(const char *command);
 void close_command_history(void);
+void cleanup_command_history_state(void);
 
 /* History navigation functions */
 int load_history_buffer(void);
