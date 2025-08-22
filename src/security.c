@@ -497,6 +497,7 @@ int is_safe_command(const char *command) {
         "uptime", "/usr/bin/uptime", "/bin/uptime",
         "w", "/usr/bin/w", "/bin/w",
         "who", "/usr/bin/who", "/bin/who",
+        "last", "/usr/bin/last", "/bin/last",
         "echo", "/bin/echo", "/usr/bin/echo",
         /* Text processing commands with security controls */
         "grep", "/bin/grep", "/usr/bin/grep",
