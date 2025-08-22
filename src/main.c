@@ -475,9 +475,9 @@ int main_loop(void) {
             if (target_user) {
                 char log_message[1024];
                 snprintf(log_message, sizeof(log_message), "%s (as %s)", command_line, target_user);
-                log_command_with_ansible_context(username, log_message, result);
+                log_command_with_ansible_context(username, log_message, (result == 0));
             } else {
-                log_command_with_ansible_context(username, command_line, result);
+                log_command_with_ansible_context(username, command_line, (result == 0));
             }
 
             /* Clean up command structure */

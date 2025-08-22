@@ -1411,11 +1411,18 @@ int validate_command_with_length(const char *command, size_t buffer_len) {
 
     }
 
-    /* Disallow dangerous quoting/backslash; allow quotes/backslash in echo and text processing commands */
+    /* Check for dangerous quoting patterns that could lead to command injection */
     /* Skip this check for pipeline commands as they will be validated by pipeline validator */
-    if (!is_echo && !is_text_processing && !strchr(command, '|') && (strchr(command, '\'') || strchr(command, '"') || strchr(command, '\\'))) {
-        log_security_violation(current_username, "special quoting detected in command");
-        return 0;
+    if (!is_echo && !is_text_processing && !strchr(command, '|')) {
+        /* Allow simple quoted arguments but block dangerous patterns */
+        if (strstr(command, "';") || strstr(command, "\";") ||
+            strstr(command, "'&&") || strstr(command, "\"&&") ||
+            strstr(command, "'||") || strstr(command, "\"||") ||
+            strstr(command, "'`") || strstr(command, "\"`") ||
+            strstr(command, "'$(") || strstr(command, "\"$(")) {
+            log_security_violation(current_username, "dangerous quoting pattern detected in command");
+            return 0;
+        }
     }
 
     /* Block environment manipulation invocations; explicitly allow printenv */
