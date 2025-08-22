@@ -15,6 +15,13 @@ Only pre-approved commands are allowed in pipelines:
 - `cut`, `sort`, `uniq`, `head`, `tail`
 - `tr`, `wc`, `nl`, `cat`, `tac`, `rev`
 
+**Note**: `head` and `tail` commands support all standard options including:
+- `head -n NUM` / `head -NUM`: Show first NUM lines
+- `head -c NUM`: Show first NUM bytes
+- `tail -n NUM` / `tail -NUM`: Show last NUM lines
+- `tail -f`: Follow file changes (useful for log monitoring)
+- `tail -c NUM`: Show last NUM bytes
+
 **System Information Commands:**
 - `ps`, `ls`, `df`, `du`, `who`, `w`
 - `id`, `whoami`, `date`, `uptime`, `uname`
@@ -109,8 +116,15 @@ ps auxw | awk '{print $3}' | grep 9 | less
 # File analysis
 ls -la | head -10 | tail -5
 
-# Log processing
+# Log processing and monitoring
 cat /var/log/syslog | grep error | wc -l
+tail -f /var/log/syslog | grep WARNING    # Real-time log monitoring
+cat large_file.txt | head -100 | tail -20 # Lines 81-100
+
+# Data sampling and analysis
+ps aux | head -20                          # First 20 processes
+ps aux | sort -k3 -nr | head -10          # Top 10 CPU users
+df -h | tail -n +2 | head -5               # First 5 mounted filesystems
 
 # Network diagnostics
 ping -c 5 google.com | grep "time="

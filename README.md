@@ -445,6 +445,11 @@ sudosh:/home/user## find /tmp -name "*.log" | xargs grep "ERROR" | sort | uniq >
 - **Safe command chaining** - Prevents dangerous command combinations
 - **Redirection validation** - Pipeline output redirection follows same security rules
 - **Memory management** - Efficient handling of large pipeline operations
+- **Enhanced head/tail support** - Full support for all head and tail options:
+  - `head -n NUM` / `head -NUM`: Show first NUM lines
+  - `tail -n NUM` / `tail -NUM`: Show last NUM lines
+  - `tail -f`: Real-time log monitoring and file following
+  - `head -c NUM` / `tail -c NUM`: Byte-based operations
 
 ## 🔐 **Security Model**
 
