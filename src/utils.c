@@ -697,6 +697,9 @@ char *read_command(void) {
     struct termios old_termios, new_termios;
     static int history_index = -1;  /* -1 means not navigating history */
 
+    /* Reset history navigation for each new command prompt */
+    history_index = -1;
+
     /* Save terminal state globally for cleanup on exit */
     save_terminal_state();
 
