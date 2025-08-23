@@ -292,7 +292,7 @@ char *get_auth_cache_path(const char *username) {
             }
         }
     } else {
-        strcpy(tty_safe, "unknown");
+        snprintf(tty_safe, sizeof(tty_safe), "%s", "unknown");
     }
 
     /* Create cache file path: /var/run/sudosh/auth_cache_username_tty */
@@ -430,12 +430,12 @@ int update_auth_cache(const char *username) {
         }
         strncpy(cache_data.tty, tty, sizeof(cache_data.tty) - 1);
     } else {
-        strcpy(cache_data.tty, "unknown");
+        snprintf(cache_data.tty, sizeof(cache_data.tty), "%s", "unknown");
     }
 
     /* Get hostname */
     if (gethostname(cache_data.hostname, sizeof(cache_data.hostname)) != 0) {
-        strcpy(cache_data.hostname, "localhost");
+        snprintf(cache_data.hostname, sizeof(cache_data.hostname), "%s", "localhost");
     }
 
     /* Create cache file with secure permissions atomically */
@@ -856,7 +856,7 @@ int check_nopasswd_privileges_enhanced(const char *username) {
 
     /* Get hostname */
     if (gethostname(hostname, sizeof(hostname)) != 0) {
-        strcpy(hostname, "localhost");
+        snprintf(hostname, sizeof(hostname), "%s", "localhost");
     }
 
     /* Read NSS configuration */
@@ -905,7 +905,7 @@ int check_nopasswd_privileges_enhanced(const char *username) {
         if (sudoers_config) {
             char hostname[256];
             if (gethostname(hostname, sizeof(hostname)) != 0) {
-                strcpy(hostname, "localhost");
+                snprintf(hostname, sizeof(hostname), "%s", "localhost");
             }
             has_nopasswd = check_sudoers_nopasswd(username, hostname, sudoers_config);
             free_sudoers_config(sudoers_config);
@@ -934,7 +934,7 @@ int check_global_nopasswd_privileges_enhanced(const char *username) {
     }
 
     if (gethostname(hostname, sizeof(hostname)) != 0) {
-        strcpy(hostname, "localhost");
+        snprintf(hostname, sizeof(hostname), "%s", "localhost");
     }
 
     /* Try sudoers parsing first */
