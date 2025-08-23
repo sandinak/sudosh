@@ -174,12 +174,13 @@ void print_help(void) {
         printf("  -u USER, --user USER    Run commands as target USER\n");
         printf("  -c COMMAND              Execute COMMAND and exit\n");
         printf("  -L FILE                 Log entire session to FILE\n");
+        printf("  -p PROMPT, --prompt PROMPT  Use custom password prompt\n");
         printf("  --verbose               Enable verbose output\n");
         printf("  --rc-alias-import       Enable importing aliases from shell rc files\n");
         printf("  --no-rc-alias-import    Disable importing aliases from shell rc files\n");
         printf("  --ansible-detect        Enable Ansible session detection\n");
         printf("  --no-ansible-detect     Disable Ansible session detection\n\n");
-        printf("Note: Some standard sudo options (-E, -H, -i, -s, -A, -S, -b, -p) are\n");
+        printf("Note: Some standard sudo options (-E, -H, -i, -s, -A, -S, -b) are\n");
         printf("      unsupported for security policy compliance.\n\n");
     }
 

@@ -78,6 +78,9 @@ security policies (no direct shells, sanitized environment, restricted redirecti
 .BR -V
 Print version (same as --version) and exit.
 .TP
+.BR -p " " \fIPROMPT\fR ", " --prompt " " \fIPROMPT\fR
+Use custom password prompt (sudo -p compatibility).
+.TP
 .BR -v
 Validate/update authentication timestamp (refresh cache) and exit.
 .TP
