@@ -1,0 +1,116 @@
+name: Build Matrix (WERROR, Sanitizers, Coverage)
+
+on:
+  push:
+    branches: [ chore/audit-v2.0.2, ci/sanitizers-and-werror ]
+  pull_request:
+    branches: [ main, chore/audit-v2.0.2 ]
+
+jobs:
+  build:
+    name: ${{ matrix.os }} • ${{ matrix.compiler }} • ${{ matrix.mode }} • ${{ matrix.sanitize || 'none' }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, macos-14]
+        compiler: [gcc, clang]
+        mode: [release]
+        sanitize: ["", address, undefined]
+        include:
+          - os: ubuntu-22.04
+            compiler: gcc
+            mode: release
+            sanitize: ""
+          - os: ubuntu-22.04
+            compiler: gcc
+            mode: release
+            sanitize: address
+          - os: ubuntu-22.04
+            compiler: gcc
+            mode: release
+            sanitize: undefined
+          - os: ubuntu-22.04
+            compiler: clang
+            mode: release
+            sanitize: ""
+          - os: ubuntu-22.04
+            compiler: clang
+            mode: release
+            sanitize: address
+          - os: ubuntu-22.04
+            compiler: clang
+            mode: release
+            sanitize: undefined
+          - os: macos-14
+            compiler: clang
+            mode: release
+            sanitize: ""
+          - os: macos-14
+            compiler: clang
+            mode: release
+            sanitize: address
+          - os: macos-14
+            compiler: clang
+            mode: release
+            sanitize: undefined
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select compiler
+        run: |
+          if [ "${{ matrix.compiler }}" = "gcc" ]; then
+            echo "CC=gcc" >> $GITHUB_ENV
+          else
+            echo "CC=clang" >> $GITHUB_ENV
+          fi
+      - name: Install deps (Ubuntu)
+        if: startsWith(matrix.os, 'ubuntu')
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential libpam0g-dev cppcheck valgrind
+      - name: Install deps (macOS)
+        if: startsWith(matrix.os, 'macos')
+        run: |
+          brew update
+          brew install pam-tester cppcheck || true
+      - name: Build with WERROR${{ matrix.sanitize && format(' + SANITIZE={0}', matrix.sanitize) || '' }}
+        run: |
+          make clean
+          if [ -n "${{ matrix.sanitize }}" ]; then
+            make tests WERROR=1 SANITIZE=${{ matrix.sanitize }}
+          else
+            make tests WERROR=1
+          fi
+      - name: Static analysis (cppcheck)
+        run: make static-analysis || true
+      - name: Run pipeline regression smoke (optional)
+        if: startsWith(matrix.os, 'ubuntu') && matrix.sanitize == ''
+        run: |
+          ./scripts/run_pipeline_regression_tests.sh --smoke-only || true
+
+  coverage:
+    name: Coverage (Ubuntu + gcc)
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential libpam0g-dev gcovr
+      - name: Build with coverage
+        run: |
+          make clean
+          make tests COVERAGE=1 WERROR=1
+      - name: Generate coverage report
+        run: |
+          gcovr -r . --exclude-directories obj --xml -o coverage.xml || true
+          gcovr -r . --exclude-directories obj --branches --txt || true
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: |
+            coverage.xml
+            gcovr*.txt
+
