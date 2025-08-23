@@ -600,7 +600,7 @@ static void print_prompt(void) {
         while (*p && strlen(out) < sizeof(out) - 4) {
             if (*p == '%' && *(p+1)) {
                 p++;
-                char temp[512]; temp[0] = '\0';
+                /* no temp buffer needed */
                 switch (*p) {
                     case 'u': strncat(out, user_component, sizeof(out)-strlen(out)-1); break;
                     case 'h': strncat(out, short_hostname, sizeof(out)-strlen(out)-1); break;
@@ -2406,8 +2406,8 @@ char **complete_path(const char *text, int start, int end, int executables_only,
                     full_match = malloc(tilde_len + strlen(entry->d_name) + 1);
                     if (full_match) {
                         memcpy(full_match, text, (size_t)tilde_len);
-                        full_match[tilde_len] = '\0';
-                        strncat(full_match, entry->d_name, strlen(entry->d_name));
+                        size_t dlen = strlen(entry->d_name);
+                        memcpy(full_match + tilde_len, entry->d_name, dlen + 1);
                     }
                 } else {
                     /* This shouldn't happen in this context, but handle it */

@@ -524,7 +524,7 @@ void log_pipeline_start(struct pipeline_info *pipeline) {
     /* Log each individual command in the pipeline */
     for (int i = 0; i < pipeline->num_commands; i++) {
         struct command_info *cmd = &pipeline->commands[i].cmd;
-        if (cmd && cmd->command) {
+        if (cmd->command) {
             syslog(LOG_INFO, "PIPELINE_CMD[%d]: user=%s command=%s", i, username, cmd->command);
 
             /* Also log to command history if available */
@@ -553,7 +553,7 @@ void log_pipeline_completion(struct pipeline_info *pipeline, int exit_code) {
     /* Log individual command completions */
     for (int i = 0; i < pipeline->num_commands; i++) {
         struct command_info *cmd = &pipeline->commands[i].cmd;
-        if (cmd && cmd->command) {
+        if (cmd->command) {
             syslog(LOG_INFO, "PIPELINE_CMD_COMPLETE[%d]: user=%s command=%s",
                    i, username, cmd->command);
         }
