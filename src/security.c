@@ -1137,7 +1137,7 @@ int user_has_unrestricted_access(const char *username) {
 
     char hostname[256];
     if (gethostname(hostname, sizeof(hostname)) != 0) {
-        strcpy(hostname, "localhost");
+        snprintf(hostname, sizeof(hostname), "%s", "localhost");
     }
 
     struct sudoers_userspec *spec = sudoers_config->userspecs;

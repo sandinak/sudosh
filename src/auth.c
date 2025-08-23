@@ -14,6 +14,25 @@
 /* Weak symbol for verbose_mode - can be overridden by main.c or test files */
 __attribute__((weak)) int verbose_mode = 0;
 
+/* Secure zeroization helper: use explicit_bzero if available, otherwise volatile memset */
+static void secure_bzero(void *ptr, size_t len) {
+    /* Portable guaranteed zeroization without relying on platform symbols */
+    volatile unsigned char *p = (volatile unsigned char *)ptr;
+    while (len--) {
+        *p++ = 0;
+    }
+}
+
+/* Safe hostname helper */
+static void get_hostname_or_localhost(char *buf, size_t buflen) {
+    if (gethostname(buf, buflen) != 0 || buflen == 0) {
+        if (buflen > 0) snprintf(buf, buflen, "%s", "localhost");
+        return;
+    }
+    /* Ensure NUL-termination even if truncated */
+    buf[buflen - 1] = '\0';
+}
+
 /* Global variable for custom password prompt (sudo -p compatibility) */
 static const char *custom_password_prompt = NULL;
 
@@ -83,7 +102,7 @@ static int mock_authenticate(const char *username) {
     int result = (strlen(password) > 0);
 
     /* Clear password from memory */
-    memset(password, 0, strlen(password));
+    secure_bzero(password, strlen(password));
     free(password);
 
     return result;
@@ -167,7 +186,7 @@ int pam_conversation(int num_msg, const struct pam_message **msg,
 cleanup_error:
     for (i = 0; i < num_msg; i++) {
         if (responses[i].resp) {
-            memset(responses[i].resp, 0, strlen(responses[i].resp));
+            secure_bzero(responses[i].resp, strlen(responses[i].resp));
             free(responses[i].resp);
         }
     }
@@ -282,8 +301,7 @@ char *get_auth_cache_path(const char *username) {
         if (strncmp(tty, "/dev/", 5) == 0) {
             tty += 5;
         }
-        strncpy(tty_safe, tty, sizeof(tty_safe) - 1);
-        tty_safe[sizeof(tty_safe) - 1] = '\0';
+        snprintf(tty_safe, sizeof(tty_safe), "%s", tty);
 
         /* Replace / with _ for filesystem safety */
         for (i = 0; tty_safe[i]; i++) {
@@ -292,7 +310,7 @@ char *get_auth_cache_path(const char *username) {
             }
         }
     } else {
-        strcpy(tty_safe, "unknown");
+        snprintf(tty_safe, sizeof(tty_safe), "%s", "unknown");
     }
 
     /* Create cache file path: /var/run/sudosh/auth_cache_username_tty */
@@ -416,7 +434,7 @@ int update_auth_cache(const char *username) {
 
     /* Prepare cache data */
     memset(&cache_data, 0, sizeof(cache_data));
-    strncpy(cache_data.username, username, sizeof(cache_data.username) - 1);
+    snprintf(cache_data.username, sizeof(cache_data.username), "%s", username);
     cache_data.timestamp = time(NULL);
     cache_data.session_id = getsid(0);
     cache_data.uid = getuid();
@@ -428,15 +446,13 @@ int update_auth_cache(const char *username) {
         if (strncmp(tty, "/dev/", 5) == 0) {
             tty += 5;
         }
-        strncpy(cache_data.tty, tty, sizeof(cache_data.tty) - 1);
+        snprintf(cache_data.tty, sizeof(cache_data.tty), "%s", tty);
     } else {
-        strcpy(cache_data.tty, "unknown");
+        snprintf(cache_data.tty, sizeof(cache_data.tty), "%s", "unknown");
     }
 
     /* Get hostname */
-    if (gethostname(cache_data.hostname, sizeof(cache_data.hostname)) != 0) {
-        strcpy(cache_data.hostname, "localhost");
-    }
+    get_hostname_or_localhost(cache_data.hostname, sizeof(cache_data.hostname));
 
     /* Create cache file with secure permissions atomically */
     int fd = open(cache_path, O_WRONLY | O_CREAT | O_EXCL, 0600);
@@ -855,9 +871,7 @@ int check_nopasswd_privileges_enhanced(const char *username) {
     }
 
     /* Get hostname */
-    if (gethostname(hostname, sizeof(hostname)) != 0) {
-        strcpy(hostname, "localhost");
-    }
+    get_hostname_or_localhost(hostname, sizeof(hostname));
 
     /* Read NSS configuration */
     nss_config = read_nss_config();
@@ -904,9 +918,7 @@ int check_nopasswd_privileges_enhanced(const char *username) {
         struct sudoers_config *sudoers_config = parse_sudoers_file(NULL);
         if (sudoers_config) {
             char hostname[256];
-            if (gethostname(hostname, sizeof(hostname)) != 0) {
-                strcpy(hostname, "localhost");
-            }
+            get_hostname_or_localhost(hostname, sizeof(hostname));
             has_nopasswd = check_sudoers_nopasswd(username, hostname, sudoers_config);
             free_sudoers_config(sudoers_config);
         }
@@ -933,9 +945,7 @@ int check_global_nopasswd_privileges_enhanced(const char *username) {
         return 0;
     }
 
-    if (gethostname(hostname, sizeof(hostname)) != 0) {
-        strcpy(hostname, "localhost");
-    }
+    get_hostname_or_localhost(hostname, sizeof(hostname));
 
     /* Try sudoers parsing first */
     struct sudoers_config *sudoers_config = parse_sudoers_file(NULL);

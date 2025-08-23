@@ -735,7 +735,7 @@ char *expand_aliases_internal(const char *command) {
     if (strlen(rest_of_command) > 0) {
         snprintf(expanded, expanded_len, "%s %s", alias_value, rest_of_command);
     } else {
-        strcpy(expanded, alias_value);
+        snprintf(expanded, expanded_len, "%s", alias_value);
     }
 
     free(command_copy);
@@ -791,7 +791,7 @@ char *expand_aliases(const char *command) {
     if (strlen(rest_of_command) > 0) {
         snprintf(expanded, expanded_len, "%s %s", alias_value, rest_of_command);
     } else {
-        strcpy(expanded, alias_value);
+        snprintf(expanded, expanded_len, "%s", alias_value);
     }
 
     /* SECURITY ENHANCEMENT: Validate the expanded command before returning it */

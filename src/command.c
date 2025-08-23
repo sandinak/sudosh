@@ -133,8 +133,7 @@ int check_sudo_command_allowed(const char *username, const char *command) {
     /* Check if user has general sudo access */
     char hostname[256];
     if (gethostname(hostname, sizeof(hostname)) != 0) {
-        strncpy(hostname, "localhost", sizeof(hostname) - 1);
-        hostname[sizeof(hostname) - 1] = '\0';
+        snprintf(hostname, sizeof(hostname), "%s", "localhost");
     }
 
     if (check_sudoers_nopasswd(username, hostname, NULL)) {

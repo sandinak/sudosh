@@ -371,7 +371,7 @@ char *find_command_type(const char *command) {
         if (strcmp(command, builtins[i]) == 0) {
             char *result = malloc(strlen(command) + 20);
             if (result) {
-                sprintf(result, "%s is a shell builtin", command);
+                snprintf(result, strlen(command) + 20, "%s is a shell builtin", command);
             }
             return result;
         }
@@ -382,7 +382,7 @@ char *find_command_type(const char *command) {
     if (alias_value) {
         char *result = malloc(strlen(command) + strlen(alias_value) + 30);
         if (result) {
-            sprintf(result, "%s is aliased to `%s'", command, alias_value);
+            snprintf(result, strlen(command) + strlen(alias_value) + 30, "%s is aliased to `%s'", command, alias_value);
         }
         return result;
     }
@@ -392,7 +392,7 @@ char *find_command_type(const char *command) {
     if (path) {
         char *result = malloc(strlen(command) + strlen(path) + 10);
         if (result) {
-            sprintf(result, "%s is %s", command, path);
+            snprintf(result, strlen(command) + strlen(path) + 10, "%s is %s", command, path);
         }
         free(path);
         return result;

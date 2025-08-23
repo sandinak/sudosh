@@ -172,9 +172,9 @@ char *clean_path(const char *path_env) {
             struct stat st;
             if (stat(dir, &st) == 0 && S_ISDIR(st.st_mode)) {
                 if (!first) {
-                    strcat(clean_path_str, ":");
+                    strncat(clean_path_str, ":", strlen(path_env)); /* bounded */
                 }
-                strcat(clean_path_str, dir);
+                strncat(clean_path_str, dir, strlen(path_env) - strlen(clean_path_str) - 1);
                 first = 0;
             }
         }

@@ -288,8 +288,11 @@ static int escalate_for_sudoers_read(uid_t *saved_euid) {
  */
 static void drop_after_sudoers_read(int escalated, uid_t saved_euid) {
     if (escalated == 1) {
-        /* Restore original effective UID */
-        seteuid(saved_euid);
+        /* Restore original effective UID; handle error explicitly to satisfy -Werror=unused-result */
+        if (seteuid(saved_euid) != 0) {
+            /* Log and continue; failure to drop is serious but avoid aborting here */
+            syslog(LOG_ERR, "sudosh: failed to restore effective uid: %m");
+        }
     }
 }
 
@@ -407,7 +410,7 @@ struct sudoers_config *parse_sudoers_file(const char *filename) {
     ssize_t read;
     struct sudoers_config *config;
     struct sudoers_userspec *last_spec = NULL;
-    uid_t saved_euid;
+    uid_t saved_euid = geteuid();
     int escalated;
 
     if (!filename) {
@@ -785,7 +788,7 @@ void list_available_commands_basic(const char *username) {
 
     /* Get hostname */
     if (gethostname(hostname, sizeof(hostname)) != 0) {
-        strcpy(hostname, "localhost");
+        snprintf(hostname, sizeof(hostname), "%s", "localhost");
     }
 
     printf("Sudo privileges for %s on %s:\n", username, hostname);
@@ -965,7 +968,7 @@ void list_available_commands(const char *username) {
 
     /* Get hostname */
     if (gethostname(hostname, sizeof(hostname)) != 0) {
-        strcpy(hostname, "localhost");
+        snprintf(hostname, sizeof(hostname), "%s", "localhost");
     }
 
     printf("Sudo privileges for %s on %s:\n", username, hostname);

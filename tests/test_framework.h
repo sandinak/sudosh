@@ -143,7 +143,8 @@ extern int test_failures;
 static inline char *create_temp_file(const char *content) {
     static char template[] = "/tmp/sudosh_test_XXXXXX";
     char *filename = malloc(strlen(template) + 1);
-    strcpy(filename, template);
+    if (!filename) return NULL;
+    memcpy(filename, template, strlen(template) + 1);
     
     int fd = mkstemp(filename);
     if (fd == -1) {
@@ -207,8 +208,10 @@ static inline capture_result_t *capture_command_output(const char *command) {
     close(stderr_fd);
     
     /* Build command with redirections */
-    char *full_command = malloc(strlen(command) + strlen(stdout_template) + strlen(stderr_template) + 20);
-    sprintf(full_command, "%s >%s 2>%s", command, stdout_template, stderr_template);
+    size_t cmd_cap = strlen(command) + strlen(stdout_template) + strlen(stderr_template) + 20;
+    char *full_command = malloc(cmd_cap);
+    if (!full_command) { unlink(stdout_template); unlink(stderr_template); free(result); return NULL; }
+    snprintf(full_command, cmd_cap, "%s >%s 2>%s", command, stdout_template, stderr_template);
     
     /* Execute command */
     result->exit_code = system(full_command);
