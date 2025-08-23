@@ -164,10 +164,13 @@ jobs:
         EOF
         
         gcc -Isrc -c test_whitelist_integrity.c -o test_whitelist_integrity.o
-        gcc test_whitelist_integrity.o obj/pipeline.o obj/security.o obj/utils.o \
+        gcc -Isrc -c tests/support/test_globals.c -o test_globals.o
+        gcc test_whitelist_integrity.o test_globals.o obj/pipeline.o obj/security.o obj/utils.o \
           obj/logging.o obj/auth.o obj/command.o obj/nss.o obj/sudoers.o \
           obj/sssd.o obj/filelock.o obj/shell_enhancements.o obj/shell_env.o \
-          obj/config.o -o test_whitelist_integrity -lpam -lpam_misc
+          obj/config.o obj/ansible_detection.o obj/ai_detection.o \
+          obj/dangerous_commands.o obj/editor_detection.o \
+          -o test_whitelist_integrity -lpam -lpam_misc
         ./test_whitelist_integrity
         
     - name: Test pager security configuration
@@ -206,10 +209,12 @@ jobs:
         EOF
         
         gcc -Isrc -c test_pager_security.c -o test_pager_security.o
-        gcc test_pager_security.o obj/security.o obj/utils.o obj/logging.o \
+        gcc test_pager_security.o test_globals.o obj/security.o obj/utils.o obj/logging.o \
           obj/auth.o obj/command.o obj/nss.o obj/sudoers.o obj/sssd.o \
           obj/filelock.o obj/shell_enhancements.o obj/shell_env.o \
-          obj/config.o obj/pipeline.o -o test_pager_security -lpam -lpam_misc
+          obj/config.o obj/pipeline.o obj/ansible_detection.o obj/ai_detection.o \
+          obj/dangerous_commands.o obj/editor_detection.o \
+          -o test_pager_security -lpam -lpam_misc
         ./test_pager_security
 
   notification:
