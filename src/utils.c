@@ -1617,7 +1617,7 @@ char *safe_strdup(const char *str) {
         return NULL;
     }
 
-    strcpy(copy, str);
+    memcpy(copy, str, strlen(str) + 1);
     return copy;
 }
 
@@ -2713,28 +2713,28 @@ static int zsh_color_to_ansi(const char *color_name, char *output, size_t output
 
     /* Map common zsh color names to ANSI codes */
     if (strcmp(color_name, "yellow") == 0) {
-        strcpy(output, ANSI_YELLOW);
+        snprintf(output, output_size, "%s", ANSI_YELLOW);
         return 1;
     } else if (strcmp(color_name, "green") == 0) {
-        strcpy(output, ANSI_GREEN);
+        snprintf(output, output_size, "%s", ANSI_GREEN);
         return 1;
     } else if (strcmp(color_name, "blue") == 0) {
-        strcpy(output, ANSI_BLUE);
+        snprintf(output, output_size, "%s", ANSI_BLUE);
         return 1;
     } else if (strcmp(color_name, "cyan") == 0) {
-        strcpy(output, ANSI_CYAN);
+        snprintf(output, output_size, "%s", ANSI_CYAN);
         return 1;
     } else if (strcmp(color_name, "red") == 0) {
-        strcpy(output, ANSI_RED);
+        snprintf(output, output_size, "%s", ANSI_RED);
         return 1;
     } else if (strcmp(color_name, "magenta") == 0) {
-        strcpy(output, ANSI_MAGENTA);
+        snprintf(output, output_size, "%s", ANSI_MAGENTA);
         return 1;
     } else if (strcmp(color_name, "white") == 0) {
-        strcpy(output, ANSI_WHITE);
+        snprintf(output, output_size, "%s", ANSI_WHITE);
         return 1;
     } else if (strcmp(color_name, "black") == 0) {
-        strcpy(output, ANSI_BLACK);
+        snprintf(output, output_size, "%s", ANSI_BLACK);
         return 1;
     }
 

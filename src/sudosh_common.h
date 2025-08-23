@@ -91,7 +91,7 @@ static inline char *sudosh_safe_strdup(const char *str) {
         return NULL;
     }
 
-    strcpy(copy, str);
+    memcpy(copy, str, strlen(str) + 1);
     return copy;
 }
 
@@ -160,8 +160,8 @@ static inline sudosh_error_t sudosh_safe_strcpy(char *dest, size_t dest_size, co
     if (src_len >= dest_size) {
         return SUDOSH_ERROR_BUFFER_OVERFLOW;
     }
-    
-    strcpy(dest, src);
+
+    memcpy(dest, src, src_len + 1);
     return SUDOSH_SUCCESS;
 }
 
@@ -176,12 +176,12 @@ static inline sudosh_error_t sudosh_safe_strcat(char *dest, size_t dest_size, co
     
     size_t dest_len = strlen(dest);
     size_t src_len = strlen(src);
-    
+
     if (dest_len + src_len >= dest_size) {
         return SUDOSH_ERROR_BUFFER_OVERFLOW;
     }
-    
-    strcat(dest, src);
+
+    memcpy(dest + dest_len, src, src_len + 1);
     return SUDOSH_SUCCESS;
 }
 
