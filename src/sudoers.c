@@ -785,7 +785,7 @@ void list_available_commands_basic(const char *username) {
 
     /* Get hostname */
     if (gethostname(hostname, sizeof(hostname)) != 0) {
-        strcpy(hostname, "localhost");
+        snprintf(hostname, sizeof(hostname), "%s", "localhost");
     }
 
     printf("Sudo privileges for %s on %s:\n", username, hostname);
@@ -965,7 +965,7 @@ void list_available_commands(const char *username) {
 
     /* Get hostname */
     if (gethostname(hostname, sizeof(hostname)) != 0) {
-        strcpy(hostname, "localhost");
+        snprintf(hostname, sizeof(hostname), "%s", "localhost");
     }
 
     printf("Sudo privileges for %s on %s:\n", username, hostname);

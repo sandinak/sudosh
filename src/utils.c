@@ -444,9 +444,9 @@ static char *expand_tilde_path(const char *path) {
             return strdup(pwd->pw_dir);
         } else {
             /* ~/subpath */
-            char *result = malloc(strlen(pwd->pw_dir) + strlen(path));
+            char *result = malloc(strlen(pwd->pw_dir) + strlen(path) + 1); /* +1 for NUL */
             if (result) {
-                sprintf(result, "%s%s", pwd->pw_dir, path + 1);
+                snprintf(result, strlen(pwd->pw_dir) + strlen(path) + 1, "%s%s", pwd->pw_dir, path + 1);
             }
             return result;
         }
@@ -484,7 +484,7 @@ static char *expand_tilde_path(const char *path) {
             /* ~username/subpath */
             result = malloc(strlen(pwd->pw_dir) + strlen(slash) + 1);
             if (result) {
-                sprintf(result, "%s%s", pwd->pw_dir, slash);
+                snprintf(result, strlen(pwd->pw_dir) + strlen(slash) + 1, "%s%s", pwd->pw_dir, slash);
             }
         } else {
             /* ~username */
@@ -527,7 +527,7 @@ static char *get_prompt_cwd(void) {
         if (strcmp(cwd, pwd->pw_dir) == 0) {
             result = malloc(strlen(effective_user) + 3); /* ~user + null */
             if (result) {
-                sprintf(result, "~%s", effective_user);
+                snprintf(result, strlen(effective_user) + 2, "~%s", effective_user);
                 free(cwd);
                 return result;
             }
@@ -538,7 +538,7 @@ static char *get_prompt_cwd(void) {
             const char *subpath = cwd + home_len; /* Points to the '/' after home dir */
             result = malloc(strlen(effective_user) + strlen(subpath) + 2); /* ~user + subpath + null */
             if (result) {
-                sprintf(result, "~%s%s", effective_user, subpath);
+                snprintf(result, strlen(effective_user) + strlen(subpath) + 2, "~%s%s", effective_user, subpath);
                 free(cwd);
                 return result;
             }
@@ -578,7 +578,7 @@ static void print_prompt(void) {
 
     /* Get hostname */
     if (gethostname(hostname, sizeof(hostname)) != 0) {
-        strcpy(hostname, "localhost");
+        snprintf(hostname, sizeof(hostname), "%s", "localhost");
     }
 
     /* Get short hostname (before first dot) */
@@ -1231,7 +1231,7 @@ char *read_command(void) {
     if (len > 0) {
         line = malloc(len + 1);
         if (line) {
-            strcpy(line, buffer);
+            memcpy(line, buffer, len + 1);
         }
     } else {
         line = malloc(1);
@@ -2186,13 +2186,13 @@ static char **complete_usernames(const char *text) {
             /* Partial match - add trailing slash to indicate directory */
             match = malloc(strlen(pwd->pw_name) + 3);
             if (match) {
-                sprintf(match, "~%s/", pwd->pw_name);
+                snprintf(match, strlen(pwd->pw_name) + 3, "~%s/", pwd->pw_name);
             }
         } else {
             /* Exact match or empty prefix - no trailing slash yet */
             match = malloc(strlen(pwd->pw_name) + 2);
             if (match) {
-                sprintf(match, "~%s", pwd->pw_name);
+                snprintf(match, strlen(pwd->pw_name) + 2, "~%s", pwd->pw_name);
             }
         }
 
@@ -2213,7 +2213,7 @@ static char **complete_usernames(const char *text) {
             if (strlen(current_user->pw_name) > (size_t)prefix_len) {
                 match = malloc(strlen(current_user->pw_name) + 3);
                 if (match) {
-                    sprintf(match, "~%s/", current_user->pw_name);
+                    snprintf(match, strlen(current_user->pw_name) + 3, "~%s/", current_user->pw_name);
                 }
             } else {
                 match = malloc(strlen(current_user->pw_name) + 2);
@@ -2234,7 +2234,7 @@ static char **complete_usernames(const char *text) {
                 /* The prefix itself is a valid username */
                 char *match = malloc(strlen(username_prefix) + 2);
                 if (match) {
-                    sprintf(match, "~%s", username_prefix);
+                    snprintf(match, strlen(username_prefix) + 2, "~%s", username_prefix);
                     matches[match_count++] = match;
                 }
             }
@@ -2318,7 +2318,7 @@ char **complete_path(const char *text, int start, int end, int executables_only,
                 free(matches);
                 return NULL;
             }
-            sprintf(expanded_text, "%s%s", expanded_tilde, last_slash);
+            snprintf(expanded_text, strlen(expanded_tilde) + strlen(last_slash) + 1, "%s%s", expanded_tilde, last_slash);
             free(expanded_tilde);
             working_text = expanded_text;
         }
@@ -2420,9 +2420,7 @@ char **complete_path(const char *text, int start, int end, int executables_only,
                 int full_len = strlen(dir_path) + strlen(entry->d_name) + 1;
                 full_match = malloc(full_len);
                 if (full_match) {
-                    strcpy(full_match, dir_path);
-                    /* dir_path already includes trailing slash */
-                    strcat(full_match, entry->d_name);
+                    snprintf(full_match, full_len, "%s%s", dir_path, entry->d_name);
                 }
             }
 
@@ -2435,8 +2433,7 @@ char **complete_path(const char *text, int start, int end, int executables_only,
                     int stat_len = strlen(dir_path) + strlen(entry->d_name) + 1;
                     stat_path = malloc(stat_len);
                     if (stat_path) {
-                        strcpy(stat_path, dir_path);
-                        strcat(stat_path, entry->d_name);
+                        snprintf(stat_path, stat_len, "%s%s", dir_path, entry->d_name);
                     }
                 }
 
@@ -2447,8 +2444,7 @@ char **complete_path(const char *text, int start, int end, int executables_only,
                             /* Add trailing slash for directories */
                             char *dir_match = malloc(strlen(full_match) + 2);
                             if (dir_match) {
-                                strcpy(dir_match, full_match);
-                                strcat(dir_match, "/");
+                                snprintf(dir_match, strlen(full_match) + 2, "%s/", full_match);
                                 free(full_match);
                                 full_match = dir_match;
                             }

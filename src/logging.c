@@ -642,7 +642,7 @@ char *expand_history(const char *command) {
                             if (!new_result) { free(result); return NULL; }
                             result = new_result;
                         }
-                        strcat(result, hist_cmd);
+                        strncat(result, hist_cmd, result_capacity - result_len - 1);
                         result_len += hist_len;
                     }
                 } else {
@@ -654,7 +654,7 @@ char *expand_history(const char *command) {
                         if (!new_result) { free(result); return NULL; }
                         result = new_result;
                     }
-                    strncat(result, bang, seg_len);
+                    strncat(result, bang, seg_len); /* safe: seg_len bounded above */
                     result_len += seg_len;
                 }
                 src = endptr;
@@ -675,7 +675,7 @@ char *expand_history(const char *command) {
                             if (!new_result) { free(result); return NULL; }
                             result = new_result;
                         }
-                        strcat(result, hist_cmd);
+                        strncat(result, hist_cmd, result_capacity - result_len - 1);
                         result_len += hist_len;
                     }
                 } else {
@@ -687,7 +687,7 @@ char *expand_history(const char *command) {
                         if (!new_result) { free(result); return NULL; }
                         result = new_result;
                     }
-                    strncat(result, bang, seg_len);
+                    strncat(result, bang, seg_len); /* safe: seg_len bounded above */
                     result_len += seg_len;
                 }
                 src = endptr;
@@ -713,7 +713,7 @@ char *expand_history(const char *command) {
                         if (!new_result) { free(result); return NULL; }
                         result = new_result;
                     }
-                    strcat(result, hist_cmd);
+                    strncat(result, hist_cmd, result_capacity - result_len - 1);
                     result_len += hist_len;
                 } else {
                     /* No match - append original */
@@ -824,12 +824,12 @@ void log_session_start_with_ansible_context(const char *username) {
             char env_vars_msg[512];
             snprintf(env_vars_msg, sizeof(env_vars_msg), "ANSIBLE_ENV_VARS: ");
             for (int i = 0; i < global_ansible_info->env_var_count && i < 5; i++) {
-                if (i > 0) strcat(env_vars_msg, ", ");
+                if (i > 0) strncat(env_vars_msg, ", ", sizeof(env_vars_msg) - strlen(env_vars_msg) - 1);
                 strncat(env_vars_msg, global_ansible_info->detected_env_vars[i],
                        sizeof(env_vars_msg) - strlen(env_vars_msg) - 1);
             }
             if (global_ansible_info->env_var_count > 5) {
-                strcat(env_vars_msg, ", ...");
+                strncat(env_vars_msg, ", ...", sizeof(env_vars_msg) - strlen(env_vars_msg) - 1);
             }
             syslog(LOG_INFO, "%s : %s", username, env_vars_msg);
         }
