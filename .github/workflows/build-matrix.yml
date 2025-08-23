@@ -5,6 +5,8 @@ on:
     branches: [ chore/audit-v2.0.2, ci/sanitizers-and-werror ]
   pull_request:
     branches: [ main, chore/audit-v2.0.2 ]
+  workflow_dispatch:
+
 
 jobs:
   build:
