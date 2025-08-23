@@ -43,18 +43,18 @@ PAM_AVAILABLE := $(shell echo '\#include <security/pam_appl.h>' | $(CC) -E - >/d
 ifeq ($(UNAME_S),Linux)
     CFLAGS += -D_GNU_SOURCE
     ifeq ($(PAM_AVAILABLE),yes)
-        LDFLAGS = -lpam -lpam_misc
+        LDFLAGS += -lpam -lpam_misc
     else
         CFLAGS += -DMOCK_AUTH
-        LDFLAGS =
+        # leave LDFLAGS as-is to preserve sanitizer/coverage flags
     endif
 else ifeq ($(UNAME_S),Darwin)
     # macOS - Check for PAM, fallback to mock
     ifeq ($(PAM_AVAILABLE),yes)
-        LDFLAGS = -lpam
+        LDFLAGS += -lpam
     else
         CFLAGS += -DMOCK_AUTH
-        LDFLAGS =
+        # leave LDFLAGS as-is to preserve sanitizer/coverage flags
     endif
 else
     # Other Unix systems (including AlmaLinux, Ubuntu, etc.)
@@ -67,10 +67,10 @@ else
         CFLAGS += -D_GNU_SOURCE
     endif
     ifeq ($(PAM_AVAILABLE),yes)
-        LDFLAGS = -lpam
+        LDFLAGS += -lpam
     else
         CFLAGS += -DMOCK_AUTH
-        LDFLAGS =
+        # leave LDFLAGS as-is to preserve sanitizer/coverage flags
     endif
 endif
 
