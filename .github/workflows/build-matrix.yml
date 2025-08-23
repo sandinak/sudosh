@@ -78,17 +78,9 @@ jobs:
         run: |
           make clean
           if [ -n "${{ matrix.sanitize }}" ]; then
-            if [[ "${{ matrix.os }}" == macos* ]]; then
-              make tests SANITIZE=${{ matrix.sanitize }}
-            else
-              make tests WERROR=1 SANITIZE=${{ matrix.sanitize }}
-            fi
+            make tests WERROR=1 SANITIZE=${{ matrix.sanitize }}
           else
-            if [[ "${{ matrix.os }}" == macos* ]]; then
-              make tests
-            else
-              make tests WERROR=1
-            fi
+            make tests WERROR=1
           fi
       - name: Static analysis (cppcheck)
         run: make static-analysis || true
