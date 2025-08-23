@@ -282,8 +282,7 @@ char *get_auth_cache_path(const char *username) {
         if (strncmp(tty, "/dev/", 5) == 0) {
             tty += 5;
         }
-        strncpy(tty_safe, tty, sizeof(tty_safe) - 1);
-        tty_safe[sizeof(tty_safe) - 1] = '\0';
+        snprintf(tty_safe, sizeof(tty_safe), "%s", tty);
 
         /* Replace / with _ for filesystem safety */
         for (i = 0; tty_safe[i]; i++) {
@@ -416,7 +415,7 @@ int update_auth_cache(const char *username) {
 
     /* Prepare cache data */
     memset(&cache_data, 0, sizeof(cache_data));
-    strncpy(cache_data.username, username, sizeof(cache_data.username) - 1);
+    snprintf(cache_data.username, sizeof(cache_data.username), "%s", username);
     cache_data.timestamp = time(NULL);
     cache_data.session_id = getsid(0);
     cache_data.uid = getuid();
@@ -428,7 +427,7 @@ int update_auth_cache(const char *username) {
         if (strncmp(tty, "/dev/", 5) == 0) {
             tty += 5;
         }
-        strncpy(cache_data.tty, tty, sizeof(cache_data.tty) - 1);
+        snprintf(cache_data.tty, sizeof(cache_data.tty), "%s", tty);
     } else {
         snprintf(cache_data.tty, sizeof(cache_data.tty), "%s", "unknown");
     }
