@@ -87,7 +87,7 @@ jobs:
       if: matrix.compiler == 'gcc'
       run: |
         cppcheck --enable=all --std=c99 --suppress=missingIncludeSystem \
-          --suppress=unusedFunction --suppress=constVariablePointer \
+          --suppress=unusedFunction --suppress=constVariablePointer --suppress=unmatchedSuppression \
           --error-exitcode=1 src/pipeline.c || {
           echo "Static analysis found issues in pipeline code!"
           exit 1
