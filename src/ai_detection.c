@@ -225,7 +225,7 @@ int detect_augment_session(struct ai_detection_info *info) {
         info->method = AI_DETECTED_ENV_VAR;
         info->confidence_level = (augment_vars_found >= 3) ? 95 : (augment_vars_found * 30);
         info->should_block = 1;  /* Always block Augment */
-        strcpy(info->tool_name, "Augment");
+        snprintf(info->tool_name, sizeof(info->tool_name), "%s", "Augment");
         snprintf(info->detection_details, sizeof(info->detection_details),
                 "Augment environment detected: %d variables found", augment_vars_found);
         return 1;
@@ -271,7 +271,7 @@ int detect_copilot_session(struct ai_detection_info *info) {
         info->method = AI_DETECTED_ENV_VAR;
         info->confidence_level = (copilot_vars_found >= 2) ? 90 : (copilot_vars_found * 40);
         info->should_block = 1;  /* Block Copilot by default */
-        strcpy(info->tool_name, "GitHub Copilot");
+        snprintf(info->tool_name, sizeof(info->tool_name), "%s", "GitHub Copilot");
         snprintf(info->detection_details, sizeof(info->detection_details),
                 "GitHub Copilot environment detected: %d variables found", copilot_vars_found);
         return 1;
@@ -317,7 +317,7 @@ int detect_chatgpt_session(struct ai_detection_info *info) {
         info->method = AI_DETECTED_ENV_VAR;
         info->confidence_level = (chatgpt_vars_found >= 2) ? 85 : (chatgpt_vars_found * 35);
         info->should_block = 1;  /* Block ChatGPT by default */
-        strcpy(info->tool_name, "ChatGPT/OpenAI");
+        snprintf(info->tool_name, sizeof(info->tool_name), "%s", "ChatGPT/OpenAI");
         snprintf(info->detection_details, sizeof(info->detection_details),
                 "ChatGPT/OpenAI environment detected: %d variables found", chatgpt_vars_found);
         return 1;
@@ -429,16 +429,16 @@ struct ai_detection_info *detect_ai_session(void) {
 
         switch (info->tool_type) {
             case AI_TOOL_AUGMENT:
-                strcpy(info->tool_name, "Augment");
+                snprintf(info->tool_name, sizeof(info->tool_name), "%s", "Augment");
                 break;
             case AI_TOOL_COPILOT:
-                strcpy(info->tool_name, "GitHub Copilot");
+                snprintf(info->tool_name, sizeof(info->tool_name), "%s", "GitHub Copilot");
                 break;
             case AI_TOOL_CHATGPT:
-                strcpy(info->tool_name, "ChatGPT");
+                snprintf(info->tool_name, sizeof(info->tool_name), "%s", "ChatGPT");
                 break;
             default:
-                strcpy(info->tool_name, "Unknown AI Tool");
+                snprintf(info->tool_name, sizeof(info->tool_name), "%s", "Unknown AI Tool");
                 break;
         }
 
@@ -446,8 +446,8 @@ struct ai_detection_info *detect_ai_session(void) {
     }
 
     /* No AI tool detected */
-    strcpy(info->tool_name, "None");
-    strcpy(info->detection_details, "No AI tool detected");
+    snprintf(info->tool_name, sizeof(info->tool_name), "%s", "None");
+    snprintf(info->detection_details, sizeof(info->detection_details), "%s", "No AI tool detected");
 
     return info;
 }

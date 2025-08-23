@@ -943,8 +943,7 @@ char *read_command(void) {
                             print_prompt();
 
                             /* Copy history command to buffer */
-                            strncpy(buffer, hist_cmd, sizeof(buffer) - 1);
-                            buffer[sizeof(buffer) - 1] = '\0';
+                            snprintf(buffer, sizeof(buffer), "%s", hist_cmd);
                             len = strlen(buffer);
                             pos = len;
 
@@ -966,8 +965,7 @@ char *read_command(void) {
                                 print_prompt();
 
                                 /* Copy history command to buffer */
-                                strncpy(buffer, hist_cmd, sizeof(buffer) - 1);
-                                buffer[sizeof(buffer) - 1] = '\0';
+                                snprintf(buffer, sizeof(buffer), "%s", hist_cmd);
                                 len = strlen(buffer);
                                 pos = len;
 
@@ -1921,7 +1919,7 @@ char *find_completion_start(const char *buffer, int pos) {
 
 
 
-    strncpy(prefix, buffer + start, prefix_len);
+    memcpy(prefix, buffer + start, prefix_len);
     prefix[prefix_len] = '\0';
 
     return prefix;
@@ -2088,7 +2086,7 @@ char *get_directory_context_for_empty_prefix(const char *buffer, int pos) {
         return NULL;
     }
 
-    strncpy(dir_path, buffer + start, path_len);
+    memcpy(dir_path, buffer + start, path_len);
     dir_path[path_len] = '\0';
 
     return dir_path;
@@ -2218,7 +2216,7 @@ static char **complete_usernames(const char *text) {
             } else {
                 match = malloc(strlen(current_user->pw_name) + 2);
                 if (match) {
-                    sprintf(match, "~%s", current_user->pw_name);
+                    snprintf(match, strlen(current_user->pw_name) + 2, "~%s", current_user->pw_name);
                 }
             }
 
@@ -2299,7 +2297,7 @@ char **complete_path(const char *text, int start, int end, int executables_only,
                 free(matches);
                 return NULL;
             }
-            strncpy(tilde_part, text, last_slash - text);
+            memcpy(tilde_part, text, (size_t)(last_slash - text));
             tilde_part[last_slash - text] = '\0';
 
             char *expanded_tilde = expand_tilde_path(tilde_part);
@@ -2338,7 +2336,7 @@ char **complete_path(const char *text, int start, int end, int executables_only,
             free(matches);
             return NULL;
         }
-        strncpy(dir_path, working_text, dir_len);
+        memcpy(dir_path, working_text, dir_len);
         dir_path[dir_len] = '\0';
 
         filename_prefix = strdup(last_slash + 1);
@@ -2407,9 +2405,9 @@ char **complete_path(const char *text, int start, int end, int executables_only,
                     int tilde_len = last_slash - text + 1;
                     full_match = malloc(tilde_len + strlen(entry->d_name) + 1);
                     if (full_match) {
-                        strncpy(full_match, text, tilde_len);
+                        memcpy(full_match, text, (size_t)tilde_len);
                         full_match[tilde_len] = '\0';
-                        strcat(full_match, entry->d_name);
+                        strncat(full_match, entry->d_name, strlen(entry->d_name));
                     }
                 } else {
                     /* This shouldn't happen in this context, but handle it */
@@ -2553,16 +2551,11 @@ struct color_config *init_color_config(void) {
     }
 
     /* Initialize with default colors */
-    strncpy(config->username_color, ANSI_GREEN, MAX_COLOR_CODE_LENGTH - 1);
-    strncpy(config->hostname_color, ANSI_BLUE, MAX_COLOR_CODE_LENGTH - 1);
-    strncpy(config->path_color, ANSI_CYAN, MAX_COLOR_CODE_LENGTH - 1);
-    strncpy(config->prompt_color, ANSI_WHITE, MAX_COLOR_CODE_LENGTH - 1);
-    strncpy(config->reset_color, ANSI_RESET, MAX_COLOR_CODE_LENGTH - 1);
-
-    config->username_color[MAX_COLOR_CODE_LENGTH - 1] = '\0';
-    config->hostname_color[MAX_COLOR_CODE_LENGTH - 1] = '\0';
-    config->path_color[MAX_COLOR_CODE_LENGTH - 1] = '\0';
-    config->prompt_color[MAX_COLOR_CODE_LENGTH - 1] = '\0';
+    snprintf(config->username_color, MAX_COLOR_CODE_LENGTH, "%s", ANSI_GREEN);
+    snprintf(config->hostname_color, MAX_COLOR_CODE_LENGTH, "%s", ANSI_BLUE);
+    snprintf(config->path_color, MAX_COLOR_CODE_LENGTH, "%s", ANSI_CYAN);
+    snprintf(config->prompt_color, MAX_COLOR_CODE_LENGTH, "%s", ANSI_WHITE);
+    snprintf(config->reset_color, MAX_COLOR_CODE_LENGTH, "%s", ANSI_RESET);
     config->reset_color[MAX_COLOR_CODE_LENGTH - 1] = '\0';
 
     /* Check if terminal supports colors */
@@ -2575,10 +2568,10 @@ struct color_config *init_color_config(void) {
     const char *sudosh_colors = getenv("SUDOSH_COLORS");
     if (sudosh_colors && strcmp(sudosh_colors, "yellow") == 0) {
         /* Use yellow for all components to match user's shell */
-        strncpy(config->username_color, ANSI_YELLOW, MAX_COLOR_CODE_LENGTH - 1);
-        strncpy(config->hostname_color, ANSI_YELLOW, MAX_COLOR_CODE_LENGTH - 1);
-        strncpy(config->path_color, ANSI_YELLOW, MAX_COLOR_CODE_LENGTH - 1);
-        strncpy(config->prompt_color, ANSI_YELLOW, MAX_COLOR_CODE_LENGTH - 1);
+        snprintf(config->username_color, MAX_COLOR_CODE_LENGTH, "%s", ANSI_YELLOW);
+        snprintf(config->hostname_color, MAX_COLOR_CODE_LENGTH, "%s", ANSI_YELLOW);
+        snprintf(config->path_color, MAX_COLOR_CODE_LENGTH, "%s", ANSI_YELLOW);
+        snprintf(config->prompt_color, MAX_COLOR_CODE_LENGTH, "%s", ANSI_YELLOW);
         colors_found = 1;
     }
 
@@ -2604,10 +2597,10 @@ struct color_config *init_color_config(void) {
         if (shell && strstr(shell, "zsh")) {
             /* For zsh without PROMPT set, try some common zsh color schemes */
             /* Many zsh themes use yellow for user@host */
-            strncpy(config->username_color, ANSI_YELLOW, MAX_COLOR_CODE_LENGTH - 1);
-            strncpy(config->hostname_color, ANSI_YELLOW, MAX_COLOR_CODE_LENGTH - 1);
-            strncpy(config->path_color, ANSI_CYAN, MAX_COLOR_CODE_LENGTH - 1);
-            strncpy(config->prompt_color, ANSI_YELLOW, MAX_COLOR_CODE_LENGTH - 1);
+            snprintf(config->username_color, MAX_COLOR_CODE_LENGTH, "%s", ANSI_YELLOW);
+            snprintf(config->hostname_color, MAX_COLOR_CODE_LENGTH, "%s", ANSI_YELLOW);
+            snprintf(config->path_color, MAX_COLOR_CODE_LENGTH, "%s", ANSI_CYAN);
+            snprintf(config->prompt_color, MAX_COLOR_CODE_LENGTH, "%s", ANSI_YELLOW);
             colors_found = 1;
         }
     }
@@ -2772,21 +2765,18 @@ int parse_zsh_prompt_colors(const char *prompt, struct color_config *config) {
                 int color_len = color_end - color_start;
                 if (color_len > 0 && color_len < 20) {
                     char color_name[21];
-                    strncpy(color_name, color_start, color_len);
+                    memcpy(color_name, color_start, (size_t)color_len);
                     color_name[color_len] = '\0';
 
                     /* Convert to ANSI */
                     if (zsh_color_to_ansi(color_name, temp_color, sizeof(temp_color))) {
                         /* Simple heuristic: assign colors in order found */
                         if (found_colors == 0) {
-                            strncpy(config->username_color, temp_color, MAX_COLOR_CODE_LENGTH - 1);
-                            config->username_color[MAX_COLOR_CODE_LENGTH - 1] = '\0';
+                            snprintf(config->username_color, MAX_COLOR_CODE_LENGTH, "%s", temp_color);
                         } else if (found_colors == 1) {
-                            strncpy(config->hostname_color, temp_color, MAX_COLOR_CODE_LENGTH - 1);
-                            config->hostname_color[MAX_COLOR_CODE_LENGTH - 1] = '\0';
+                            snprintf(config->hostname_color, MAX_COLOR_CODE_LENGTH, "%s", temp_color);
                         } else if (found_colors == 2) {
-                            strncpy(config->path_color, temp_color, MAX_COLOR_CODE_LENGTH - 1);
-                            config->path_color[MAX_COLOR_CODE_LENGTH - 1] = '\0';
+                            snprintf(config->path_color, MAX_COLOR_CODE_LENGTH, "%s", temp_color);
                         }
                         found_colors++;
                     }
@@ -2797,14 +2787,11 @@ int parse_zsh_prompt_colors(const char *prompt, struct color_config *config) {
             if (extract_ansi_color(ptr, temp_color, sizeof(temp_color))) {
                 /* Simple heuristic: assign colors in order found */
                 if (found_colors == 0) {
-                    strncpy(config->username_color, temp_color, MAX_COLOR_CODE_LENGTH - 1);
-                    config->username_color[MAX_COLOR_CODE_LENGTH - 1] = '\0';
+                    snprintf(config->username_color, MAX_COLOR_CODE_LENGTH, "%s", temp_color);
                 } else if (found_colors == 1) {
-                    strncpy(config->hostname_color, temp_color, MAX_COLOR_CODE_LENGTH - 1);
-                    config->hostname_color[MAX_COLOR_CODE_LENGTH - 1] = '\0';
+                    snprintf(config->hostname_color, MAX_COLOR_CODE_LENGTH, "%s", temp_color);
                 } else if (found_colors == 2) {
-                    strncpy(config->path_color, temp_color, MAX_COLOR_CODE_LENGTH - 1);
-                    config->path_color[MAX_COLOR_CODE_LENGTH - 1] = '\0';
+                    snprintf(config->path_color, MAX_COLOR_CODE_LENGTH, "%s", temp_color);
                 }
                 found_colors++;
             }
@@ -2842,14 +2829,11 @@ int parse_ps1_colors(const char *ps1, struct color_config *config) {
         if (extract_ansi_color(ptr, temp_color, sizeof(temp_color))) {
             /* Simple heuristic: assign colors in order found */
             if (found_colors == 0) {
-                strncpy(config->username_color, temp_color, MAX_COLOR_CODE_LENGTH - 1);
-                config->username_color[MAX_COLOR_CODE_LENGTH - 1] = '\0';
+                snprintf(config->username_color, MAX_COLOR_CODE_LENGTH, "%s", temp_color);
             } else if (found_colors == 1) {
-                strncpy(config->hostname_color, temp_color, MAX_COLOR_CODE_LENGTH - 1);
-                config->hostname_color[MAX_COLOR_CODE_LENGTH - 1] = '\0';
+                snprintf(config->hostname_color, MAX_COLOR_CODE_LENGTH, "%s", temp_color);
             } else if (found_colors == 2) {
-                strncpy(config->path_color, temp_color, MAX_COLOR_CODE_LENGTH - 1);
-                config->path_color[MAX_COLOR_CODE_LENGTH - 1] = '\0';
+                snprintf(config->path_color, MAX_COLOR_CODE_LENGTH, "%s", temp_color);
             }
             found_colors++;
         }
