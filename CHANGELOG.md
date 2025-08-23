@@ -5,6 +5,19 @@ All notable changes to sudosh will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0] - 2025-08-23
+
+### 🧰 CI Hardening & Security Validation
+- Build Matrix across Ubuntu and macOS with WERROR, Address/Undefined sanitizers, and coverage
+- Stabilized static analysis: cppcheck configured to ignore unmatched suppression noise
+- Security regression tests integrated in CI for pipelines and pager protections
+
+### 🛠️ Fixes & Improvements
+- Sudoers parsing: initialize saved_euid to satisfy -Werror under UBSan and ensure proper euid restore
+- CI test link fixes: whitelist integrity and pager security tests now link required objects
+- Ubuntu WERROR cleanups: check seteuid() return; remove unused variables; safer string handling
+
+
 ## [2.0.0] - 2025-08-21 - FINAL RELEASE
 
 ### 🚀 Major New Features
