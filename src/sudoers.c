@@ -410,7 +410,7 @@ struct sudoers_config *parse_sudoers_file(const char *filename) {
     ssize_t read;
     struct sudoers_config *config;
     struct sudoers_userspec *last_spec = NULL;
-    uid_t saved_euid;
+    uid_t saved_euid = geteuid();
     int escalated;
 
     if (!filename) {
