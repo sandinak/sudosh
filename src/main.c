@@ -628,12 +628,8 @@ int main(int argc, char *argv[]) {
             ansible_detection_force = 1;
         } else if (strcmp(argv[i], "--ansible-verbose") == 0) {
             ansible_detection_verbose = 1;
-        } else if (strcmp(argv[i], "--version") == 0) {
-            } else if (strcmp(argv[i], "-V") == 0 && sudo_compat_mode) {
-                /* sudo-compat: -V (version) */
-                printf("sudosh %s\n", SUDOSH_VERSION);
-                return EXIT_SUCCESS;
-
+        } else if ((strcmp(argv[i], "--version") == 0) ||
+                   (sudo_compat_mode && strcmp(argv[i], "-V") == 0)) {
             printf("sudosh %s\n", SUDOSH_VERSION);
             return EXIT_SUCCESS;
         } else if (strcmp(argv[i], "--build-info") == 0) {

@@ -43,6 +43,14 @@ void set_custom_password_prompt(const char *prompt) {
     custom_password_prompt = prompt;
 }
 
+/**
+ * Get current custom password prompt (for testing/inspection)
+ */
+const char *get_custom_password_prompt(void) {
+    return custom_password_prompt;
+}
+
+
 #ifdef MOCK_AUTH
 /* Mock authentication for systems without PAM */
 static int mock_authenticate(const char *username) {
