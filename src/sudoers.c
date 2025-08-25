@@ -28,7 +28,7 @@ static struct sudoers_userspec *create_userspec(void) {
     spec->hosts = NULL;
     spec->commands = NULL;
     spec->nopasswd = 0;
-    spec->runas_user = strdup("root");  /* Default runas user */
+    spec->runas_user = safe_strdup("root");  /* Default runas user */
     spec->source_file = NULL;
     spec->next = NULL;
 
@@ -78,7 +78,7 @@ static char **parse_list(const char *list_str) {
         return NULL;
     }
 
-    char *str_copy = strdup(list_str);
+    char *str_copy = safe_strdup(list_str);
     if (!str_copy) {
         return NULL;
     }
@@ -114,7 +114,7 @@ static char **parse_list(const char *list_str) {
             *end-- = '\0';
         }
 
-        array[i] = strdup(token);
+        array[i] = safe_strdup(token);
         if (!array[i]) {
             /* Cleanup on failure */
             for (int j = 0; j < i; j++) {
@@ -140,7 +140,7 @@ static char **parse_list(const char *list_str) {
  * Example: %wheel ALL = (ALL) ALL
  */
 static struct sudoers_userspec *parse_sudoers_line(const char *line, const char *source_file) {
-    char *line_copy = strdup(line);
+    char *line_copy = safe_strdup(line);
     if (!line_copy) {
         return NULL;
     }
@@ -227,7 +227,7 @@ static struct sudoers_userspec *parse_sudoers_line(const char *line, const char 
         if (close_paren) {
             *close_paren = '\0';
             free(spec->runas_user);
-            spec->runas_user = strdup(right_side + 1);
+            spec->runas_user = safe_strdup(right_side + 1);
             right_side = close_paren + 1;
             while (*right_side && isspace(*right_side)) {
                 right_side++;
@@ -249,7 +249,7 @@ static struct sudoers_userspec *parse_sudoers_line(const char *line, const char 
 
     /* Set source file */
     if (source_file) {
-        spec->source_file = strdup(source_file);
+        spec->source_file = safe_strdup(source_file);
     }
 
     free(line_copy);
@@ -428,7 +428,7 @@ struct sudoers_config *parse_sudoers_file(const char *filename) {
     /* Allow test harness to override includedir */
     {
         const char *env_dir = getenv("SUDOSH_SUDOERS_DIR");
-        config->includedir = strdup((env_dir && *env_dir) ? env_dir : SUDOERS_DIR);
+        config->includedir = safe_strdup((env_dir && *env_dir) ? env_dir : SUDOERS_DIR);
     }
 
     /* Also parse the sudoers.d directory if it exists (honors override) */
@@ -467,7 +467,7 @@ struct sudoers_config *parse_sudoers_file(const char *filename) {
             if (*dir_path) {
                 /* Update the includedir in config and parse the directory */
                 free(config->includedir);
-                config->includedir = strdup(dir_path);
+                config->includedir = safe_strdup(dir_path);
                 parse_sudoers_directory(dir_path, config, &last_spec);
             }
             continue;
@@ -600,7 +600,7 @@ int check_sudoers_command_permission(const char *username, const char *hostname,
     }
 
     /* Extract just the command name (first word) for checking */
-    cmd_copy = strdup(command);
+    cmd_copy = safe_strdup(command);
     if (!cmd_copy) {
         return 0;
     }

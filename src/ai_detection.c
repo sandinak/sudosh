@@ -201,7 +201,7 @@ int detect_augment_session(struct ai_detection_info *info) {
     /* Check environment variables */
     extern char **environ;
     for (char **env = environ; *env && info->env_var_count < AI_ENV_VAR_COUNT; env++) {
-        char *var_copy = strdup(*env);
+        char *var_copy = safe_strdup(*env);
         if (!var_copy) continue;
         
         char *equals = strchr(var_copy, '=');
@@ -209,7 +209,7 @@ int detect_augment_session(struct ai_detection_info *info) {
             *equals = '\0';
             
             if (is_augment_environment_variable(var_copy)) {
-                strncpy(info->detected_env_vars[info->env_var_count], 
+                strncpy(info->detected_env_vars[info->env_var_count],
                        var_copy, 63);
                 info->detected_env_vars[info->env_var_count][63] = '\0';
                 info->env_var_count++;
@@ -247,7 +247,7 @@ int detect_copilot_session(struct ai_detection_info *info) {
     /* Check environment variables */
     extern char **environ;
     for (char **env = environ; *env && info->env_var_count < AI_ENV_VAR_COUNT; env++) {
-        char *var_copy = strdup(*env);
+        char *var_copy = safe_strdup(*env);
         if (!var_copy) continue;
         
         char *equals = strchr(var_copy, '=');
@@ -255,7 +255,7 @@ int detect_copilot_session(struct ai_detection_info *info) {
             *equals = '\0';
             
             if (is_copilot_environment_variable(var_copy)) {
-                strncpy(info->detected_env_vars[info->env_var_count], 
+                strncpy(info->detected_env_vars[info->env_var_count],
                        var_copy, 63);
                 info->detected_env_vars[info->env_var_count][63] = '\0';
                 info->env_var_count++;
@@ -293,7 +293,7 @@ int detect_chatgpt_session(struct ai_detection_info *info) {
     /* Check environment variables */
     extern char **environ;
     for (char **env = environ; *env && info->env_var_count < AI_ENV_VAR_COUNT; env++) {
-        char *var_copy = strdup(*env);
+        char *var_copy = safe_strdup(*env);
         if (!var_copy) continue;
         
         char *equals = strchr(var_copy, '=');
@@ -301,7 +301,7 @@ int detect_chatgpt_session(struct ai_detection_info *info) {
             *equals = '\0';
             
             if (is_chatgpt_environment_variable(var_copy)) {
-                strncpy(info->detected_env_vars[info->env_var_count], 
+                strncpy(info->detected_env_vars[info->env_var_count],
                        var_copy, 63);
                 info->detected_env_vars[info->env_var_count][63] = '\0';
                 info->env_var_count++;

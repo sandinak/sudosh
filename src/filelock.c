@@ -92,12 +92,12 @@ char *resolve_canonical_path(const char *file_path) {
     /* Use realpath to resolve symlinks and relative paths */
     resolved_path = realpath(file_path, NULL);
     if (resolved_path) {
-        canonical_path = strdup(resolved_path);
+        canonical_path = safe_strdup(resolved_path);
         free(resolved_path);
     } else {
         /* If realpath fails (file doesn't exist yet), use absolute path */
         if (file_path[0] == '/') {
-            canonical_path = strdup(file_path);
+            canonical_path = safe_strdup(file_path);
         } else {
             /* Convert relative path to absolute */
             char *cwd = getcwd(NULL, 0);
@@ -202,7 +202,7 @@ static struct file_lock_info *read_lock_metadata(const char *lock_file_path) {
     }
 
     memset(lock_info, 0, sizeof(struct file_lock_info));
-    lock_info->lock_file_path = strdup(lock_file_path);
+    lock_info->lock_file_path = safe_strdup(lock_file_path);
 
     char line[512];
     while (fgets(line, sizeof(line), lock_file)) {
@@ -210,9 +210,9 @@ static struct file_lock_info *read_lock_metadata(const char *lock_file_path) {
         line[strcspn(line, "\n")] = '\0';
 
         if (strncmp(line, "file_path=", 10) == 0) {
-            lock_info->file_path = strdup(line + 10);
+            lock_info->file_path = safe_strdup(line + 10);
         } else if (strncmp(line, "username=", 9) == 0) {
-            lock_info->username = strdup(line + 9);
+            lock_info->username = safe_strdup(line + 9);
         } else if (strncmp(line, "pid=", 4) == 0) {
             lock_info->pid = (pid_t)atoi(line + 4);
         } else if (strncmp(line, "timestamp=", 10) == 0) {
@@ -544,7 +544,7 @@ int is_editing_command(const char *command) {
     }
 
     /* Create a copy for parsing */
-    char *cmd_copy = strdup(command);
+    char *cmd_copy = safe_strdup(command);
     if (!cmd_copy) return 0;
 
     /* Get the first token (command name) */
@@ -590,7 +590,7 @@ int is_editing_command(const char *command) {
 char *extract_file_argument(const char *command) {
     if (!command) return NULL;
 
-    char *cmd_copy = strdup(command);
+    char *cmd_copy = safe_strdup(command);
     if (!cmd_copy) return NULL;
 
     char *token, *saveptr;
@@ -624,7 +624,7 @@ char *extract_file_argument(const char *command) {
                 char *next_token = strtok_r(NULL, " \t", &saveptr);
                 if (next_token && next_token[0] != '\'' && next_token[0] != '"' && next_token[0] != '-') {
                     /* This looks like a file, not an -i argument */
-                    file_arg = strdup(next_token);
+                    file_arg = safe_strdup(next_token);
                     break;
                 }
                 /* Continue to look for file argument */
@@ -645,7 +645,7 @@ char *extract_file_argument(const char *command) {
         }
         /* This looks like a file argument */
         else {
-            file_arg = strdup(token);
+            file_arg = safe_strdup(token);
             break;
         }
 

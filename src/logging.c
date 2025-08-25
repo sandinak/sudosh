@@ -70,7 +70,7 @@ void log_command(const char *username, const char *command, int success) {
     /* Get current working directory */
     pwd = getcwd(NULL, 0);
     if (!pwd) {
-        pwd = strdup("unknown");
+        pwd = safe_strdup("unknown");
     }
 
     /* Get session type indicator */
@@ -338,7 +338,7 @@ void log_session_output(const char *output) {
     strftime(timestamp, sizeof(timestamp), "%H:%M:%S", tm_info);
 
     /* Log each line of output separately for better readability */
-    output_copy = strdup(output);
+    output_copy = safe_strdup(output);
     if (!output_copy) {
         return;
     }
@@ -441,7 +441,7 @@ void log_command_history(const char *command) {
 
     /* Update last command */
     free(last_logged_command);
-    last_logged_command = strdup(command);
+    last_logged_command = safe_strdup(command);
 
     time(&now);
     tm_info = localtime(&now);
@@ -534,7 +534,7 @@ int load_history_buffer(void) {
         char *command_start = strchr(line, ']');
         if (command_start && command_start[1] == ' ') {
             command_start += 2;  /* Skip "] " */
-            history_buffer[history_count] = strdup(command_start);
+            history_buffer[history_count] = safe_strdup(command_start);
             if (history_buffer[history_count]) {
                 history_count++;
             }
@@ -612,7 +612,7 @@ void add_to_history_buffer(const char *command) {
     }
 
     /* Add command to buffer */
-    history_buffer[history_count] = strdup(command);
+    history_buffer[history_count] = safe_strdup(command);
     if (history_buffer[history_count]) {
         history_count++;
     }

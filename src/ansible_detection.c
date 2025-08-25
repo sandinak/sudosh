@@ -110,7 +110,7 @@ int check_ansible_become_method(struct ansible_detection_info *info) {
         snprintf(info->detection_details, sizeof(info->detection_details),
                 "Sudosh explicitly set as Ansible become method");
         info->method = ANSIBLE_DETECTED_ENV_VAR;
-        strcpy(info->automation_type, "ansible");
+        snprintf(info->automation_type, sizeof(info->automation_type), "%s", "ansible");
     }
 
     /* Check for other become method indicators */
@@ -159,7 +159,7 @@ int check_ansible_environment_variables(struct ansible_detection_info *info) {
 
     /* Check all environment variables */
     for (char **env = environ; *env && info->env_var_count < ANSIBLE_ENV_VAR_COUNT; env++) {
-        char *var_copy = strdup(*env);
+        char *var_copy = safe_strdup(*env);
         if (!var_copy) continue;
 
         char *equals = strchr(var_copy, '=');
@@ -181,10 +181,10 @@ int check_ansible_environment_variables(struct ansible_detection_info *info) {
 
     /* Set automation type based on what we found */
     if (ansible_vars_found > 0) {
-        strcpy(info->automation_type, "ansible");
+        snprintf(info->automation_type, sizeof(info->automation_type), "%s", "ansible");
         return ansible_vars_found;
     } else {
-        strcpy(info->automation_type, "unknown");
+        snprintf(info->automation_type, sizeof(info->automation_type), "%s", "unknown");
         return 0;
     }
 }
@@ -286,7 +286,7 @@ char *get_parent_process_name(pid_t pid) {
             if (newline) {
                 *newline = '\0';
             }
-            process_name = strdup(comm_buffer);
+            process_name = safe_strdup(comm_buffer);
         }
         fclose(comm_file);
     }
@@ -306,9 +306,9 @@ char *get_parent_process_name(pid_t pid) {
                 /* Get basename */
                 char *basename = strrchr(cmdline_buffer, '/');
                 if (basename) {
-                    process_name = strdup(basename + 1);
+                    process_name = safe_strdup(basename + 1);
                 } else {
-                    process_name = strdup(cmdline_buffer);
+                    process_name = safe_strdup(cmdline_buffer);
                 }
             }
             fclose(cmdline_file);
@@ -325,9 +325,9 @@ char *get_parent_process_name(pid_t pid) {
     if (proc_pidpath(pid, pathbuf, sizeof(pathbuf)) > 0) {
         char *basename = strrchr(pathbuf, '/');
         if (basename) {
-            process_name = strdup(basename + 1);
+            process_name = safe_strdup(basename + 1);
         } else {
-            process_name = strdup(pathbuf);
+            process_name = safe_strdup(pathbuf);
         }
     }
     
@@ -344,7 +344,7 @@ char *get_parent_process_name(pid_t pid) {
     size = sizeof(proc_info);
 
     if (sysctl(mib, 4, &proc_info, &size, NULL, 0) == 0) {
-        process_name = strdup(proc_info.ki_comm);
+        process_name = safe_strdup(proc_info.ki_comm);
     }
 #elif defined(__OpenBSD__)
     int mib[6] = {CTL_KERN, KERN_PROC, KERN_PROC_PID, pid, sizeof(struct kinfo_proc), 1};
@@ -352,7 +352,7 @@ char *get_parent_process_name(pid_t pid) {
     size = sizeof(proc_info);
 
     if (sysctl(mib, 6, &proc_info, &size, NULL, 0) == 0) {
-        process_name = strdup(proc_info.p_comm);
+        process_name = safe_strdup(proc_info.p_comm);
     }
 #elif defined(__NetBSD__)
     int mib[4] = {CTL_KERN, KERN_PROC2, KERN_PROC_PID, pid};
@@ -360,7 +360,7 @@ char *get_parent_process_name(pid_t pid) {
     size = sizeof(proc_info);
 
     if (sysctl(mib, 4, &proc_info, &size, NULL, 0) == 0) {
-        process_name = strdup(proc_info.p_comm);
+        process_name = safe_strdup(proc_info.p_comm);
     }
 #endif
 
@@ -440,7 +440,7 @@ int check_ansible_parent_process(struct ansible_detection_info *info) {
         info->parent_process_name[MAX_PROCESS_NAME_LENGTH - 1] = '\0';
         free(parent_name);
     } else {
-        strcpy(info->parent_process_name, "unknown");
+        snprintf(info->parent_process_name, MAX_PROCESS_NAME_LENGTH, "%s", "unknown");
     }
 
     /* Walk up the process tree looking for Ansible */

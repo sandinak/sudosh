@@ -42,7 +42,7 @@ struct nss_source *create_nss_source(const char *name) {
         return NULL;
     }
     
-    source->name = strdup(name);
+    source->name = safe_strdup(name);
     source->type = parse_nss_source_type(name);
     source->next = NULL;
     
@@ -73,7 +73,7 @@ static void free_nss_source_list(struct nss_source *sources) {
  * Parse NSS configuration line
  */
 static struct nss_source *parse_nss_line(const char *line, const char *service) {
-    char *line_copy = strdup(line);
+    char *line_copy = safe_strdup(line);
     char *token;
     char *saveptr;
     struct nss_source *sources = NULL;
@@ -123,7 +123,7 @@ struct nss_config *read_nss_config(void) {
     ssize_t read;
     struct nss_config *config;
     
-    config = malloc(sizeof(struct nss_config));
+    config = calloc(1, sizeof(struct nss_config));
     if (!config) {
         return NULL;
     }
@@ -270,7 +270,7 @@ struct user_info *get_user_info_files(const char *username) {
         char *token, *saveptr;
         int field_count = 0;
 
-        char *line_copy = strdup(line);
+        char *line_copy = safe_strdup(line);
         if (!line_copy) {
             continue;
         }
@@ -287,9 +287,9 @@ struct user_info *get_user_info_files(const char *username) {
             if (user) {
                 user->uid = (uid_t)atoi(fields[2]);
                 user->gid = (gid_t)atoi(fields[3]);
-                user->username = strdup(fields[0]);
-                user->home_dir = strdup(fields[5]);
-                user->shell = field_count >= 7 ? strdup(fields[6]) : strdup("/bin/sh");
+                user->username = safe_strdup(fields[0]);
+                user->home_dir = safe_strdup(fields[5]);
+                user->shell = field_count >= 7 ? safe_strdup(fields[6]) : safe_strdup("/bin/sh");
 
                 if (!user->username || !user->home_dir || !user->shell) {
                     free_user_info(user);
@@ -377,7 +377,7 @@ int check_admin_groups_files(const char *username) {
         char *token, *saveptr;
         int field_count = 0;
 
-        char *line_copy = strdup(line);
+        char *line_copy = safe_strdup(line);
         if (!line_copy) {
             continue;
         }
@@ -470,7 +470,7 @@ int check_sudo_privileges_nss(const char *username) {
 
     /* Get hostname */
     if (gethostname(hostname, sizeof(hostname)) != 0) {
-        strcpy(hostname, "localhost");
+        snprintf(hostname, sizeof(hostname), "%s", "localhost");
     }
 
     /* First try direct sudoers file parsing */
@@ -560,7 +560,7 @@ int check_command_permission_nss(const char *username, const char *command) {
 
     /* Get hostname */
     if (gethostname(hostname, sizeof(hostname)) != 0) {
-        strcpy(hostname, "localhost");
+        snprintf(hostname, sizeof(hostname), "%s", "localhost");
     }
 
     /* Parse sudoers configuration */

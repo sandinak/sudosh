@@ -108,7 +108,7 @@ static const char *dangerous_patterns[] = {
 int is_critical_dangerous_command(const char *command) {
     if (!command) return 0;
     
-    char *cmd_copy = strdup(command);
+    char *cmd_copy = safe_strdup(command);
     if (!cmd_copy) return 0;
     
     char *cmd_name = strtok(cmd_copy, " \t");
@@ -141,7 +141,7 @@ int is_critical_dangerous_command(const char *command) {
 int is_moderate_dangerous_command(const char *command) {
     if (!command) return 0;
     
-    char *cmd_copy = strdup(command);
+    char *cmd_copy = safe_strdup(command);
     if (!cmd_copy) return 0;
     
     char *cmd_name = strtok(cmd_copy, " \t");
