@@ -1543,7 +1543,12 @@ int validate_command_with_length(const char *command, size_t buffer_len) {
 
     /* Early allow: always allow simple read-only safe commands (including echo) */
     if (is_echo || is_ls || is_whoami || is_date) {
-        return 1;
+        /* Early allow only if no shell operators are present */
+        if (strchr(command, ';') || strstr(command, "&&") || strstr(command, "||") || strchr(command, '`') || strstr(command, "$(") || strchr(command, '|')) {
+            /* Defer to the operator checks below which will block appropriately */
+        } else {
+            return 1;
+        }
     }
 
     /* Block sudoedit commands (CVE-2023-22809 protection) */
@@ -1706,6 +1711,8 @@ int validate_secure_pipeline(const char *command) {
         return 0;
     }
 
+    const char *dbg = getenv("SUDOSH_DEBUG_PIPE");
+
     /* Validate each command in the pipeline against user permissions */
     for (int i = 0; i < pipeline.num_commands; i++) {
         struct command_info *cmd = &pipeline.commands[i].cmd;
@@ -1715,9 +1722,20 @@ int validate_secure_pipeline(const char *command) {
             break;
         }
 
+        if (dbg && strcmp(dbg, "1") == 0) {
+            fprintf(stderr, "[DEBUG] pipeline cmd[%d]: argv0='%s' full='%s'\n", i, cmd->argv[0], cmd->command ? cmd->command : "(null)");
+        }
+
         /* Check if command is whitelisted for pipeline use */
         if (!is_whitelisted_pipe_command(cmd->argv[0])) {
             fprintf(stderr, "sudosh: command '%s' is not whitelisted for pipeline use\n", cmd->argv[0]);
+            result = 0;
+            break;
+        }
+
+        /* Disallow identity commands as sinks (avoid ls | whoami patterns) */
+        if ((i > 0) && (strcmp(cmd->argv[0], "whoami") == 0 || strcmp(cmd->argv[0], "id") == 0)) {
+            fprintf(stderr, "sudosh: command '%s' is not allowed as a pipeline sink\n", cmd->argv[0]);
             result = 0;
             break;
         }
