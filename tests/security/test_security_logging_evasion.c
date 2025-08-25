@@ -8,10 +8,11 @@ int security_failures = 0;
 /* Test command logging evasion */
 int test_command_logging_evasion() {
     /* Test if commands can be executed without logging */
-    
+
     /* Clear existing logs */
-    system("echo '' > /tmp/sudosh_commands.log 2>/dev/null");
-    
+    int sys_rc1 = system("echo '' > /tmp/sudosh_commands.log 2>/dev/null");
+    (void)sys_rc1;
+
     /* Execute a command that should be logged */
     struct command_info cmd;
     if (parse_command("whoami", &cmd) == 0) {
