@@ -9,11 +9,16 @@ int test_failures = 0;
 static const char *nss_fixture =
     "passwd: files sssd\n"
     "sudoers: files\n";
+/* Silence -Wunused-variable while keeping fixture for future tests */
+static void _use_nss_fixture(void) { (void)nss_fixture; }
 
 static int test_read_nss_config_basic() {
     /* Create a temp file and point NSS_CONF_PATH via a weak hook if supported.
        Since code reads fixed paths, we at least exercise parse_nss_line indirectly
        by calling read_nss_config() on the real system (best-effort). */
+    /* reference fixture to avoid unused warnings */
+    _use_nss_fixture();
+
     struct nss_config *cfg = read_nss_config();
     TEST_ASSERT_NOT_NULL(cfg, "read_nss_config should return config");
 
