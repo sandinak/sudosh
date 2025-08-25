@@ -166,10 +166,14 @@ static inline char *create_malicious_file(const char *content, const char *filen
         free(filepath);
         return NULL;
     }
-    
-    write(fd, content, strlen(content));
+
+    if (content) {
+        size_t len = strlen(content);
+        ssize_t w = write(fd, content, len);
+        (void)w; /* ignore write result in tests to satisfy -Werror=unused-result */
+    }
     close(fd);
-    
+
     return filepath;
 }
 
