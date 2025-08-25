@@ -235,9 +235,11 @@ int main(void) {
     test_complete_secure_editor_workflow();
     
     /* Print results */
-    for (int i = 0; i < 50; ++i) putchar('='); putchar('\n');
+    for (int i = 0; i < 50; ++i) { putchar('='); }
+    putchar('\n');
     printf("TEST RESULTS SUMMARY\n");
-    for (int i = 0; i < 50; ++i) putchar('='); putchar('\n');
+    for (int i = 0; i < 50; ++i) { putchar('='); }
+    putchar('\n');
     printf("Total Tests: %d\n", total_tests);
     printf("Passed: %d\n", tests_passed);
     printf("Failed: %d\n", tests_failed);
