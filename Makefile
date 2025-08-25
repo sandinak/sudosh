@@ -365,9 +365,9 @@ coverage: $(TARGET) tests
 
 # Run coverage analysis
 coverage-report: coverage
-	@echo "Running tests with coverage..."
+	@echo "Running tests with coverage (SUDOSH_TEST_MODE=1)..."
 	@for test in $(TEST_TARGETS); do \
-		$$test || exit 1; \
+		SUDOSH_TEST_MODE=1 $$test || exit 1; \
 	done
 	@echo "Generating coverage report..."
 	gcov $(SOURCES)
