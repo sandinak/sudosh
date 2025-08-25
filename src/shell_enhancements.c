@@ -321,7 +321,7 @@ int add_alias(const char *name, const char *value) {
         if (strcmp(current->name, name) == 0) {
             /* Update existing alias */
             free(current->value);
-            current->value = strdup(value);
+            current->value = safe_strdup(value);
             return current->value ? 1 : 0;
         }
         current = current->next;
@@ -333,8 +333,8 @@ int add_alias(const char *name, const char *value) {
         return 0;
     }
 
-    new_alias->name = strdup(name);
-    new_alias->value = strdup(value);
+    new_alias->name = safe_strdup(name);
+    new_alias->value = safe_strdup(value);
     new_alias->next = alias_list;
 
     if (!new_alias->name || !new_alias->value) {
@@ -695,7 +695,7 @@ char *expand_aliases_internal(const char *command) {
     }
 
     /* Create a copy of the command to work with */
-    char *command_copy = strdup(command);
+    char *command_copy = safe_strdup(command);
     if (!command_copy) {
         return NULL;
     }
@@ -721,7 +721,7 @@ char *expand_aliases_internal(const char *command) {
     if (!alias_value) {
         /* No alias found, return original command */
         free(command_copy);
-        return strdup(command);
+        return safe_strdup(command);
     }
 
     /* Construct expanded command */
@@ -751,7 +751,7 @@ char *expand_aliases(const char *command) {
     }
 
     /* Create a copy of the command to work with */
-    char *command_copy = strdup(command);
+    char *command_copy = safe_strdup(command);
     if (!command_copy) {
         return NULL;
     }
@@ -777,7 +777,7 @@ char *expand_aliases(const char *command) {
     if (!alias_value) {
         /* No alias found, return original command */
         free(command_copy);
-        return strdup(command);
+        return safe_strdup(command);
     }
 
     /* Construct expanded command */
@@ -858,7 +858,7 @@ int validate_expanded_alias_command(const char *expanded_command, const char *al
     }
 
     /* Extract the first command from the expanded result for additional validation */
-    char *expanded_copy = strdup(expanded_command);
+    char *expanded_copy = safe_strdup(expanded_command);
     if (!expanded_copy) {
         return 0;
     }

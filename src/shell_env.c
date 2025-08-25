@@ -111,7 +111,7 @@ int handle_export_command(const char *command) {
     }
     
     /* Parse variable assignment */
-    char *args_copy = strdup(args);
+    char *args_copy = safe_strdup(args);
     if (!args_copy) {
         return 0;
     }
@@ -192,7 +192,7 @@ int handle_unset_command(const char *command) {
     }
     
     /* Parse variable names */
-    char *args_copy = strdup(args);
+    char *args_copy = safe_strdup(args);
     if (!args_copy) {
         return 0;
     }
@@ -253,7 +253,7 @@ int handle_which_command(const char *command) {
     }
     
     /* Parse command names */
-    char *args_copy = strdup(args);
+    char *args_copy = safe_strdup(args);
     if (!args_copy) {
         return 0;
     }
@@ -325,7 +325,7 @@ int handle_type_command(const char *command) {
     }
     
     /* Parse command names */
-    char *args_copy = strdup(args);
+    char *args_copy = safe_strdup(args);
     if (!args_copy) {
         return 0;
     }

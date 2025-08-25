@@ -359,6 +359,7 @@ debug: CFLAGS += -g -DDEBUG
 debug: $(TARGET)
 
 # Coverage build (requires gcov)
+coverage: clean
 coverage: CFLAGS += -g --coverage
 coverage: LDFLAGS += --coverage
 coverage: $(TARGET) tests
@@ -370,7 +371,7 @@ coverage-report: coverage
 		$$test || exit 1; \
 	done
 	@echo "Generating coverage report..."
-	gcov $(SOURCES)
+	gcov -o $(OBJDIR) $(addprefix $(SRCDIR)/,$(SOURCES))
 	@echo "Coverage files generated (*.gcov)"
 
 # Static analysis with cppcheck (if available)

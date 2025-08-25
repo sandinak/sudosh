@@ -530,7 +530,7 @@ char *find_command_in_path(const char *command) {
     /* Use secure hardcoded PATH to prevent hijacking attacks */
     path_env = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin";
 
-    path_copy = strdup(path_env);
+    path_copy = safe_strdup(path_env);
     if (!path_copy) {
         return NULL;
     }
@@ -712,7 +712,7 @@ int parse_command_with_redirection(const char *input, struct command_info *cmd) 
     /* Initialize command structure */
     memset(cmd, 0, sizeof(struct command_info));
 
-    input_copy = strdup(input);
+    input_copy = safe_strdup(input);
     if (!input_copy) {
         return -1;
     }
@@ -779,7 +779,7 @@ int parse_command_with_redirection(const char *input, struct command_info *cmd) 
         cmd->redirect_type = REDIRECT_INPUT;
     }
 
-    cmd->redirect_file = strdup(redirect_part);
+    cmd->redirect_file = safe_strdup(redirect_part);
     if (!cmd->redirect_file) {
         free(input_copy);
         return -1;
@@ -801,7 +801,7 @@ int parse_command_with_redirection(const char *input, struct command_info *cmd) 
     /* Set argc and store original command */
     cmd->argc = argc;
     cmd->argv[argc] = NULL;
-    cmd->command = strdup(input);
+    cmd->command = safe_strdup(input);
 
     free(input_copy);
     return 0;
@@ -817,7 +817,7 @@ int tokenize_command_line(const char *input, char ***argv, int *argc, int *argv_
         return -1;
     }
 
-    input_copy = strdup(input);
+    input_copy = safe_strdup(input);
     if (!input_copy) {
         return -1;
     }

@@ -77,7 +77,7 @@ void set_current_username(const char *username) {
     if (current_username) {
         free(current_username);
     }
-    current_username = username ? strdup(username) : NULL;
+    current_username = username ? safe_strdup(username) : NULL;
 }
 
 /**

@@ -1063,7 +1063,7 @@ int check_command_permission(const char *username, const char *command) {
         /* For whitelisted pipeline commands, check if user has general sudo access */
         char hostname[256];
         if (gethostname(hostname, sizeof(hostname)) != 0) {
-            strcpy(hostname, "localhost");
+            snprintf(hostname, sizeof(hostname), "%s", "localhost");
         }
 
         /* Check if user has NOPASSWD ALL privileges */
