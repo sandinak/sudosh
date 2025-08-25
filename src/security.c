@@ -1832,13 +1832,19 @@ int validate_safe_redirection(const char *command) {
         return 0;
     }
 
-    /* Look for output redirection operators */
+    /* Look for output/input redirection operators */
     char *gt = strchr(cmd_copy, '>');
     char *lt = strchr(cmd_copy, '<');
 
     if (gt) {
-        /* Ensure there is only a single redirection operator in the command */
-        char *next_gt = strchr(gt + 1, '>');
+        /* Allow append operator '>>' but block multiple distinct redirections */
+        char *scan_from = gt + 1;
+        if (*scan_from == '>') {
+            /* This is '>>' append; skip the second '>' */
+            scan_from++;
+        }
+        /* If there's another '>' later, that's a second redirection – block */
+        char *next_gt = strchr(scan_from, '>');
         if (next_gt) {
             free(cmd_copy);
             return 0; /* Multiple redirections not allowed */
