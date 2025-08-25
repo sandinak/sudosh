@@ -198,6 +198,30 @@ Vulnerable (attacks succeeded): 0
 
 ### Adding New Tests
 
+
+### 3. Sudoers Authorization Profiles Tests (Integration)
+Purpose: Validate sudosh authorization behavior across common sudoers profiles, verify NOPASSWD behavior, and ensure `-l`/`-ll` listings show correct sources and summaries.
+
+Run only these tests:
+
+    make test-sudoers-authz
+
+What it does:
+- Creates a temp sudoers file and sudoers.d directory
+- Overrides sudosh parsing paths using environment variables:
+  - `SUDOSH_SUDOERS_PATH` (sudoers file)
+  - `SUDOSH_SUDOERS_DIR` (sudoers.d dir)
+- Exercises 5 profiles:
+  1. Unrestricted Admin (ALL=(ALL) NOPASSWD: ALL)
+  2. Standard Admin (ALL=(ALL) ALL)
+  3. Docker User (NOPASSWD: /usr/bin/docker, /usr/bin/docker-compose)
+  4. System Service User (NOPASSWD: /usr/bin/systemctl restart/start/stop *)
+  5. Dangerous Commands User (NOPASSWD: /usr/sbin/iptables, /usr/bin/rm -rf *, /usr/sbin/fdisk)
+- Validates: allowed vs blocked commands, password prompt expectations, and `-l`/`-ll` output including rule sources and summaries.
+
+File:
+- `tests/integration/test_sudoers_authz_profiles.sh`
+
 1. **Create test file** in `tests/` directory
 2. **Include test framework** headers
 3. **Implement test functions** following naming conventions

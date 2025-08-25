@@ -225,6 +225,13 @@ test-enhancements: $(TARGET)
 # Run all tests including enhancements
 test-all: test test-enhancements
 
+# Run only sudoers authorization profiles integration tests
+.PHONY: test-sudoers-authz
+test-sudoers-authz: $(TARGET)
+	@echo "Running sudoers authorization profiles tests..."
+	@SUDOSH_TEST_MODE=1 bash ./tests/integration/test_sudoers_authz_profiles.sh
+
+
 # Run v2.0 regression tests
 test-v2: $(TARGET)
 	@echo "Running v2.0 feature regression tests..."
