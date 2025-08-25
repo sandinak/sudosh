@@ -216,9 +216,9 @@ static struct sss_sudo_result *query_sssd_sudo_rules(const char *username) {
                 /* Found some indication of sudo rules */
                 struct sss_sudo_rule *rule = calloc(1, sizeof(struct sss_sudo_rule));
                 if (rule) {
-                    rule->user = strdup(username);
-                    rule->command = strdup("(detected via SSSD)");
-                    rule->runas_user = strdup("ALL");
+                    rule->user = safe_strdup(username);
+                    rule->command = safe_strdup("(detected via SSSD)");
+                    rule->runas_user = safe_strdup("ALL");
 
                     result->rules = rule;
                     result->num_rules = 1;
@@ -238,9 +238,9 @@ static struct sss_sudo_result *query_sssd_sudo_rules(const char *username) {
             /* SSSD sudo socket exists, create a placeholder rule */
             struct sss_sudo_rule *rule = calloc(1, sizeof(struct sss_sudo_rule));
             if (rule) {
-                rule->user = strdup(username);
-                rule->command = strdup("/bin/touch");  /* Common SSSD rule we know exists */
-                rule->runas_user = strdup("ALL");
+                rule->user = safe_strdup(username);
+                rule->command = safe_strdup("/bin/touch");  /* Common SSSD rule we know exists */
+                rule->runas_user = safe_strdup("ALL");
 
                 result->rules = rule;
                 result->num_rules = 1;

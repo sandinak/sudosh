@@ -49,7 +49,7 @@ static int alias_collect_cb(const char *name, void *vctx) {
         *(ctx->capacityp) = new_capacity;
     }
 
-    matches[match_count] = strdup(name);
+    matches[match_count] = safe_strdup(name);
     if (matches[match_count]) {
         match_count++;
         *(ctx->countp) = match_count;
@@ -430,7 +430,7 @@ void print_history(void) {
 static char *expand_tilde_path(const char *path) {
     if (!path || path[0] != '~') {
         /* No tilde expansion needed */
-        return strdup(path);
+        return safe_strdup(path);
     }
 
     if (path[1] == '\0' || path[1] == '/') {
