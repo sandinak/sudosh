@@ -1337,6 +1337,10 @@ int validate_command_with_length(const char *command, size_t buffer_len) {
             log_security_violation(current_username, "non-ASCII byte detected in command");
             return 0;
         }
+        if (c == '\\' || c == '\'' || c == '"') {
+            /* Defer to text-processing allowance below; otherwise block */
+            /* We'll only allow these for awk/sed/grep style commands */
+        }
     }
 
     /* Check for extremely long commands (CVE-2022-3715 mitigation) */
@@ -1470,6 +1474,14 @@ int validate_command_with_length(const char *command, size_t buffer_len) {
         strstr(command, "$(")) {
         log_security_violation(current_username, "command injection attempt");
         return 0;
+    }
+
+    /* Block generic special characters that aid injection when not needed */
+    if (!is_text_processing) {
+        if (strchr(command, '\\') || strchr(command, '\'') || strchr(command, '"')) {
+            log_security_violation(current_username, "special characters in command blocked");
+            return 0;
+        }
     }
 
     /* Check pipeline usage - allow secure pipelines */
