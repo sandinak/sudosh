@@ -151,12 +151,14 @@ static inline char *create_temp_file(const char *content) {
         free(filename);
         return NULL;
     }
-    
+
     if (content) {
-        write(fd, content, strlen(content));
+        size_t content_len = strlen(content);
+        ssize_t written = write(fd, content, content_len);
+        (void)written; /* best-effort write for tests; suppress -Werror=unused-result */
     }
     close(fd);
-    
+
     return filename;
 }
 
@@ -224,8 +226,11 @@ static inline capture_result_t *capture_command_output(const char *command) {
         fseek(stdout_file, 0, SEEK_SET);
         
         result->stdout_content = malloc(stdout_size + 1);
-        fread(result->stdout_content, 1, stdout_size, stdout_file);
-        result->stdout_content[stdout_size] = '\0';
+        if (result->stdout_content) {
+            size_t read_count = fread(result->stdout_content, 1, stdout_size, stdout_file);
+            (void)read_count; /* ignore for tests; suppress -Werror=unused-result */
+            result->stdout_content[stdout_size] = '\0';
+        }
         fclose(stdout_file);
     }
     
@@ -237,8 +242,11 @@ static inline capture_result_t *capture_command_output(const char *command) {
         fseek(stderr_file, 0, SEEK_SET);
         
         result->stderr_content = malloc(stderr_size + 1);
-        fread(result->stderr_content, 1, stderr_size, stderr_file);
-        result->stderr_content[stderr_size] = '\0';
+        if (result->stderr_content) {
+            size_t read_err = fread(result->stderr_content, 1, stderr_size, stderr_file);
+            (void)read_err; /* ignore for tests; suppress -Werror=unused-result */
+            result->stderr_content[stderr_size] = '\0';
+        }
         fclose(stderr_file);
     }
     

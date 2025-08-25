@@ -15,10 +15,6 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04, macos-14]
-        compiler: [gcc, clang]
-        mode: [release]
-        sanitize: ["", address, undefined]
         include:
           - os: ubuntu-22.04
             compiler: gcc
@@ -71,6 +67,9 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential libpam0g-dev cppcheck valgrind
+          if [ "${{ matrix.compiler }}" = "clang" ]; then
+            sudo apt-get install -y clang
+          fi
       - name: Install deps (macOS)
         if: startsWith(matrix.os, 'macos')
         run: |
