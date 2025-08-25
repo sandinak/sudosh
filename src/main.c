@@ -73,7 +73,7 @@ static int execute_single_command(const char *command_str, const char *target_us
         fprintf(stderr, "sudosh: failed to determine current user\n");
         return EXIT_FAILURE;
     }
-    username = strdup(pwd->pw_name);
+    username = safe_strdup(pwd->pw_name);
     if (!username) {
         fprintf(stderr, "sudosh: failed to allocate memory for username\n");
         return EXIT_FAILURE;
