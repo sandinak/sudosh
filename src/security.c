@@ -8,6 +8,8 @@
  */
 
 #include "sudosh.h"
+#include "dangerous_commands.h"
+
 #include <limits.h>
 
 /* Global variables for signal handling */
@@ -905,6 +907,11 @@ int is_dangerous_command(const char *command) {
         return 1;
     }
 
+    /* Other dangerous system operations (chmod/chown/chgrp/etc.) */
+    if (is_dangerous_system_operation(command)) {
+        return 1;
+    }
+
     return 0;
 }
 
@@ -1302,11 +1309,114 @@ int prompt_user_confirmation(const char *command, const char *warning) {
     return 0;
 }
 
+
+/* Helper: detect chmod 777 on system directories */
+static int is_chmod_777_on_system_path(const char *command) {
+    if (!command) return 0;
+
+    /* Extract first token (command name) */
+    const char *p = command;
+    while (*p == ' ' || *p == '\t') p++;
+    const char *end = p;
+    while (*end && *end != ' ' && *end != '\t') end++;
+
+    size_t len = (size_t)(end - p);
+    if (len == 0) return 0;
+
+    /* Basename of command */
+    const char *last_slash = NULL;
+    for (const char *scan = p; scan < end; ++scan) {
+        if (*scan == '/') last_slash = scan;
+    }
+    const char *name = last_slash ? last_slash + 1 : p;
+    size_t name_len = last_slash ? (size_t)(end - (last_slash + 1)) : len;
+    if (!(name_len == 5 && strncmp(name, "chmod", 5) == 0)) {
+        return 0;
+    }
+
+    /* Parse next token as mode */
+    const char *q = end;
+    while (*q == ' ' || *q == '\t') q++;
+    const char *mode_start = q;
+    while (*q && *q != ' ' && *q != '\t') q++;
+    size_t mode_len = (size_t)(q - mode_start);
+
+    int is_777 = 0;
+    if (mode_len == 3 && strncmp(mode_start, "777", 3) == 0) {
+        is_777 = 1;
+    } else if (mode_len == 4 && strncmp(mode_start, "0777", 4) == 0) {
+        is_777 = 1;
+    }
+    if (!is_777) return 0;
+
+    /* Check for critical dirs anywhere in the remainder */
+    const char *critical_dirs[] = {
+        "/etc/", "/bin/", "/sbin/", "/usr/", "/var/", "/dev/", "/boot/",
+        "/lib/", "/lib64/", NULL
+    };
+
+    for (int i = 0; critical_dirs[i]; i++) {
+        if (strstr(q, critical_dirs[i]) || strstr(command, critical_dirs[i])) {
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+
+/* Helper: detect chmod/chown/chgrp operations targeting system directories */
+static int is_permission_change_on_system_path(const char *command) {
+    if (!command) return 0;
+
+    /* Duplicate and extract first token */
+    char *copy = strdup(command);
+    if (!copy) return 0;
+    char *first = copy;
+    /* Trim leading whitespace */
+    while (*first == ' ' || *first == '\t') first++;
+
+    char *sp = strpbrk(first, " \t");
+    if (sp) *sp = '\0';
+
+    /* Reduce to basename if absolute path */
+    char *base = strrchr(first, '/');
+    if (base) first = base + 1;
+
+    int is_perm_cmd = (strcmp(first, "chmod") == 0 ||
+                       strcmp(first, "chown") == 0 ||
+                       strcmp(first, "chgrp") == 0);
+
+    /* Restore and free */
+    free(copy);
+
+    if (!is_perm_cmd) return 0;
+
+    /* Conservatively detect system directory targets anywhere in the command */
+    const char *critical_dirs[] = {
+        "/etc/", "/bin/", "/sbin/", "/usr/", "/var/", "/dev/", "/boot/",
+        "/lib/", "/lib64/", "/System/", NULL
+    };
+
+    for (int i = 0; critical_dirs[i]; i++) {
+        if (strstr(command, critical_dirs[i])) {
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
 /**
  * Enhanced command validation with comprehensive injection protection
  */
 int validate_command(const char *command) {
-    return validate_command_with_length(command, command ? strlen(command) + 1 : 0);
+    /* Reject empty or whitespace-only commands */
+    if (!command) return 0;
+    const char *t = command;
+    while (*t == ' ' || *t == '\t') t++;
+    if (*t == '\0') return 0;
+    return validate_command_with_length(command, strlen(command) + 1);
 }
 
 /**
@@ -1356,6 +1466,14 @@ int validate_command_with_length(const char *command, size_t buffer_len) {
         log_security_violation(current_username, audit_msg);
         return 1;
     }
+
+    /* Early hard-block: chmod 777 on system paths */
+    if (is_chmod_777_on_system_path(command)) {
+        log_security_violation(current_username, "dangerous chmod 777 on system path blocked");
+        fprintf(stderr, "sudosh: dangerous recursive operation is not permitted\n");
+        return 0;
+    }
+
 
     /* Check for path traversal attempts */
     if (strstr(command, "../") || strstr(command, "..\\")) {
@@ -1518,6 +1636,14 @@ int validate_command_with_length(const char *command, size_t buffer_len) {
                     /* Extract just the target (stop at whitespace) */
                     char target_copy[256];
                     int i = 0;
+
+    /* Hard block chmod 777 on system paths regardless of auth */
+    if (is_chmod_777_on_system_path(command)) {
+        log_security_violation(current_username, "dangerous chmod 777 on system path blocked");
+        fprintf(stderr, "sudosh: dangerous recursive operation is not permitted\n");
+        return 0;
+    }
+
                     while (target[i] && target[i] != ' ' && target[i] != '\t' && target[i] != '\n' && i < 255) {
                         target_copy[i] = target[i];
                         i++;
@@ -1562,6 +1688,8 @@ int validate_command_with_length(const char *command, size_t buffer_len) {
     /* Handle shell commands with special sudo compatibility mode behavior */
     if (is_shell_command(command)) {
         /* Check if we're in sudo compatibility mode (sudosh aliased to sudo) */
+
+
         extern int sudo_compat_mode_flag;
         if (sudo_compat_mode_flag) {
             /* Provide helpful message and indicate we should drop to interactive shell */
@@ -1613,6 +1741,28 @@ int validate_command_with_length(const char *command, size_t buffer_len) {
             fprintf(stderr, "sudosh: privilege escalation commands (su, sudo, pkexec) are not permitted\n");
             fprintf(stderr, "sudosh: use sudosh directly for administrative tasks\n");
             return 0;
+        }
+
+        /* Stronger protection: block permission changes on system paths unless explicitly authorized */
+        if (is_permission_change_on_system_path(command)) {
+            int authorized = 0;
+            if (check_sudo_privileges_enhanced(current_username)) {
+                /* Require explicit rule for this command or ALL; mere membership is not sufficient */
+                if (check_command_permission(current_username, command) ||
+                    check_command_permission(current_username, "ALL")) {
+                    authorized = 1;
+                }
+            }
+            if (authorized) {
+                char audit_msg[512];
+                snprintf(audit_msg, sizeof(audit_msg), "permission change on system path authorized: %s", command);
+                log_security_violation(current_username, audit_msg);
+                return 1;
+            } else {
+                log_security_violation(current_username, "permission change on system path denied");
+                fprintf(stderr, "sudosh: permission changes on system files require explicit sudo rules or authentication\n");
+                return 0;
+            }
         }
 
         /* Check conditionally blocked commands */
@@ -1936,6 +2086,22 @@ int is_safe_redirection_target(const char *target) {
         return 0;
     }
 
+    /* Empty or whitespace-only string is not a valid target; also reject embedded nulls */
+    if (target[0] == '\0') {
+        return 0;
+    }
+    int only_ws = 1;
+    for (const char *q = target; *q; ++q) {
+        if (*q == '\0') return 0; /* embedded null */
+        if (!(*q == ' ' || *q == '\t')) { only_ws = 0; }
+    }
+    if (only_ws) return 0;
+
+    /* Basic path traversal check */
+    if (strstr(target, "../") || strstr(target, "..\\")) {
+        return 0;
+    }
+
     /* Resolve relative paths and home directory */
     char resolved_path[PATH_MAX];
     char *real_target = NULL;
@@ -1961,6 +2127,13 @@ int is_safe_redirection_target(const char *target) {
         "/Users/",  /* macOS home directories */
         NULL
     };
+
+    /* Reject obvious malformed targets like sequences of only redirection characters */
+    int only_arrows = 1;
+    for (const char *q2 = target; *q2; ++q2) {
+        if (!(*q2 == '>' || *q2 == '<' || *q2 == ' ' || *q2 == '\t')) { only_arrows = 0; break; }
+    }
+    if (only_arrows) return 0;
 
     /* Check if target starts with a safe prefix */
     for (int i = 0; safe_prefixes[i]; i++) {
