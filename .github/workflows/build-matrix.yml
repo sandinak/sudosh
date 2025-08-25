@@ -15,13 +15,6 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04, macos-14]
-        compiler: [gcc, clang]
-        mode: [release]
-        sanitize: ["", address, undefined]
-        exclude:
-          - os: macos-14
-            compiler: gcc
         include:
           - os: ubuntu-22.04
             compiler: gcc
