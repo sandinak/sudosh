@@ -64,10 +64,12 @@ int test_enhanced_rules_command(void) {
         } else if (pid > 0) {
             close(pipefd[1]);
             char buffer[4096] = {0};
-            read(pipefd[0], buffer, sizeof(buffer) - 1);
+            ssize_t r1 = read(pipefd[0], buffer, sizeof(buffer) - 1);
+            if (r1 > 0 && r1 < (ssize_t)sizeof(buffer)) buffer[r1] = '\0';
+            (void)r1;
             close(pipefd[0]);
             waitpid(pid, NULL, 0);
-            
+
             ASSERT_TRUE(strstr(buffer, "Always Safe Commands") != NULL);
             ASSERT_TRUE(strstr(buffer, "Text Processing:") != NULL);
         }
@@ -85,10 +87,12 @@ int test_enhanced_rules_command(void) {
         } else if (pid > 0) {
             close(pipefd[1]);
             char buffer[4096] = {0};
-            read(pipefd[0], buffer, sizeof(buffer) - 1);
+            ssize_t r2 = read(pipefd[0], buffer, sizeof(buffer) - 1);
+            if (r2 > 0 && r2 < (ssize_t)sizeof(buffer)) buffer[r2] = '\0';
+            (void)r2;
             close(pipefd[0]);
             waitpid(pid, NULL, 0);
-            
+
             ASSERT_TRUE(strstr(buffer, "Always Blocked Commands") != NULL);
             ASSERT_TRUE(strstr(buffer, "System Control:") != NULL);
         }
