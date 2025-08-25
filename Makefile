@@ -210,10 +210,10 @@ tests: $(TEST_TARGETS)
 # Run all tests
 test: $(LIB_OBJECTS) tests
 	@mkdir -p obj/tests
-	@echo "Running sudosh test suite..."
+	@echo "Running sudosh test suite (SUDOSH_TEST_MODE=1)..."
 	@for test in $(TEST_TARGETS); do \
 		echo "Running $$test..."; \
-		$$test || exit 1; \
+		SUDOSH_TEST_MODE=1 $$test || exit 1; \
 	done
 	@echo "All tests passed!"
 
