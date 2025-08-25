@@ -124,8 +124,9 @@ test-pipeline-regression: $(PIPELINE_REGRESSION_TEST)
 	@./scripts/run_pipeline_regression_tests.sh
 
 # Path validator binary rule with proper dependency
+# Standalone: src/path_validator.c is self-contained and does not link against utils
 $(BINDIR)/path-validator: src/path_validator.c | $(BINDIR)
-	$(CC) $(CFLAGS) -o $@ $<
+	$(CC) $(CFLAGS) -I$(SRCDIR) $< -o $@ $(LDFLAGS)
 
 # Quick pipeline smoke test
 # Build the basic regression test binary if not present, then run script with smoke-only

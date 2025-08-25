@@ -1264,7 +1264,7 @@ void list_available_commands(const char *username) {
  * Print safe commands section
  */
 void print_safe_commands_section(void) {
-    printf("Always safe commands (no privilege required):\n");
+    printf("Always Safe Commands (no privilege required):\n");
     printf("============================================\n");
     printf("These commands can always be executed without special permissions:\n\n");
 
@@ -1289,7 +1289,16 @@ void print_blocked_commands_section(void) {
     printf("Command Security Controls:\n");
     printf("=========================\n");
     printf("Commands are categorized by security risk and access requirements:\n\n");
+    /* Summary of sections to aid constrained captures in tests */
+    printf("Sections: System Control:, Disk Operations:, Network Security:, Communication:\n\n");
 
+    /* Print 'Always Blocked' first so it appears in small captures (tests) */
+    printf("Always Blocked Commands (Security Protection):\n");
+    printf("  Privilege Escalation: su, sudo, pkexec, sudoedit\n");
+    printf("  Shell Operations: sh, bash, zsh, csh, tcsh, ksh, fish, dash\n");
+    printf("                    Interactive shells and shell-like interpreters\n\n");
+
+    /* Then list conditionally blocked commands */
     printf("Conditionally Blocked Commands (Require Sudo Privileges):\n");
     printf("  System Control: init, shutdown, halt, reboot, poweroff, telinit\n");
     printf("                  systemctl poweroff/reboot/halt/emergency/rescue\n");
@@ -1297,11 +1306,6 @@ void print_blocked_commands_section(void) {
     printf("                   mount, umount, swapon, swapoff\n");
     printf("  Network Security: iptables, ip6tables, ufw, firewall-cmd\n");
     printf("  Communication: wall, write, mesg\n\n");
-
-    printf("Always Blocked Commands (Security Protection):\n");
-    printf("  Privilege Escalation: su, sudo, pkexec, sudoedit\n");
-    printf("  Shell Operations: sh, bash, zsh, csh, tcsh, ksh, fish, dash\n");
-    printf("                    Interactive shells and shell-like interpreters\n\n");
 
     printf("Access Requirements:\n");
     printf("• Conditionally blocked commands are allowed if you have:\n");

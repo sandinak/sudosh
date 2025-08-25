@@ -14,6 +14,16 @@
 #include <sys/stat.h>
 #include <errno.h>
 
+/* Minimal local safe_strdup to avoid linking full utils.o */
+static char *safe_strdup(const char *s) {
+    if (!s) return NULL;
+    size_t n = strlen(s);
+    char *p = (char *)malloc(n + 1);
+    if (!p) return NULL;
+    memcpy(p, s, n + 1);
+    return p;
+}
+
 /**
  * Validate PATH for security issues
  */
