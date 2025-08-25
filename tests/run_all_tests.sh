@@ -25,7 +25,7 @@ PASSED_TESTS=0
 setup_test_env() {
     echo -e "${BLUE}Setting up test environment...${NC}"
     export SUDOSH_TEST_MODE=1
-    
+
     # Ensure sudosh binary exists
     if [ ! -x "./bin/sudosh" ]; then
         echo -e "${RED}ERROR: sudosh binary not found at ./bin/sudosh${NC}"
@@ -103,9 +103,9 @@ run_test_suite() {
 main() {
     echo -e "${BLUE}Starting comprehensive sudosh test suite...${NC}"
     echo "=============================================="
-    
+
     setup_test_env
-    
+
     # Unit tests
     echo -e "\n${BLUE}=== Running Unit Tests ===${NC}"
     run_test_suite "Authentication Unit Tests" \
@@ -136,7 +136,10 @@ main() {
 
     run_test_suite "Simple Auth Tests" \
         "bash ./tests/integration/simple_auth_test.sh" 30
-    
+
+    run_test_suite "Sudoers Authorization Profiles" \
+        "bash ./tests/integration/test_sudoers_authz_profiles.sh" 60
+
     # Security tests
     echo -e "\n${BLUE}=== Running Security Tests ===${NC}"
     run_test_suite "CVE Security Tests" \
@@ -153,7 +156,7 @@ main() {
 
     run_test_suite "Logging Evasion Tests" \
         "bin/test_security_logging_evasion" 30
-    
+
     # Regression tests
     echo -e "\n${BLUE}=== Running Regression Tests ===${NC}"
     run_test_suite "File Locking System Tests" \
@@ -172,9 +175,9 @@ main() {
 
     run_test_suite "Logging Comprehensive Tests" \
         "bin/test_logging_comprehensive" 30
-    
+
     cleanup_test_env
-    
+
     # Print comprehensive summary
     echo -e "\n=============================================="
     echo -e "${BLUE}COMPREHENSIVE TEST SUMMARY${NC}"
@@ -183,7 +186,7 @@ main() {
     echo -e "  Total: $TOTAL_SUITES"
     echo -e "  Passed: ${GREEN}$PASSED_SUITES${NC}"
     echo -e "  Failed: ${RED}$((TOTAL_SUITES - PASSED_SUITES))${NC}"
-    
+
     if [ "$TOTAL_TESTS" -gt 0 ]; then
         echo
         echo "Individual Tests:"
@@ -191,7 +194,7 @@ main() {
         echo -e "  Passed: ${GREEN}$PASSED_TESTS${NC}"
         echo -e "  Failed: ${RED}$((TOTAL_TESTS - PASSED_TESTS))${NC}"
     fi
-    
+
     echo
     echo "Coverage Areas Tested:"
     echo "  ✓ Command-line execution (sudo-like functionality)"
@@ -206,7 +209,7 @@ main() {
     echo "  ✓ Privilege escalation protections"
     echo "  ✓ Command injection protections"
     echo "  ✓ File locking and concurrent access"
-    
+
     echo
     if [ "$PASSED_SUITES" -eq "$TOTAL_SUITES" ]; then
         echo -e "${GREEN}🎉 ALL TEST SUITES PASSED!${NC}"
