@@ -225,6 +225,16 @@ test-enhancements: $(TARGET)
 # Run all tests including enhancements
 test-all: test test-enhancements
 
+# Run only sudoers authorization profiles integration tests
+.PHONY: test-sudoers-authz
+test-sudoers-authz: $(TARGET)
+	@echo "Running sudoers authorization profiles tests..."
+	@echo "Verifying test script path..."
+	@ls -al ./tests/integration || true
+	@echo "Invoking: $(CURDIR)/tests/integration/test_sudoers_authz_profiles.sh"
+	@SUDOSH_TEST_MODE=1 bash -x "$(CURDIR)/tests/integration/test_sudoers_authz_profiles.sh"
+
+
 # Run v2.0 regression tests
 test-v2: $(TARGET)
 	@echo "Running v2.0 feature regression tests..."
@@ -503,28 +513,29 @@ clean-packages:
 # Show help
 help:
 	@echo "Available targets:"
-	@echo "  all              - Build sudosh (default)"
-	@echo "  tests            - Build all tests"
-	@echo "  test             - Run all tests"
-	@echo "  unit-test        - Run unit tests only"
-	@echo "  integration-test - Run integration tests only"
-	@echo "  test-suid        - Set suid root for testing (requires sudo)"
+	@echo "  all                      - Build sudosh (default)"
+	@echo "  tests                    - Build all tests"
+	@echo "  test                     - Run all tests"
+	@echo "  unit-test                - Run unit tests only"
+	@echo "  integration-test         - Run integration tests only"
+	@echo "  test-sudoers-authz       - Run sudoers authorization profiles tests only"
+	@echo "  test-suid                - Set suid root for testing (requires sudo)"
 	@echo "  test-pipeline-regression - Run pipeline security regression tests"
-	@echo "  test-pipeline-smoke - Run quick pipeline smoke test"
-	@echo "  clean-suid       - Remove suid privileges (requires sudo)"
-	@echo "  install          - Install sudosh and manpage (requires root)"
-	@echo "  uninstall        - Remove sudosh and manpage (requires root)"
-	@echo "  clean            - Remove build files"
-	@echo "  rebuild          - Clean and rebuild"
-	@echo "  debug            - Build with debug symbols"
-	@echo "  coverage         - Build with coverage support"
-	@echo "  coverage-report  - Generate coverage report"
-	@echo "  static-analysis  - Run static code analysis"
-	@echo "  rpm              - Build RPM package for DNF-based systems"
-	@echo "  deb              - Build DEB package for APT-based systems"
-	@echo "  packages         - Build both RPM and DEB packages"
-	@echo "  clean-packages   - Remove packaging files"
-	@echo "  help             - Show this help message"
+	@echo "  test-pipeline-smoke      - Run quick pipeline smoke test"
+	@echo "  clean-suid               - Remove suid privileges (requires sudo)"
+	@echo "  install                  - Install sudosh and manpage (requires root)"
+	@echo "  uninstall                - Remove sudosh and manpage (requires root)"
+	@echo "  clean                    - Remove build files"
+	@echo "  rebuild                  - Clean and rebuild"
+	@echo "  debug                    - Build with debug symbols"
+	@echo "  coverage                 - Build with coverage support"
+	@echo "  coverage-report          - Generate coverage report"
+	@echo "  static-analysis          - Run static code analysis"
+	@echo "  rpm                      - Build RPM package for DNF-based systems"
+	@echo "  deb                      - Build DEB package for APT-based systems"
+	@echo "  packages                 - Build both RPM and DEB packages"
+	@echo "  clean-packages           - Remove packaging files"
+	@echo "  help                     - Show this help message"
 	@echo ""
 	@echo "Enhanced Features:"
 	@echo "  - NSS configuration support (/etc/nsswitch.conf)"

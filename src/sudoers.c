@@ -413,8 +413,10 @@ struct sudoers_config *parse_sudoers_file(const char *filename) {
     uid_t saved_euid = geteuid();
     int escalated;
 
+    /* Allow test harness to override sudoers path */
     if (!filename) {
-        filename = SUDOERS_PATH;
+        const char *env_path = getenv("SUDOSH_SUDOERS_PATH");
+        filename = (env_path && *env_path) ? env_path : SUDOERS_PATH;
     }
 
     config = malloc(sizeof(struct sudoers_config));
@@ -423,10 +425,14 @@ struct sudoers_config *parse_sudoers_file(const char *filename) {
     }
 
     config->userspecs = NULL;
-    config->includedir = strdup(SUDOERS_DIR);
+    /* Allow test harness to override includedir */
+    {
+        const char *env_dir = getenv("SUDOSH_SUDOERS_DIR");
+        config->includedir = strdup((env_dir && *env_dir) ? env_dir : SUDOERS_DIR);
+    }
 
-    /* Also parse the default sudoers.d directory if it exists */
-    parse_sudoers_directory(SUDOERS_DIR, config, &last_spec);
+    /* Also parse the sudoers.d directory if it exists (honors override) */
+    parse_sudoers_directory(config->includedir, config, &last_spec);
 
     /* Temporarily escalate privileges to read sudoers file */
     escalated = escalate_for_sudoers_read(&saved_euid);
@@ -534,16 +540,32 @@ static int user_matches_spec(const char *username, struct sudoers_userspec *spec
              * Use getgrouplist() to check if user is in the group */
             struct passwd *pwd = getpwnam(username);
             if (pwd) {
-                gid_t *groups;
                 int ngroups = 0;
 
-                /* First call to get the number of groups */
-                if (getgrouplist(username, pwd->pw_gid, NULL, &ngroups) == -1) {
-                    groups = malloc(ngroups * sizeof(gid_t));
+                /* Determine number of groups first */
+#ifdef __APPLE__
+                if (getgrouplist(username, (int)pwd->pw_gid, NULL, &ngroups) == -1 && ngroups > 0) {
+                    int *groups = malloc((size_t)ngroups * sizeof(int));
                     if (groups) {
-                        /* Second call to get the actual groups */
+                        if (getgrouplist(username, (int)pwd->pw_gid, groups, &ngroups) != -1) {
+                            struct group *target_grp = getgrnam(group_name);
+                            if (target_grp) {
+                                for (int j = 0; j < ngroups; j++) {
+                                    if ((gid_t)groups[j] == target_grp->gr_gid) {
+                                        free(groups);
+                                        return 1;
+                                    }
+                                }
+                            }
+                        }
+                        free(groups);
+                    }
+                }
+#else
+                if (getgrouplist(username, pwd->pw_gid, NULL, &ngroups) == -1 && ngroups > 0) {
+                    gid_t *groups = malloc((size_t)ngroups * sizeof(gid_t));
+                    if (groups) {
                         if (getgrouplist(username, pwd->pw_gid, groups, &ngroups) != -1) {
-                            /* Check if any of the user's groups match the target group */
                             struct group *target_grp = getgrnam(group_name);
                             if (target_grp) {
                                 for (int j = 0; j < ngroups; j++) {
@@ -557,6 +579,7 @@ static int user_matches_spec(const char *username, struct sudoers_userspec *spec
                         free(groups);
                     }
                 }
+#endif
             }
         }
     }
@@ -613,7 +636,7 @@ int check_sudoers_command_permission(const char *username, const char *hostname,
         /* Check if the command is allowed */
         if (spec->commands) {
             for (int i = 0; spec->commands[i] && !is_allowed; i++) {
-                char *allowed_cmd = spec->commands[i];
+                const char *allowed_cmd = spec->commands[i];
 
                 /* Handle ALL commands */
                 if (strcmp(allowed_cmd, "ALL") == 0) {
@@ -621,31 +644,36 @@ int check_sudoers_command_permission(const char *username, const char *hostname,
                     break;
                 }
 
-                /* Handle exact command matches */
+                /* Handle exact command name matches (basename) */
                 if (strcmp(allowed_cmd, cmd_name) == 0) {
                     is_allowed = 1;
                     break;
                 }
 
-                /* Handle full path matches */
+                /* Handle full path matches (exact) */
                 if (allowed_cmd[0] == '/' && strcmp(allowed_cmd, command) == 0) {
                     is_allowed = 1;
                     break;
                 }
 
-                /* Handle wildcard patterns (basic support) */
-                if (strstr(allowed_cmd, "*")) {
-                    /* Simple wildcard matching - could be enhanced */
-                    char *pattern = strdup(allowed_cmd);
-                    if (pattern) {
-                        char *star = strchr(pattern, '*');
-                        if (star) {
-                            *star = '\0';
-                            if (strncmp(pattern, cmd_name, strlen(pattern)) == 0) {
-                                is_allowed = 1;
-                            }
-                        }
-                        free(pattern);
+                /* Handle basename match when allowed is a full path */
+                if (allowed_cmd[0] == '/') {
+                    const char *slash = strrchr(allowed_cmd, '/');
+                    const char *base = slash ? slash + 1 : allowed_cmd;
+                    if (strcmp(base, cmd_name) == 0) {
+                        is_allowed = 1;
+                        break;
+                    }
+                }
+
+                /* Handle wildcard patterns (prefix*) against cmd_name and command */
+                if (strchr(allowed_cmd, '*')) {
+                    const char *star = strchr(allowed_cmd, '*');
+                    size_t prefix_len = (size_t)(star - allowed_cmd);
+                    if (strncmp(allowed_cmd, cmd_name, prefix_len) == 0 ||
+                        strncmp(allowed_cmd, command, prefix_len) == 0) {
+                        is_allowed = 1;
+                        break;
                     }
                 }
             }
