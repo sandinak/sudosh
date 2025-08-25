@@ -121,9 +121,10 @@ int test_toctou_vulnerability() {
         /* Child process - modify file between check and use */
         usleep(1000); /* Small delay */
         unlink(test_file);
-        
+
         /* Create symlink to sensitive file */
-        symlink("/etc/passwd", test_file);
+        int sym_rc = symlink("/etc/passwd", test_file);
+        (void)sym_rc; /* ignore result in tests to satisfy -Werror=unused-result */
         exit(0);
     } else if (pid > 0) {
         /* Parent process - check then use file */
