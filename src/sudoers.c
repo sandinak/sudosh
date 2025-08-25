@@ -540,16 +540,32 @@ static int user_matches_spec(const char *username, struct sudoers_userspec *spec
              * Use getgrouplist() to check if user is in the group */
             struct passwd *pwd = getpwnam(username);
             if (pwd) {
-                gid_t *groups;
                 int ngroups = 0;
 
-                /* First call to get the number of groups */
-                if (getgrouplist(username, pwd->pw_gid, NULL, &ngroups) == -1) {
-                    groups = malloc(ngroups * sizeof(gid_t));
+                /* Determine number of groups first */
+#ifdef __APPLE__
+                if (getgrouplist(username, (int)pwd->pw_gid, NULL, &ngroups) == -1 && ngroups > 0) {
+                    int *groups = malloc((size_t)ngroups * sizeof(int));
                     if (groups) {
-                        /* Second call to get the actual groups */
+                        if (getgrouplist(username, (int)pwd->pw_gid, groups, &ngroups) != -1) {
+                            struct group *target_grp = getgrnam(group_name);
+                            if (target_grp) {
+                                for (int j = 0; j < ngroups; j++) {
+                                    if ((gid_t)groups[j] == target_grp->gr_gid) {
+                                        free(groups);
+                                        return 1;
+                                    }
+                                }
+                            }
+                        }
+                        free(groups);
+                    }
+                }
+#else
+                if (getgrouplist(username, pwd->pw_gid, NULL, &ngroups) == -1 && ngroups > 0) {
+                    gid_t *groups = malloc((size_t)ngroups * sizeof(gid_t));
+                    if (groups) {
                         if (getgrouplist(username, pwd->pw_gid, groups, &ngroups) != -1) {
-                            /* Check if any of the user's groups match the target group */
                             struct group *target_grp = getgrnam(group_name);
                             if (target_grp) {
                                 for (int j = 0; j < ngroups; j++) {
@@ -563,6 +579,7 @@ static int user_matches_spec(const char *username, struct sudoers_userspec *spec
                         free(groups);
                     }
                 }
+#endif
             }
         }
     }

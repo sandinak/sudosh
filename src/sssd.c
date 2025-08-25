@@ -24,6 +24,13 @@
 #include <ctype.h>
 #include <time.h>
 
+/* Attribute for marking intentionally unused static functions to satisfy -Werror */
+#if defined(__GNUC__) || defined(__clang__)
+#define UNUSED __attribute__((unused))
+#else
+#define UNUSED
+#endif
+
 /* SSSD socket paths */
 #define SSSD_NSS_SOCKET "/var/lib/sss/pipes/nss"
 #define SSSD_SUDO_SOCKET "/var/lib/sss/pipes/sudo"
@@ -68,7 +75,7 @@ struct sss_sudo_result {
 /**
  * Write data to socket with proper error handling
  */
-static int write_to_socket(int fd, const void *data, size_t len) {
+static UNUSED int write_to_socket(int fd, const void *data, size_t len) {
     const char *ptr = (const char *)data;
     size_t written = 0;
 
@@ -88,7 +95,7 @@ static int write_to_socket(int fd, const void *data, size_t len) {
 /**
  * Read data from socket with proper error handling
  */
-static int read_from_socket(int fd, void *data, size_t len) {
+static UNUSED int read_from_socket(int fd, void *data, size_t len) {
     char *ptr = (char *)data;
     size_t bytes_read = 0;
 
@@ -158,7 +165,7 @@ struct user_info *get_user_info_sssd(const char *username) {
 /**
  * Connect to SSSD sudo socket
  */
-static int connect_to_sssd_sudo(void) {
+static UNUSED int connect_to_sssd_sudo(void) {
     int sock_fd;
     struct sockaddr_un addr;
 
