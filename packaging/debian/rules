@@ -1,11 +1,14 @@
 #!/usr/bin/make -f
 
 %:
-dh $@
+	dh $@
+
+override_dh_auto_build:
+	make -j$$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 2)
 
 override_dh_auto_install:
-$(MAKE) install DESTDIR=$(CURDIR)/debian/sudosh BINDIR_INSTALL=/usr/bin MANDIR=/usr/share/man/man1
+	$(MAKE) DESTDIR=$(CURDIR)/debian/sudosh BINDIR_INSTALL=/usr/bin MANDIR=/usr/share/man/man1 install
 
 override_dh_fixperms:
-dh_fixperms
-chmod 4755 debian/sudosh/usr/bin/sudosh
+	dh_fixperms
+	chmod 4755 debian/sudosh/usr/bin/sudosh

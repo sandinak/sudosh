@@ -1,0 +1,117 @@
+name: Build Packages and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Tag to release (e.g., v2.1.1). If empty and triggered by tag, uses the tag.'
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+
+jobs:
+  build_deb:
+    name: Build DEB (Ubuntu)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies (APT)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential debhelper devscripts dpkg-dev libpam0g-dev
+
+      - name: Build
+        run: |
+          make clean
+          make -j4
+
+      - name: Build DEB package
+        run: |
+          make deb
+
+      - name: Upload DEB artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: deb-packages
+          path: |
+            dist/*.deb
+          if-no-files-found: warn
+
+  build_rpm:
+    name: Build RPM (Fedora)
+    runs-on: fedora-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies (DNF)
+        run: |
+          sudo dnf -y install make gcc rpm-build pam-devel git
+
+      - name: Build
+        run: |
+          make clean
+          make -j4
+
+      - name: Build RPM package
+        run: |
+          make rpm
+
+      - name: Upload RPM artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: rpm-packages
+          path: |
+            dist/*.rpm
+          if-no-files-found: warn
+
+  release:
+    name: Create GitHub Release
+    needs: [build_deb, build_rpm]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Determine tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            echo "tag=${GITHUB_REF_NAME}" >> $GITHUB_OUTPUT
+          else
+            if [ -n "${{ inputs.release_tag }}" ]; then
+              echo "tag=${{ inputs.release_tag }}" >> $GITHUB_OUTPUT
+            else
+              echo "No tag provided; deriving from repo (may fail)." >&2
+              echo "tag=${GITHUB_REF_NAME}" >> $GITHUB_OUTPUT
+            fi
+          fi
+
+      - name: Download DEB artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: deb-packages
+          path: artifacts
+        continue-on-error: true
+
+      - name: Download RPM artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: rpm-packages
+          path: artifacts
+        continue-on-error: true
+
+      - name: Create Release and Upload Assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: ${{ steps.tag.outputs.tag }}
+          files: |
+            artifacts/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
