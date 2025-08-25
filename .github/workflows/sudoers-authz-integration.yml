@@ -1,0 +1,51 @@
+name: Sudoers Authz Integration Tests
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'Makefile'
+      - '.github/workflows/sudoers-authz-integration.yml'
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'Makefile'
+      - '.github/workflows/sudoers-authz-integration.yml'
+  workflow_dispatch:
+
+jobs:
+  sudoers-authz-integration:
+    name: Sudoers Authorization Profiles
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install dependencies (Ubuntu)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential libpam0g-dev
+
+      - name: Build sudosh
+        run: |
+          make clean
+          make
+
+      - name: Run sudoers authorization profiles tests
+        run: |
+          make test-sudoers-authz
+
+      - name: Upload logs (if present)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sudoers-authz-logs
+          path: |
+            tests/integration/*.log
+            tests/integration/*.txt
+
