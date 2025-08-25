@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [2.1.0] - 2025-08-23
+## [2.1.1] - 2025-08-25
+
+### Fixed
+- CLI parser regression that broke `--version`; consolidated `--version` and `-V` handling
+
+### Added
+- Sudo-compat `-V` version flag support when invoked as `sudo`
+- `-p, --prompt` compatibility for custom password prompts
+
+### Tests
+- Unit test for prompt setter/getter
+- Integration test updates to validate `-p` behavior and keep `-V`/`--version` working
+
+### Docs
+- Help text and manpage updated to document `-p/--prompt`; manpage regenerated
+
+
 
 ### 🧰 CI Hardening & Security Validation
 - Build Matrix across Ubuntu and macOS with WERROR, Address/Undefined sanitizers, and coverage
