@@ -212,8 +212,8 @@ static struct sss_sudo_result *query_sssd_sudo_rules(const char *username) {
     if (fp) {
         while (fgets(buffer, sizeof(buffer), fp)) {
             /* Parse any output that might indicate sudo rules */
-            if (strstr(buffer, username) || strstr(buffer, "sudo")) {
-                /* Found some indication of sudo rules */
+            if (strstr(buffer, username)) {
+                /* Found username in SSSD sudoers response; record minimal rule indicator */
                 struct sss_sudo_rule *rule = calloc(1, sizeof(struct sss_sudo_rule));
                 if (rule) {
                     rule->user = safe_strdup(username);
@@ -232,21 +232,8 @@ static struct sss_sudo_result *query_sssd_sudo_rules(const char *username) {
 
     /* If no rules found through NSS, try to detect SSSD sudo capability */
     if (result->num_rules == 0) {
-        /* Check if SSSD sudo is configured and user might have rules */
-        struct stat st;
-        if (stat(SSSD_SUDO_SOCKET, &st) == 0) {
-            /* SSSD sudo socket exists, create a placeholder rule */
-            struct sss_sudo_rule *rule = calloc(1, sizeof(struct sss_sudo_rule));
-            if (rule) {
-                rule->user = safe_strdup(username);
-                rule->command = safe_strdup("/bin/touch");  /* Common SSSD rule we know exists */
-                rule->runas_user = safe_strdup("ALL");
-
-                result->rules = rule;
-                result->num_rules = 1;
-                result->error_code = SSS_SUDO_ERROR_OK;
-            }
-        }
+        /* Do not infer sudo privileges or example rules from ambient SSSD socket presence */
+        (void)username; /* retained for interface consistency */
     }
 
     return result;
@@ -297,39 +284,10 @@ static int check_sssd_sudo_rules(const char *username) {
  * Query SSSD for sudo privileges using alternative methods
  */
 static int check_sssd_ldap_sudo(const char *username) {
-    (void)username;  /* Suppress unused parameter warning */
-
-    /* Check if SSSD sudo service is active */
-    FILE *fp = popen("systemctl is-active sssd-sudo 2>/dev/null", "r");
-    if (fp) {
-        char buffer[32];
-        if (fgets(buffer, sizeof(buffer), fp)) {
-            if (strncmp(buffer, "active", 6) == 0) {
-                pclose(fp);
-                return 1;  /* SSSD sudo is active */
-            }
-        }
-        pclose(fp);
-    }
-
-    /* Check if SSSD main service is active and sudo socket exists */
-    fp = popen("systemctl is-active sssd 2>/dev/null", "r");
-    if (fp) {
-        char buffer[32];
-        if (fgets(buffer, sizeof(buffer), fp)) {
-            if (strncmp(buffer, "active", 6) == 0) {
-                pclose(fp);
-                /* SSSD is active, check if sudo socket exists */
-                struct stat st;
-                if (stat("/var/lib/sss/pipes/sudo", &st) == 0) {
-                    return 1;  /* SSSD with sudo support is available */
-                }
-            }
-        } else {
-            pclose(fp);
-        }
-    }
-
+    /* Do not infer sudo privileges from service state or socket presence.
+     * Proper authoritative checks require parsing SSSD-provided sudo rules.
+     * Returning 0 avoids false positives and closes the bypass tested by security tests. */
+    (void)username;
     return 0;
 }
 
