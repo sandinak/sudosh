@@ -75,45 +75,43 @@ struct sss_sudo_result {
 /**
  * Write data to socket with proper error handling
  */
-static UNUSED int write_to_socket(int fd, const void *data, size_t len) {
+/* unused: reserved for future SSSD socket client */
+#if 0
+static int write_to_socket(int fd, const void *data, size_t len) {
     const char *ptr = (const char *)data;
     size_t written = 0;
-
     while (written < len) {
         ssize_t result = write(fd, ptr + written, len - written);
         if (result < 0) {
-            if (errno == EINTR) {
-                continue;
-            }
+            if (errno == EINTR) continue;
             return -1;
         }
         written += result;
     }
     return 0;
 }
+#endif
 
 /**
  * Read data from socket with proper error handling
  */
-static UNUSED int read_from_socket(int fd, void *data, size_t len) {
+/* unused: reserved for future SSSD socket client */
+#if 0
+static int read_from_socket(int fd, void *data, size_t len) {
     char *ptr = (char *)data;
     size_t bytes_read = 0;
-
     while (bytes_read < len) {
         ssize_t result = read(fd, ptr + bytes_read, len - bytes_read);
         if (result < 0) {
-            if (errno == EINTR) {
-                continue;
-            }
+            if (errno == EINTR) continue;
             return -1;
         }
-        if (result == 0) {
-            return -1; /* EOF */
-        }
+        if (result == 0) return -1; /* EOF */
         bytes_read += result;
     }
     return 0;
 }
+#endif
 
 /**
  * Check if SSSD is available and running
@@ -165,26 +163,23 @@ struct user_info *get_user_info_sssd(const char *username) {
 /**
  * Connect to SSSD sudo socket
  */
-static UNUSED int connect_to_sssd_sudo(void) {
+/* unused: reserved for future SSSD socket client */
+#if 0
+static int connect_to_sssd_sudo(void) {
     int sock_fd;
     struct sockaddr_un addr;
-
     sock_fd = socket(AF_UNIX, SOCK_STREAM, 0);
-    if (sock_fd < 0) {
-        return -1;
-    }
-
+    if (sock_fd < 0) return -1;
     memset(&addr, 0, sizeof(addr));
     addr.sun_family = AF_UNIX;
     strncpy(addr.sun_path, SSSD_SUDO_SOCKET, sizeof(addr.sun_path) - 1);
-
     if (connect(sock_fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
         close(sock_fd);
         return -1;
     }
-
     return sock_fd;
 }
+#endif
 
 /**
  * Query SSSD sudo rules using alternative methods since direct socket requires root

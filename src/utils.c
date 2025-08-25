@@ -85,9 +85,9 @@ struct user_info *get_user_info(const char *username) {
 
     user->uid = pwd->pw_uid;
     user->gid = pwd->pw_gid;
-    user->username = strdup(pwd->pw_name);
-    user->home_dir = strdup(pwd->pw_dir);
-    user->shell = strdup(pwd->pw_shell);
+    user->username = safe_strdup(pwd->pw_name);
+    user->home_dir = safe_strdup(pwd->pw_dir);
+    user->shell = safe_strdup(pwd->pw_shell);
 
     if (!user->username || !user->home_dir || !user->shell) {
         free_user_info(user);
@@ -270,7 +270,7 @@ void print_commands(void) {
     }
 
     /* Make a copy of PATH for tokenization */
-    path_copy = strdup(path_env);
+    path_copy = safe_strdup(path_env);
     if (!path_copy) {
         printf("Error: Unable to copy PATH\n");
         free(commands);
@@ -317,7 +317,7 @@ void print_commands(void) {
                         }
 
                         /* Add command to list */
-                        commands[command_count] = strdup(entry->d_name);
+                        commands[command_count] = safe_strdup(entry->d_name);
                         if (commands[command_count]) {
                             command_count++;
                         }
@@ -442,7 +442,7 @@ static char *expand_tilde_path(const char *path) {
 
         if (path[1] == '\0') {
             /* Just ~ */
-            return strdup(pwd->pw_dir);
+            return safe_strdup(pwd->pw_dir);
         } else {
             /* ~/subpath */
             char *result = malloc(strlen(pwd->pw_dir) + strlen(path) + 1); /* +1 for NUL */
@@ -467,7 +467,7 @@ static char *expand_tilde_path(const char *path) {
             username[username_len] = '\0';
         } else {
             /* ~username */
-            username = strdup(path + 1);
+            username = safe_strdup(path + 1);
             if (!username) {
                 return NULL;
             }
@@ -489,7 +489,7 @@ static char *expand_tilde_path(const char *path) {
             }
         } else {
             /* ~username */
-            result = strdup(pwd->pw_dir);
+            result = safe_strdup(pwd->pw_dir);
         }
 
         free(username);
@@ -507,7 +507,7 @@ static char *get_prompt_cwd(void) {
     const char *effective_user;
 
     if (!cwd) {
-        return strdup("unknown");
+        return safe_strdup("unknown");
     }
 
     /* Determine which user's home directory to check */
@@ -1130,8 +1130,8 @@ char *read_command(void) {
                                 displayed_list = 1;
 
                                 /* Store for potential second tab completion */
-                                tab_pending_completion = strdup(matches[0]);
-                                tab_original_prefix = strdup(prefix);
+                                tab_pending_completion = safe_strdup(matches[0]);
+                                tab_original_prefix = safe_strdup(prefix);
                                 tab_prefix_start = prefix_start;
 
                                 /* Free matches since we're just displaying */
@@ -1148,7 +1148,7 @@ char *read_command(void) {
                         } else {
                             /* Multiple matches - set up for cycling through all matches */
                             tab_matches = matches;
-                            tab_original_prefix = strdup(prefix);
+                            tab_original_prefix = safe_strdup(prefix);
                             tab_prefix_start = prefix_start;
                             tab_match_index = 0;
 
@@ -1253,7 +1253,7 @@ int validate_path_security(const char *path_env) {
         return 0; /* No PATH is a security issue */
     }
 
-    char *path_copy = strdup(path_env);
+    char *path_copy = safe_strdup(path_env);
     if (!path_copy) {
         return 0;
     }
@@ -1314,7 +1314,7 @@ void print_path_info(void) {
     printf("%s\n", path_env);
 
     /* Check each directory and report only inaccessible ones */
-    char *path_copy = strdup(path_env);
+    char *path_copy = safe_strdup(path_env);
     if (!path_copy) {
         return;
     }
@@ -1341,7 +1341,7 @@ void print_path_info(void) {
  * Check if command is a built-in command
  */
 int handle_builtin_command(const char *command) {
-    char *trimmed = trim_whitespace(strdup(command));
+    char *trimmed = trim_whitespace(safe_strdup(command));
     char *token, *saveptr;
     int handled = 0;
 
@@ -1397,9 +1397,9 @@ int handle_builtin_command(const char *command) {
             /* No argument, change to home directory */
             struct passwd *pwd = getpwuid(getuid());
             if (pwd && pwd->pw_dir) {
-                expanded_dir = strdup(pwd->pw_dir);
+                expanded_dir = safe_strdup(pwd->pw_dir);
             } else {
-                expanded_dir = strdup("/");
+                expanded_dir = safe_strdup("/");
             }
         } else {
             /* Expand tilde in the provided directory path */
@@ -1569,7 +1569,7 @@ char *get_current_username(void) {
         return NULL;
     }
 
-    return strdup(pwd->pw_name);
+    return safe_strdup(pwd->pw_name);
 }
 
 /**
@@ -1756,7 +1756,7 @@ char **complete_command(const char *text) {
     }
 
     /* Make a copy of PATH for tokenization */
-    char *path_copy = strdup(path_env);
+    char *path_copy = safe_strdup(path_env);
     if (!path_copy) {
         free(matches);
         return NULL;
@@ -1813,7 +1813,7 @@ char **complete_command(const char *text) {
                             }
 
                             /* Add command to matches */
-                            matches[match_count] = strdup(entry->d_name);
+                            matches[match_count] = safe_strdup(entry->d_name);
                             if (matches[match_count]) {
                                 match_count++;
                             }
@@ -1859,7 +1859,7 @@ char **complete_command(const char *text) {
                     matches = new_matches;
                 }
 
-                matches[match_count] = strdup(builtins[i]);
+                matches[match_count] = safe_strdup(builtins[i]);
                 if (matches[match_count]) {
                     match_count++;
                 }
@@ -1913,7 +1913,7 @@ char *find_completion_start(const char *buffer, int pos) {
     /* Return a copy of the prefix to complete */
     int prefix_len = pos - start;
     if (prefix_len <= 0) {
-        return strdup("");
+        return safe_strdup("");
     }
 
     char *prefix = malloc(prefix_len + 1);
@@ -1961,7 +1961,7 @@ char **complete_equals_expansion(const char *text) {
     }
 
     /* Make a copy of PATH for tokenization */
-    char *path_copy = strdup(path_env);
+    char *path_copy = safe_strdup(path_env);
     if (!path_copy) {
         free(matches);
         return NULL;
@@ -2018,7 +2018,7 @@ char **complete_equals_expansion(const char *text) {
                             }
 
                             /* Add full path to matches */
-                            matches[match_count] = strdup(full_path);
+                            matches[match_count] = safe_strdup(full_path);
                             if (matches[match_count]) {
                                 match_count++;
                             }
@@ -2343,11 +2343,11 @@ char **complete_path(const char *text, int start, int end, int executables_only,
         memcpy(dir_path, working_text, dir_len);
         dir_path[dir_len] = '\0';
 
-        filename_prefix = strdup(last_slash + 1);
+        filename_prefix = safe_strdup(last_slash + 1);
     } else {
         /* No directory separator - complete in current directory */
-        dir_path = strdup("./");
-        filename_prefix = strdup(working_text);
+        dir_path = safe_strdup("./");
+        filename_prefix = safe_strdup(working_text);
     }
 
     if (!filename_prefix) {
@@ -2415,7 +2415,7 @@ char **complete_path(const char *text, int start, int end, int executables_only,
                     }
                 } else {
                     /* This shouldn't happen in this context, but handle it */
-                    full_match = strdup(entry->d_name);
+                    full_match = safe_strdup(entry->d_name);
                 }
             } else {
                 /* Normal path completion */
@@ -2430,7 +2430,7 @@ char **complete_path(const char *text, int start, int end, int executables_only,
                 /* Build full path for stat() check */
                 char *stat_path;
                 if (strcmp(dir_path, "./") == 0) {
-                    stat_path = strdup(entry->d_name);
+                    stat_path = safe_strdup(entry->d_name);
                 } else {
                     int stat_len = strlen(dir_path) + strlen(entry->d_name) + 1;
                     stat_path = malloc(stat_len);
