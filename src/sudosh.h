@@ -388,6 +388,7 @@ int check_sudoers_command_permission(const char *username, const char *hostname,
 /* SSSD integration functions */
 int check_sssd_privileges(const char *username);
 struct user_info *get_user_info_sssd(const char *username);
+void get_sssd_sudo_rules_detailed(const char *username, char *output, size_t output_size);
 
 /* Enhanced privilege checking - already declared above */
 /* int check_sudo_privileges_enhanced(const char *username); */

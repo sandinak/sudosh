@@ -825,7 +825,13 @@ void list_available_commands_basic(const char *username) {
     /* Show LDAP/SSSD-based rules using NSS/SSSD integration */
     printf("LDAP/SSSD-Based Rules:\n");
     if (check_sssd_privileges(username)) {
-        printf("    User has SSSD/LDAP-based sudo privileges  [Source: SSSD]\n");
+        char sssd_rules[2048];
+        get_sssd_sudo_rules_detailed(username, sssd_rules, sizeof(sssd_rules));
+        if (strlen(sssd_rules) > 0) {
+            printf("    %s\n", sssd_rules);
+        } else {
+            printf("    User has SSSD/LDAP-based sudo privileges  [Source: SSSD]\n");
+        }
         found_any_rules = 1;
     } else {
         printf("    No LDAP/SSSD-based rules found\n");
@@ -1005,7 +1011,13 @@ void list_available_commands(const char *username) {
     /* Show LDAP/SSSD-based rules using NSS/SSSD integration */
     printf("LDAP/SSSD-Based Rules:\n");
     if (check_sssd_privileges(username)) {
-        printf("    User has SSSD/LDAP-based sudo privileges  [Source: SSSD]\n");
+        char sssd_rules[2048];
+        get_sssd_sudo_rules_detailed(username, sssd_rules, sizeof(sssd_rules));
+        if (strlen(sssd_rules) > 0) {
+            printf("    %s\n", sssd_rules);
+        } else {
+            printf("    User has SSSD/LDAP-based sudo privileges  [Source: SSSD]\n");
+        }
         found_any_rules = 1;
     } else {
         printf("    No LDAP/SSSD-based rules found\n");
