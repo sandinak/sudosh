@@ -1337,6 +1337,10 @@ int validate_command_with_length(const char *command, size_t buffer_len) {
             log_security_violation(current_username, "non-ASCII byte detected in command");
             return 0;
         }
+        if (c == '\\' || c == '\'' || c == '"') {
+            /* Defer to text-processing allowance below; otherwise block */
+            /* We'll only allow these for awk/sed/grep style commands */
+        }
     }
 
     /* Check for extremely long commands (CVE-2022-3715 mitigation) */
@@ -1472,6 +1476,14 @@ int validate_command_with_length(const char *command, size_t buffer_len) {
         return 0;
     }
 
+    /* Block generic special characters that aid injection when not needed */
+    if (!is_text_processing) {
+        if (strchr(command, '\\') || strchr(command, '\'') || strchr(command, '"')) {
+            log_security_violation(current_username, "special characters in command blocked");
+            return 0;
+        }
+    }
+
     /* Check pipeline usage - allow secure pipelines */
     if (strchr(command, '|')) {
         /* Parse and validate the pipeline */
@@ -1531,7 +1543,12 @@ int validate_command_with_length(const char *command, size_t buffer_len) {
 
     /* Early allow: always allow simple read-only safe commands (including echo) */
     if (is_echo || is_ls || is_whoami || is_date) {
-        return 1;
+        /* Early allow only if no shell operators are present */
+        if (strchr(command, ';') || strstr(command, "&&") || strstr(command, "||") || strchr(command, '`') || strstr(command, "$(") || strchr(command, '|')) {
+            /* Defer to the operator checks below which will block appropriately */
+        } else {
+            return 1;
+        }
     }
 
     /* Block sudoedit commands (CVE-2023-22809 protection) */
@@ -1618,6 +1635,13 @@ int validate_command_with_length(const char *command, size_t buffer_len) {
         return 0;
     }
 
+    /* Additional hardening: block dangerous recursive destructive ops (e.g., rm -rf) */
+    if (check_dangerous_flags(command) && is_dangerous_system_operation(command)) {
+        log_security_violation(current_username, "dangerous recursive operation blocked");
+        fprintf(stderr, "sudosh: dangerous recursive operation is not permitted\n");
+        return 0;
+    }
+
     return 1;
 }
 
@@ -1687,6 +1711,8 @@ int validate_secure_pipeline(const char *command) {
         return 0;
     }
 
+    const char *dbg = getenv("SUDOSH_DEBUG_PIPE");
+
     /* Validate each command in the pipeline against user permissions */
     for (int i = 0; i < pipeline.num_commands; i++) {
         struct command_info *cmd = &pipeline.commands[i].cmd;
@@ -1696,6 +1722,10 @@ int validate_secure_pipeline(const char *command) {
             break;
         }
 
+        if (dbg && strcmp(dbg, "1") == 0) {
+            fprintf(stderr, "[DEBUG] pipeline cmd[%d]: argv0='%s' full='%s'\n", i, cmd->argv[0], cmd->command ? cmd->command : "(null)");
+        }
+
         /* Check if command is whitelisted for pipeline use */
         if (!is_whitelisted_pipe_command(cmd->argv[0])) {
             fprintf(stderr, "sudosh: command '%s' is not whitelisted for pipeline use\n", cmd->argv[0]);
@@ -1703,11 +1733,32 @@ int validate_secure_pipeline(const char *command) {
             break;
         }
 
+        /* Disallow identity commands as sinks (avoid ls | whoami patterns) */
+        if ((i > 0) && (strcmp(cmd->argv[0], "whoami") == 0 || strcmp(cmd->argv[0], "id") == 0)) {
+            fprintf(stderr, "sudosh: command '%s' is not allowed as a pipeline sink\n", cmd->argv[0]);
+            result = 0;
+            break;
+        }
+
         /* Check if user has permission to run this specific command */
-        if (!check_command_permission(current_username, cmd->command)) {
+        const char *user_for_check = current_username;
+        if (!user_for_check) {
+            char *fallback = get_current_username();
+            user_for_check = fallback ? fallback : "(null)";
+            /* Note: fallback is heap-allocated; free below once used */
+            int permitted = check_command_permission(user_for_check, cmd->command);
+            if (fallback) free(fallback);
+            if (!permitted) {
+                fprintf(stderr, "sudosh: %s is not allowed to run '%s' in pipeline\n",
+                        user_for_check, cmd->command);
+                log_security_violation(user_for_check, "unauthorized command in pipeline");
+                result = 0;
+                break;
+            }
+        } else if (!check_command_permission(user_for_check, cmd->command)) {
             fprintf(stderr, "sudosh: %s is not allowed to run '%s' in pipeline\n",
-                    current_username, cmd->command);
-            log_security_violation(current_username, "unauthorized command in pipeline");
+                    user_for_check, cmd->command);
+            log_security_violation(user_for_check, "unauthorized command in pipeline");
             result = 0;
             break;
         }
@@ -1811,11 +1862,23 @@ int validate_safe_redirection(const char *command) {
         return 0;
     }
 
-    /* Look for output redirection operators */
+    /* Look for output/input redirection operators */
     char *gt = strchr(cmd_copy, '>');
     char *lt = strchr(cmd_copy, '<');
 
     if (gt) {
+        /* Allow append operator '>>' but block multiple distinct redirections */
+        char *scan_from = gt + 1;
+        if (*scan_from == '>') {
+            /* This is '>>' append; skip the second '>' */
+            scan_from++;
+        }
+        /* If there's another '>' later, that's a second redirection – block */
+        char *next_gt = strchr(scan_from, '>');
+        if (next_gt) {
+            free(cmd_copy);
+            return 0; /* Multiple redirections not allowed */
+        }
         redirect_pos = gt;
     } else if (lt) {
         /* Input redirection is generally safer, but still validate */
@@ -1851,6 +1914,12 @@ int validate_safe_redirection(const char *command) {
         end++;
     }
     *end = '\0';
+
+    /* Additional guardrail: block known unsafe read-sources with redirection */
+    if (strstr(cmd_copy, "/etc/shadow") || strstr(cmd_copy, "/etc/sudoers")) {
+        free(cmd_copy);
+        return 0; /* Disallow redirecting sensitive sources regardless of target */
+    }
 
     /* Check if target is in a safe directory */
     int is_safe = is_safe_redirection_target(target);
