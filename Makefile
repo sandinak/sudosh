@@ -229,7 +229,10 @@ test-all: test test-enhancements
 .PHONY: test-sudoers-authz
 test-sudoers-authz: $(TARGET)
 	@echo "Running sudoers authorization profiles tests..."
-	@SUDOSH_TEST_MODE=1 bash ./tests/integration/test_sudoers_authz_profiles.sh
+	@echo "Verifying test script path..."
+	@ls -al ./tests/integration || true
+	@echo "Invoking: $(CURDIR)/tests/integration/test_sudoers_authz_profiles.sh"
+	@SUDOSH_TEST_MODE=1 bash -x "$(CURDIR)/tests/integration/test_sudoers_authz_profiles.sh"
 
 
 # Run v2.0 regression tests
