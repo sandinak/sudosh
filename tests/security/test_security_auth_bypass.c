@@ -223,13 +223,14 @@ int test_sssd_bypass() {
 /* Test authentication logging bypass */
 int test_auth_logging_bypass() {
     /* Test if authentication attempts can avoid logging */
-    
+
     /* Clear any existing logs */
-    system("echo '' > /tmp/sudosh_auth.log 2>/dev/null");
-    
+    int sys_rc = system("echo '' > /tmp/sudosh_auth.log 2>/dev/null");
+    (void)sys_rc; /* ignore result in tests; satisfy -Werror=unused-result */
+
     /* Attempt authentication */
     authenticate_user("test_user");
-    
+
     /* Check if authentication was logged */
     FILE *log = fopen("/tmp/sudosh_auth.log", "r");
     if (!log) {
