@@ -24,8 +24,8 @@ int test_enhanced_command_injection_protection() {
     if (!validate_command("printenv USER")) return 1; /* Should be allowed via printenv */
     
     /* Test format string injection is blocked */
-    if (!validate_command("printf '%s' test")) return 1; /* Should be allowed: harmless format with fixed args */
-    if (!validate_command("echo %d")) return 1; /* Should be allowed as literal */
+    if (validate_command("printf '%s' test")) return 1; /* Should be blocked */
+    if (validate_command("echo %d")) return 1; /* Should be blocked */
     
     /* Test Unicode/encoding attacks are blocked */
     if (!validate_command("ls \x80\x81")) return 1; /* Should be allowed (non-ASCII harmless in args) */
