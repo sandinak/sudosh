@@ -28,7 +28,7 @@ int test_enhanced_command_injection_protection() {
     if (validate_command("echo %d")) return 1; /* Should be blocked */
     
     /* Test Unicode/encoding attacks are blocked */
-    if (!validate_command("ls \x80\x81")) return 1; /* Should be allowed (non-ASCII harmless in args) */
+    if (validate_command("ls \x80\x81")) return 1; /* Should be blocked (non-ASCII bytes detected) */
     
     /* Test null byte injection is blocked */
     char null_cmd[] = {'l', 's', '\0', 'r', 'm', '\0'};
