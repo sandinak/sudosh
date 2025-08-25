@@ -8,6 +8,9 @@
 [![Security](https://img.shields.io/badge/security-enhanced-red.svg)](docs/ENHANCED_SECURITY_FEATURES.md)
 [![CI Build & Release](https://github.com/sandinak/sudosh/actions/workflows/build-and-release.yml/badge.svg)](https://github.com/sandinak/sudosh/actions/workflows/build-and-release.yml)
 [![codecov](https://codecov.io/gh/sandinak/sudosh/branch/main/graph/badge.svg)](https://codecov.io/gh/sandinak/sudosh)
+[![DEB](https://img.shields.io/badge/DEB-available-blue.svg)](https://github.com/sandinak/sudosh/releases/latest)
+[![RPM](https://img.shields.io/badge/RPM-available-blue.svg)](https://github.com/sandinak/sudosh/releases/latest)
+
 
 Sudosh is a comprehensive, secure interactive shell that provides elevated privileges with extensive logging, security protections, and audit capabilities. It's designed for system administrators who need secure, monitored access to privileged operations.
 
@@ -141,6 +144,30 @@ cd sudosh
 make
 sudo make install
 ```
+### Install via Packages
+
+- Download the latest DEB/RPM from the Releases page: https://github.com/sandinak/sudosh/releases/latest
+
+DEB (Ubuntu/Debian/Mint):
+```bash
+# Install build tools if you want to build yourself (optional)
+sudo apt-get update && sudo apt-get install -y build-essential
+
+# Install from release artifact
+sudo dpkg -i dist/sudosh_*.deb || sudo apt-get -f install
+```
+
+RPM (RHEL/CentOS/Fedora/openSUSE):
+```bash
+# Install build tools if you want to build yourself (optional)
+sudo dnf install -y make gcc rpm-build pam-devel
+
+# Install from release artifact
+sudo rpm -ivh dist/sudosh-*.rpm
+```
+
+Note: If your distro defaults to /usr/bin for install, sudosh’s Makefile install target respects BINDIR_INSTALL and MANDIR; packages will place binaries and manpages appropriately.
+
 
 **Note**: Installation automatically creates a `sudo -> sudosh` symlink in `/usr/local/bin` to enable intelligent shell redirection. This allows sudosh to provide enhanced security when users run shell commands through sudo.
 
