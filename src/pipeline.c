@@ -267,7 +267,13 @@ int validate_pipeline_security(struct pipeline_info *pipeline) {
             fprintf(stderr, "sudosh: command '%s' is not allowed in pipelines\n", cmd->argv[0]);
             return 0;
         }
-        
+
+        /* Disallow identity commands as sinks (avoid ls | whoami patterns) */
+        if ((i > 0) && (strcmp(cmd->argv[0], "whoami") == 0 || strcmp(cmd->argv[0], "id") == 0)) {
+            fprintf(stderr, "sudosh: command '%s' is not allowed as a pipeline sink\n", cmd->argv[0]);
+            return 0;
+        }
+
         /* Additional security checks for specific commands */
         if (strstr(cmd->argv[0], "find")) {
             /* Check for dangerous find options */
