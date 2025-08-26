@@ -1786,7 +1786,7 @@ int validate_command_with_length(const char *command, size_t buffer_len) {
                 return 1;  /* Allow with proper authorization */
             } else {
                 log_security_violation(current_username, "conditionally blocked command denied");
-                fprintf(stderr, "sudosh: command '%s' requires proper sudo privileges or authentication\n", command);
+                fprintf(stderr, "sudosh: command '%s' requires sudo privileges or authentication\n", command);
                 return 0;
             }
         }

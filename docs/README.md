@@ -28,6 +28,7 @@ This directory contains comprehensive documentation for sudosh v2.0, a secure in
 ### **🔧 Integration & Deployment**
 - [**ANSIBLE_INTEGRATION.md**](ANSIBLE_INTEGRATION.md) - Ansible integration and detection
 - [**ANSIBLE_BECOME_METHOD.md**](ANSIBLE_BECOME_METHOD.md) - Ansible become method configuration
+- [**SSSD_LDAP_INTEGRATION.md**](SSSD_LDAP_INTEGRATION.md) - SSSD/LDAP rule handling status and guidance
 - [**PACKAGING.md**](PACKAGING.md) - Package creation and distribution
 - [**SHELL_FEATURES_AND_PLAN.md**](SHELL_FEATURES_AND_PLAN.md) - Shell enhancement features
 

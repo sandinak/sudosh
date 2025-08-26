@@ -84,13 +84,39 @@ static sudosh_error_t parse_config_line(sudosh_config_t *config, const char *lin
         return SUDOSH_SUCCESS;
     }
 
-    char key[256], value[256];
-    if (sscanf(line, "%255s = %255s", key, value) != 2) {
-        /* Try without spaces around = */
-        if (sscanf(line, "%255s=%255s", key, value) != 2) {
-            return SUDOSH_ERROR_INVALID_CONFIGURATION;
-        }
+    /* Robust parse: split on first '=' and trim surrounding whitespace */
+    char key[256] = {0}, value[256] = {0};
+    const char *eq = strchr(line, '=');
+    if (!eq) {
+        return SUDOSH_ERROR_INVALID_CONFIGURATION;
     }
+    size_t key_len = (size_t)(eq - line);
+    if (key_len >= sizeof(key)) key_len = sizeof(key) - 1;
+    memcpy(key, line, key_len);
+    key[key_len] = '\0';
+    /* Copy value part */
+    const char *val_start = eq + 1;
+    size_t val_len = strlen(val_start);
+    if (val_len >= sizeof(value)) val_len = sizeof(value) - 1;
+    memcpy(value, val_start, val_len);
+    value[val_len] = '\0';
+    /* Trim spaces and tabs from both ends */
+    /* left trim key */
+    size_t i = 0; while (key[i] == ' ' || key[i] == '\t') i++; if (i) memmove(key, key + i, strlen(key + i) + 1);
+    /* remove UTF-8 BOM if present */
+    if ((unsigned char)key[0] == 0xEF && (unsigned char)key[1] == 0xBB && (unsigned char)key[2] == 0xBF) {
+        memmove(key, key + 3, strlen(key + 3) + 1);
+    }
+    /* strip any leading non-printable/control bytes */
+    while (key[0] != '\0' && ((unsigned char)key[0] < 32 || (unsigned char)key[0] == 127)) {
+        memmove(key, key + 1, strlen(key + 1) + 1);
+    }
+    /* right trim key */
+    i = strlen(key); while (i > 0 && (key[i-1] == ' ' || key[i-1] == '\t')) { key[i-1] = '\0'; i--; }
+    /* left trim value */
+    i = 0; while (value[i] == ' ' || value[i] == '\t') i++; if (i) memmove(value, value + i, strlen(value + i) + 1);
+    /* right trim value */
+    i = strlen(value); while (i > 0 && (value[i-1] == ' ' || value[i-1] == '\t')) { value[i-1] = '\0'; i--; }
 
     /* Parse configuration options */
     if (strcmp(key, "auth_cache_timeout") == 0) {
@@ -124,10 +150,9 @@ static sudosh_error_t parse_config_line(sudosh_config_t *config, const char *lin
     } else if (strcmp(key, "ansible_detection_enabled") == 0) {
         config->ansible_detection_enabled = (strcmp(value, "true") == 0 || strcmp(value, "1") == 0);
     } else if (strcmp(key, "ansible_detection_force") == 0) {
+        config->ansible_detection_force = (strcmp(value, "true") == 0 || strcmp(value, "1") == 0);
     } else if (strcmp(key, "rc_alias_import_enabled") == 0) {
         config->rc_alias_import_enabled = (strcmp(value, "true") == 0 || strcmp(value, "1") == 0);
-
-        config->ansible_detection_force = (strcmp(value, "true") == 0 || strcmp(value, "1") == 0);
     } else if (strcmp(key, "ansible_detection_verbose") == 0) {
         config->ansible_detection_verbose = (strcmp(value, "true") == 0 || strcmp(value, "1") == 0);
     } else if (strcmp(key, "ansible_detection_confidence_threshold") == 0) {
@@ -182,13 +207,16 @@ sudosh_error_t sudosh_config_load(sudosh_config_t *config, const char *config_fi
         if (parse_result != SUDOSH_SUCCESS) {
             char error_msg[1024];
             int written = snprintf(error_msg, sizeof(error_msg),
-                    "Configuration error at line %d: %.256s", line_number, line);
+                    "Configuration warning at line %d: %.256s", line_number, line);
             if (written >= (int)sizeof(error_msg)) {
                 snprintf(error_msg, sizeof(error_msg),
-                        "Configuration error at line %d: [line too long]", line_number);
+                        "Configuration warning at line %d: [line too long]", line_number);
             }
-            SUDOSH_LOG_ERROR(error_msg);
-            result = parse_result;
+            /* Log as warning and continue for non-fatal parse issues to be lenient like sudo */
+            SUDOSH_LOG_WARNING(error_msg);
+            if (parse_result == SUDOSH_ERROR_MEMORY_ALLOCATION) {
+                result = parse_result; /* propagate only fatal errors */
+            }
         }
     }
 

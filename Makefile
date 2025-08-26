@@ -101,7 +101,7 @@ SECURITY_TEST_BINARIES = $(SECURITY_TEST_SOURCES:$(TESTDIR)/security/%.c=$(BINDI
 
 # Library objects (excluding main.c for testing)
 # Note: test_globals.c has been removed; keep only real library sources here
-LIB_SOURCES = auth.c command.c logging.c security.c utils.c nss.c sudoers.c sssd.c filelock.c shell_enhancements.c shell_env.c pipeline.c ansible_detection.c ai_detection.c dangerous_commands.c editor_detection.c
+LIB_SOURCES = auth.c command.c logging.c security.c utils.c nss.c sudoers.c sssd.c filelock.c shell_enhancements.c shell_env.c config.c pipeline.c ansible_detection.c ai_detection.c dangerous_commands.c editor_detection.c
 LIB_OBJECTS = $(LIB_SOURCES:%.c=$(OBJDIR)/%.o)
 # Test support sources providing globals for link stage
 TEST_SUPPORT_SOURCES = tests/support/test_globals.c

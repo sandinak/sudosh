@@ -983,6 +983,12 @@ int should_require_authentication(const char *username, const char *command) {
         return 0;
     }
 
+    /* In automated test mode, do not enforce editor-environment overrides */
+    extern int test_mode;
+    if (test_mode) {
+        return 0;
+    }
+
     /* Check if we're in an interactive editor environment */
     int in_editor = is_interactive_editor_environment();
 

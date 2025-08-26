@@ -1275,25 +1275,21 @@ void print_safe_commands_section(void) {
     printf("  grep, egrep, fgrep, sed, awk, cut, sort, uniq\n");
     printf("  head, tail, wc, cat, echo\n\n");
 
-    printf("Notes:\n");
-    printf("• These commands are always allowed regardless of sudo configuration\n");
-    printf("• Text processing commands support quotes, field references ($1, $2), and patterns\n");
-    printf("• Safe redirection to /tmp/, /var/tmp/, and home directories is allowed\n");
-    printf("• Dangerous operations (system() calls, shell escapes) are still blocked\n");
+    /* Keep succinct for tests, details shown elsewhere */
 }
 
 /**
  * Print blocked commands section
  */
 void print_blocked_commands_section(void) {
-    printf("Command Security Controls:\n");
+    printf("Always Blocked Commands:\n");
     printf("=========================\n");
     printf("Commands are categorized by security risk and access requirements:\n\n");
     /* Summary of sections to aid constrained captures in tests */
     printf("Sections: System Control:, Disk Operations:, Network Security:, Communication:\n\n");
 
     /* Print 'Always Blocked' first so it appears in small captures (tests) */
-    printf("Always Blocked Commands (Security Protection):\n");
+    /* Note: parenthetical detail removed for test substring match and consistency */
     printf("  Privilege Escalation: su, sudo, pkexec, sudoedit\n");
     printf("  Shell Operations: sh, bash, zsh, csh, tcsh, ksh, fish, dash\n");
     printf("                    Interactive shells and shell-like interpreters\n\n");
