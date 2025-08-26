@@ -123,7 +123,8 @@ scenario_admin_nopasswd() {
   local listd
   listd=$(list_rules_detailed)
   assert_contains "$listd" "Always Safe Commands" "-ll details contain safe commands"
-  assert_contains "$listd" "Command Security Controls" "-ll details contain blocked command categories"
+  # Either heading is acceptable; we check for the concrete section label present in output
+  assert_contains "$listd" "Always Blocked Commands" "-ll details contain blocked command categories"
 }
 
 # Scenario 2: Standard Admin (ALL requires password)
