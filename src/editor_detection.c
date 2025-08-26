@@ -111,7 +111,7 @@ static char *get_process_name(pid_t pid) {
             /* Remove newline */
             char *newline = strchr(buffer, '\n');
             if (newline) *newline = '\0';
-            process_name = strdup(buffer);
+            process_name = safe_strdup(buffer);
         }
         fclose(comm_file);
     }

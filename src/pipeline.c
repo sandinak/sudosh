@@ -45,7 +45,7 @@ int is_whitelisted_pipe_command(const char *command) {
     }
     
     /* Extract just the command name (first word) */
-    char *cmd_copy = strdup(command);
+    char *cmd_copy = safe_strdup(command);
     if (!cmd_copy) {
         return 0;
     }
@@ -198,7 +198,7 @@ int parse_pipeline(const char *input, struct pipeline_info *pipeline) {
     }
     
     /* Parse individual commands */
-    char *input_copy = strdup(input);
+    char *input_copy = safe_strdup(input);
     if (!input_copy) {
         free_pipeline_info(pipeline);
         return -1;
@@ -299,7 +299,7 @@ int is_secure_pager_command(const char *command) {
         return 0;
     }
 
-    char *cmd_copy = strdup(command);
+    char *cmd_copy = safe_strdup(command);
     if (!cmd_copy) {
         return 0;
     }
@@ -369,7 +369,7 @@ int execute_pipeline(struct pipeline_info *pipeline, struct user_info *user) {
                 return -1;
             }
         } else {
-            command_path = strdup(cmd->argv[0]);
+            command_path = safe_strdup(cmd->argv[0]);
             if (!command_path) {
                 return -1;
             }

@@ -101,7 +101,7 @@ SECURITY_TEST_BINARIES = $(SECURITY_TEST_SOURCES:$(TESTDIR)/security/%.c=$(BINDI
 
 # Library objects (excluding main.c for testing)
 # Note: test_globals.c has been removed; keep only real library sources here
-LIB_SOURCES = auth.c command.c logging.c security.c utils.c nss.c sudoers.c sssd.c filelock.c shell_enhancements.c shell_env.c pipeline.c ansible_detection.c ai_detection.c dangerous_commands.c editor_detection.c
+LIB_SOURCES = auth.c command.c logging.c security.c utils.c nss.c sudoers.c sssd.c filelock.c shell_enhancements.c shell_env.c config.c pipeline.c ansible_detection.c ai_detection.c dangerous_commands.c editor_detection.c
 LIB_OBJECTS = $(LIB_SOURCES:%.c=$(OBJDIR)/%.o)
 # Test support sources providing globals for link stage
 TEST_SUPPORT_SOURCES = tests/support/test_globals.c
@@ -124,8 +124,9 @@ test-pipeline-regression: $(PIPELINE_REGRESSION_TEST)
 	@./scripts/run_pipeline_regression_tests.sh
 
 # Path validator binary rule with proper dependency
+# Standalone: src/path_validator.c is self-contained and does not link against utils
 $(BINDIR)/path-validator: src/path_validator.c | $(BINDIR)
-	$(CC) $(CFLAGS) -o $@ $<
+	$(CC) $(CFLAGS) -I$(SRCDIR) $< -o $@ $(LDFLAGS)
 
 # Quick pipeline smoke test
 # Build the basic regression test binary if not present, then run script with smoke-only
@@ -359,6 +360,7 @@ debug: CFLAGS += -g -DDEBUG
 debug: $(TARGET)
 
 # Coverage build (requires gcov)
+coverage: clean
 coverage: CFLAGS += -g --coverage
 coverage: LDFLAGS += --coverage
 coverage: $(TARGET) tests
@@ -370,7 +372,7 @@ coverage-report: coverage
 		SUDOSH_TEST_MODE=1 $$test || exit 1; \
 	done
 	@echo "Generating coverage report..."
-	gcov $(SOURCES)
+	gcov -o $(OBJDIR) $(addprefix $(SRCDIR)/,$(SOURCES))
 	@echo "Coverage files generated (*.gcov)"
 
 # Static analysis with cppcheck (if available)

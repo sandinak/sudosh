@@ -130,6 +130,7 @@ int test_redirection_message_content(void) {
             ASSERT_TRUE(strstr(buffer, "redirecting 'bash' to secure interactive shell") != NULL);
             ASSERT_TRUE(strstr(buffer, "provides enhanced logging and security controls") != NULL);
             ASSERT_TRUE(strstr(buffer, "see 'man sudosh' for details") != NULL);
+            ASSERT_TRUE(strstr(buffer, "'help' for commands") != NULL);
         }
     }
     

@@ -14,25 +14,25 @@
  */
 char *expand_equals_expression(const char *arg) {
     if (!arg || arg[0] != '=') {
-        return strdup(arg);  /* Return copy of original if not = expression */
+        return safe_strdup(arg);  /* Return copy of original if not = expression */
     }
 
     /* Skip the = character */
     const char *command_name = arg + 1;
     if (strlen(command_name) == 0) {
-        return strdup(arg);  /* Return original if just = */
+        return safe_strdup(arg);  /* Return original if just = */
     }
 
     /* Get PATH environment variable */
     char *path_env = getenv("PATH");
     if (!path_env) {
-        return strdup(arg);  /* Return original if no PATH */
+        return safe_strdup(arg);  /* Return original if no PATH */
     }
 
     /* Make a copy of PATH for tokenization */
-    char *path_copy = strdup(path_env);
+    char *path_copy = safe_strdup(path_env);
     if (!path_copy) {
-        return strdup(arg);
+        return safe_strdup(arg);
     }
 
     char *dir, *saveptr;
@@ -47,7 +47,7 @@ char *expand_equals_expression(const char *arg) {
         struct stat st;
         if (stat(full_path, &st) == 0 && S_ISREG(st.st_mode) && (st.st_mode & S_IXUSR)) {
             /* Found executable - return full path */
-            result = strdup(full_path);
+            result = safe_strdup(full_path);
             break;
         }
 
@@ -57,7 +57,7 @@ char *expand_equals_expression(const char *arg) {
     free(path_copy);
 
     /* Return the expanded path or original if not found */
-    return result ? result : strdup(arg);
+    return result ? result : safe_strdup(arg);
 }
 
 /**
@@ -76,7 +76,7 @@ int parse_command(const char *input, struct command_info *cmd) {
     memset(cmd, 0, sizeof(struct command_info));
 
     /* Make a copy of input for parsing */
-    input_copy = strdup(input);
+    input_copy = safe_strdup(input);
     if (!input_copy) {
         return -1;
     }
@@ -108,7 +108,7 @@ int parse_command(const char *input, struct command_info *cmd) {
     cmd->argc = argc;
 
     /* Store the full command */
-    cmd->command = strdup(input);
+    cmd->command = safe_strdup(input);
     if (!cmd->command) {
         free_command_info(cmd);
         free(input_copy);
@@ -169,7 +169,7 @@ int validate_ansible_command(const char *command, const char *username) {
     extern struct ansible_detection_info *global_ansible_info;
     if (global_ansible_info && global_ansible_info->is_ansible_session) {
         /* Extract the actual command from potential shell wrappers */
-        char *cmd_copy = strdup(command);
+        char *cmd_copy = safe_strdup(command);
         if (!cmd_copy) {
             return 0;
         }
@@ -239,7 +239,7 @@ int execute_command(struct command_info *cmd, struct user_info *user) {
             return EXIT_COMMAND_NOT_FOUND;
         }
     } else {
-        command_path = strdup(cmd->argv[0]);
+        command_path = safe_strdup(cmd->argv[0]);
         if (!command_path) {
             return -1;
         }
@@ -530,7 +530,7 @@ char *find_command_in_path(const char *command) {
     /* Use secure hardcoded PATH to prevent hijacking attacks */
     path_env = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin";
 
-    path_copy = strdup(path_env);
+    path_copy = safe_strdup(path_env);
     if (!path_copy) {
         return NULL;
     }
@@ -739,7 +739,7 @@ int parse_command_with_redirection(const char *input, struct command_info *cmd) 
     /* Initialize command structure */
     memset(cmd, 0, sizeof(struct command_info));
 
-    input_copy = strdup(input);
+    input_copy = safe_strdup(input);
     if (!input_copy) {
         return -1;
     }
@@ -806,7 +806,7 @@ int parse_command_with_redirection(const char *input, struct command_info *cmd) 
         cmd->redirect_type = REDIRECT_INPUT;
     }
 
-    cmd->redirect_file = strdup(redirect_part);
+    cmd->redirect_file = safe_strdup(redirect_part);
     if (!cmd->redirect_file) {
         free(input_copy);
         return -1;
@@ -828,7 +828,7 @@ int parse_command_with_redirection(const char *input, struct command_info *cmd) 
     /* Set argc and store original command */
     cmd->argc = argc;
     cmd->argv[argc] = NULL;
-    cmd->command = strdup(input);
+    cmd->command = safe_strdup(input);
 
     free(input_copy);
     return 0;
@@ -844,7 +844,7 @@ int tokenize_command_line(const char *input, char ***argv, int *argc, int *argv_
         return -1;
     }
 
-    input_copy = strdup(input);
+    input_copy = safe_strdup(input);
     if (!input_copy) {
         return -1;
     }

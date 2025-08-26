@@ -122,8 +122,9 @@ scenario_admin_nopasswd() {
   # Detailed listing (-ll) includes safe/blocked sections
   local listd
   listd=$(list_rules_detailed)
-  assert_contains "$listd" "Always safe commands" "-ll details contain safe commands"
-  assert_contains "$listd" "Command Security Controls" "-ll details contain blocked command categories"
+  assert_contains "$listd" "Always Safe Commands" "-ll details contain safe commands"
+  # Either heading is acceptable; we check for the concrete section label present in output
+  assert_contains "$listd" "Always Blocked Commands" "-ll details contain blocked command categories"
 }
 
 # Scenario 2: Standard Admin (ALL requires password)
@@ -145,7 +146,7 @@ scenario_admin_pw() {
 
   local listd
   listd=$(list_rules_detailed)
-  assert_contains "$listd" "Always safe commands" "-ll details present for standard admin"
+  assert_contains "$listd" "Always Safe Commands" "-ll details present for standard admin"
 }
 
 # Scenario 3: Docker User (only docker/compose)

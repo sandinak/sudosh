@@ -148,30 +148,14 @@ if (command -v timeout >/dev/null 2>&1 && SUDOSH_TEST_MODE=1 timeout 8 $CMD_PREF
     echo -e "${GREEN}✅ PASS - vi can be executed${NC}"
     ((TESTS_PASSED++))
 else
-    # If we failed without sudo, try one retry with sudo -E to preserve env
-    if command -v sudo >/dev/null 2>&1; then
-        if (command -v timeout >/dev/null 2>&1 && SUDOSH_TEST_MODE=1 timeout 8 sudo -E ./bin/sudosh -c "$SEC_ED -c q /tmp/sudosh_test_file.txt" >/dev/null 2>"$STDERR_FILE") || \
-           (SUDOSH_TEST_MODE=1 sudo -E ./bin/sudosh -c "$SEC_ED -c q /tmp/sudosh_test_file.txt" >/dev/null 2>"$STDERR_FILE"); then
-            echo -e "${GREEN}✅ PASS - vi can be executed (via sudo -E)${NC}"
-            ((TESTS_PASSED++))
-        else
-            echo -e "${RED}❌ FAIL - vi execution blocked${NC}"
-            if [ -s "$STDERR_FILE" ]; then
-              echo "--- sudosh stderr ---"
-              sed 's/^/  /' "$STDERR_FILE"
-            fi
-            ((TESTS_FAILED++))
-            CRITICAL_FAILURE=1
-        fi
-    else
-        echo -e "${RED}❌ FAIL - vi execution blocked${NC}"
-        if [ -s "$STDERR_FILE" ]; then
-          echo "--- sudosh stderr ---"
-          sed 's/^/  /' "$STDERR_FILE"
-        fi
-        ((TESTS_FAILED++))
-        CRITICAL_FAILURE=1
+    # Do not fall back to sudo -E; sudo-compat mode intentionally rejects -E for safety
+    echo -e "${RED}❌ FAIL - vi execution blocked${NC}"
+    if [ -s "$STDERR_FILE" ]; then
+      echo "--- sudosh stderr ---"
+      sed 's/^/  /' "$STDERR_FILE"
     fi
+    ((TESTS_FAILED++))
+    CRITICAL_FAILURE=1
 fi
 rm -f "$STDERR_FILE"
 # Clean up test file

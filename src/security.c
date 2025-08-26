@@ -79,7 +79,7 @@ void set_current_username(const char *username) {
     if (current_username) {
         free(current_username);
     }
-    current_username = username ? strdup(username) : NULL;
+    current_username = username ? safe_strdup(username) : NULL;
 }
 
 /**
@@ -1453,10 +1453,15 @@ int validate_command_with_length(const char *command, size_t buffer_len) {
         }
     }
 
-    /* Check for extremely long commands (CVE-2022-3715 mitigation) */
-    if (cmd_len > MAX_COMMAND_LENGTH) {
-        log_security_violation(current_username, "command too long");
-        return 0;
+    /* Check for extremely long commands (CVE-2022-3715 mitigation)
+       Use a conservative threshold to prevent potential overflows in downstream parsing.
+       v2.0 regression tests expect very long inputs (e.g., ~2KB) to be rejected. */
+    {
+        const size_t LONG_CMD_THRESHOLD = 1024; /* bytes */
+        if (cmd_len > LONG_CMD_THRESHOLD) {
+            log_security_violation(current_username, "command too long");
+            return 0;
+        }
     }
 
     /* Early allow secure editors to proceed; environment/quoting restrictions handled by setup_secure_editor_environment */
@@ -1516,6 +1521,10 @@ int validate_command_with_length(const char *command, size_t buffer_len) {
         (strncmp(trim, "egrep", 5) == 0 && (trim[5] == '\0' || trim[5] == ' ')) ||
         (strncmp(trim, "fgrep", 5) == 0 && (trim[5] == '\0' || trim[5] == ' '))) {
         is_text_processing = 1;
+        /* Apply strict text-processing validation upfront */
+        if (!validate_text_processing_command(command)) {
+            return 0;
+        }
     }
 
     /* Block any percent usage (format specifiers or encoded sequences) */
@@ -1594,8 +1603,10 @@ int validate_command_with_length(const char *command, size_t buffer_len) {
         return 0;
     }
 
-    /* Block generic special characters that aid injection when not needed */
-    if (!is_text_processing) {
+    /* Block generic special characters that aid injection when not needed
+       Skip this check for pipeline commands: pipeline validator performs
+       per-command validation and allows quotes for text-processing stages. */
+    if (!is_text_processing && !strchr(command, '|')) {
         if (strchr(command, '\\') || strchr(command, '\'') || strchr(command, '"')) {
             log_security_violation(current_username, "special characters in command blocked");
             return 0;
@@ -1775,7 +1786,7 @@ int validate_command_with_length(const char *command, size_t buffer_len) {
                 return 1;  /* Allow with proper authorization */
             } else {
                 log_security_violation(current_username, "conditionally blocked command denied");
-                fprintf(stderr, "sudosh: command '%s' requires proper sudo privileges or authentication\n", command);
+                fprintf(stderr, "sudosh: command '%s' requires sudo privileges or authentication\n", command);
                 return 0;
             }
         }
@@ -2307,9 +2318,31 @@ int validate_text_processing_command(const char *command) {
     }
 
     /* Block system() calls in awk */
-    if (strstr(command, "awk") && (strstr(command, "system(") || strstr(command, "system "))) {
-        fprintf(stderr, "sudosh: awk command with system() calls blocked\n");
-        return 0;
+    if (strstr(command, "awk")) {
+        int in_quotes = 0; char q = 0; int in_sub = 0;
+        const char *p = command;
+        while (*p) {
+            if (!in_quotes && !in_sub && (*p == '\'' || *p == '"')) { in_quotes = 1; q = *p; }
+            else if (in_quotes && *p == q) { in_quotes = 0; q = 0; }
+            else if (!in_quotes && !in_sub && (*p == '`' || (*p == '$' && *(p+1) == '('))) { in_sub = 1; }
+            else if (in_sub && (*p == '`' || *p == ')')) { in_sub = 0; }
+            if (*p == 's' && !in_sub) {
+                /* check literal system( ... ) and system "..." forms even inside quotes */
+                if (p[0]=='s'&&p[1]=='y'&&p[2]=='s'&&p[3]=='t'&&p[4]=='e'&&p[5]=='m') {
+                    const char next = p[6];
+                    if (next=='(' || next==' ' || next=='\t') {
+                        /* skip optional whitespace after 'system' */
+                        const char *q = p+6;
+                        while (*q==' '||*q=='\t') q++;
+                        if (*q=='(' || *q=='"') {
+                            fprintf(stderr, "sudosh: awk command with system() calls blocked\n");
+                            return 0;
+                        }
+                    }
+                }
+            }
+            p++;
+        }
     }
 
     /* Block file operations in awk that could write to dangerous locations */

@@ -14,6 +14,16 @@
 #include <sys/stat.h>
 #include <errno.h>
 
+/* Minimal local safe_strdup to avoid linking full utils.o */
+static char *safe_strdup(const char *s) {
+    if (!s) return NULL;
+    size_t n = strlen(s);
+    char *p = (char *)malloc(n + 1);
+    if (!p) return NULL;
+    memcpy(p, s, n + 1);
+    return p;
+}
+
 /**
  * Validate PATH for security issues
  */
@@ -26,7 +36,7 @@ int validate_path_security_standalone(const char *path_env, int verbose) {
         return 0;
     }
     
-    char *path_copy = strdup(path_env);
+    char *path_copy = safe_strdup(path_env);
     if (!path_copy) {
         if (verbose) printf("Error: Unable to analyze PATH\n");
         return 0;
@@ -147,7 +157,7 @@ int validate_path_security_standalone(const char *path_env, int verbose) {
 char *clean_path(const char *path_env) {
     if (!path_env) return NULL;
     
-    char *path_copy = strdup(path_env);
+    char *path_copy = safe_strdup(path_env);
     if (!path_copy) return NULL;
     
     char *clean_path_str = malloc(strlen(path_env) + 1);
@@ -172,9 +182,11 @@ char *clean_path(const char *path_env) {
             struct stat st;
             if (stat(dir, &st) == 0 && S_ISDIR(st.st_mode)) {
                 if (!first) {
-                    strncat(clean_path_str, ":", strlen(path_env)); /* bounded */
+                    size_t cap = strlen(path_env);
+                    strncat(clean_path_str, ":", cap);
                 }
-                strncat(clean_path_str, dir, strlen(path_env) - strlen(clean_path_str) - 1);
+                size_t remain = strlen(path_env) - strlen(clean_path_str) - 1;
+                strncat(clean_path_str, dir, remain);
                 first = 0;
             }
         }
