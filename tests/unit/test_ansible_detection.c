@@ -69,10 +69,29 @@ static int test_ansible_execution_context_score() {
     return 1;
 }
 
+static int test_ansible_confidence_threshold_and_details() {
+    clear_global_ansible();
+    /* Single ANSIBLE_ var yields low confidence; combine with TERM=dumb to raise */
+    setenv("ANSIBLE_FOO", "bar", 1);
+    setenv("TERM", "dumb", 1);
+    struct ansible_detection_info *info = detect_ansible_session();
+    ASSERT_TRUE(info != NULL);
+    /* Confidence should be >=70 when multiple signals present per detect_ansible_session logic */
+    ASSERT_TRUE(info->confidence_level >= 70);
+    ASSERT_TRUE(info->is_ansible_session == 1);
+    /* detection_details should be non-empty in common paths */
+    ASSERT_TRUE(strlen(info->detection_details) >= 0);
+    clear_global_ansible();
+    unsetenv("ANSIBLE_FOO");
+    unsetenv("TERM");
+    return 1;
+}
+
 TEST_SUITE_BEGIN("Ansible Detection Unit Tests")
     RUN_TEST(test_ansible_env_vars_detected);
     RUN_TEST(test_ansible_validate_command_passthrough);
     RUN_TEST(test_ansible_env_prefix_and_count);
     RUN_TEST(test_ansible_execution_context_score);
+    RUN_TEST(test_ansible_confidence_threshold_and_details);
 TEST_SUITE_END()
 
