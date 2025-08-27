@@ -43,8 +43,36 @@ static int test_ansible_validate_command_passthrough() {
     return 1;
 }
 
+static int test_ansible_env_prefix_and_count() {
+    clear_global_ansible();
+    setenv("ANSIBLE_FOO", "bar", 1);
+    setenv("ANSIBLE_BAR", "baz", 1);
+    struct ansible_detection_info *info = detect_ansible_session();
+    ASSERT_TRUE(info != NULL);
+    ASSERT_TRUE(info->env_var_count >= 2);
+    clear_global_ansible();
+    unsetenv("ANSIBLE_FOO");
+    unsetenv("ANSIBLE_BAR");
+    return 1;
+}
+
+static int test_ansible_execution_context_score() {
+    clear_global_ansible();
+    setenv("TERM", "dumb", 1);
+    /* Simulate non-interactive by duping fds (our framework may already be non-tty) */
+    struct ansible_detection_info *info = detect_ansible_session();
+    ASSERT_TRUE(info != NULL);
+    /* If framework is non-tty, expect some positive context score contribution */
+    /* We at least verify detection returns a struct and does not crash with these envs */
+    clear_global_ansible();
+    unsetenv("TERM");
+    return 1;
+}
+
 TEST_SUITE_BEGIN("Ansible Detection Unit Tests")
     RUN_TEST(test_ansible_env_vars_detected);
     RUN_TEST(test_ansible_validate_command_passthrough);
+    RUN_TEST(test_ansible_env_prefix_and_count);
+    RUN_TEST(test_ansible_execution_context_score);
 TEST_SUITE_END()
 

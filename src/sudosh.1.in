@@ -358,6 +358,22 @@ sudosh:/home/user# cd /var/log
 sudosh:/var/log# pwd
 sudosh:/var/log# commands
 sudosh:/var/log# rules
+
+.SS PATH Security Validator
+The standalone \fBpath-validator\fR tool validates and cleans PATH for security issues.
+.IP \(bu 2
+\fBUsage\fR: \fBpath-validator [OPTIONS]\fR; use \fB-h\fR for help
+.IP \(bu 2
+\fBExit codes\fR: 0=secure, 1=issues found, 2=error
+.IP \(bu 2
+\fBExamples\fR:
+.RS
+.IP \(bu 2
+\fBpath-validator -q -p "/bin:/usr/bin"\fR (quiet validation)
+.IP \(bu 2
+\fBpath-validator -c -p ".:/bin::/usr/bin"\fR (print cleaned PATH)
+.RE
+
 sudosh:/var/log# help
 sudosh:/var/log# exit
 .fi
