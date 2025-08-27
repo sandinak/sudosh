@@ -27,9 +27,9 @@ declare -a MATRIX=(
 run_case() {
   local compiler="$1"; local mode="$2"; local sanitize="$3"
   echo "===== ubuntu-22.04 • ${compiler} • ${mode} • ${sanitize:-none} ====="
-  local build_cmd="set -e; make clean; if [ -n '${sanitize}' ]; then make tests WERROR=1 SANITIZE=${sanitize}; else make tests WERROR=1; fi"
+  local build_cmd="set -e; make clean; if [ -n '${sanitize}' ]; then make -j2 tests WERROR=1 SANITIZE=${sanitize} && make -j2 test WERROR=1 SANITIZE=${sanitize}; else make -j2 tests WERROR=1 && make -j2 test WERROR=1; fi"
   if [ "${compiler}" = "clang" ]; then
-    build_cmd="set -e; export CC=clang; make clean; if [ -n '${sanitize}' ]; then make tests WERROR=1 SANITIZE=${sanitize}; else make tests WERROR=1; fi"
+    build_cmd="set -e; export CC=clang; make clean; if [ -n '${sanitize}' ]; then make -j2 tests WERROR=1 SANITIZE=${sanitize} && make -j2 test WERROR=1 SANITIZE=${sanitize}; else make -j2 tests WERROR=1 && make -j2 test WERROR=1; fi"
   fi
   docker run --rm -t \
     -e CC="${compiler}" \

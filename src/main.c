@@ -546,6 +546,24 @@ int main(int argc, char *argv[]) {
     const char *invoked_name = slash ? slash + 1 : invoked;
     int sudo_compat_mode = (invoked_name && strcmp(invoked_name, "sudo") == 0);
     sudo_compat_mode_flag = sudo_compat_mode;
+    /* If invoked as 'sudo' but we lack elevation (no setuid root on sudosh),
+     * fall back to the system's real sudo to avoid breaking 'sudo make install'.
+     * We set an env flag to avoid infinite recursion if /usr/bin/sudo points back here.
+     */
+    if (sudo_compat_mode && getuid() != 0 && geteuid() == getuid()) {
+        const char *no_fb = getenv("SUDOSH_NO_FALLBACK");
+        if (!no_fb || strcmp(no_fb, "1") != 0) {
+            const char *candidates[] = { "/usr/bin/sudo", "/bin/sudo", NULL };
+            setenv("SUDOSH_NO_FALLBACK", "1", 1);
+            for (int ci = 0; candidates[ci]; ++ci) {
+                if (access(candidates[ci], X_OK) == 0) {
+                    execv(candidates[ci], argv);
+                }
+            }
+            /* If execv returns (no sudo found), continue with sudosh behavior */
+        }
+    }
+
     /* Early AI detection and blocking - must happen before any other processing */
     struct ai_detection_info *ai_info = detect_ai_session();
     if (ai_info && should_block_ai_session(ai_info)) {
