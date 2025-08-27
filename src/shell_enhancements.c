@@ -539,6 +539,7 @@ int load_aliases_from_shell_rc_files(void) {
     };
 
     int loaded_any = 0;
+    int found_valid = 0; /* valid alias lines present in rc files, even if duplicates */
 
     for (int i = 0; rc_files[i]; i++) {
         char path[PATH_MAX];
@@ -632,11 +633,13 @@ int load_aliases_from_shell_rc_files(void) {
                 }
                 /* Respect first-seen precedence: if alias already exists, skip override */
                 if (get_alias_value(name) != NULL) {
+                    found_valid = 1; /* still counts as valid alias content */
                     continue;
                 }
                 /* Add alias */
                 if (add_alias(name, val)) {
                     loaded_any = 1;
+                    found_valid = 1;
                 }
             }
         }
@@ -644,7 +647,7 @@ int load_aliases_from_shell_rc_files(void) {
     }
 
     free(username);
-    return loaded_any ? 1 : 0;
+    return (loaded_any || found_valid) ? 1 : 0;
 }
 
 /**
