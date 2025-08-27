@@ -9,6 +9,9 @@
 CC = gcc
 CFLAGS = -Wall -Wextra -std=c99 -O2
 
+# Detect clang vs gcc for coverage handling
+IS_CLANG := $(shell $(CC) --version 2>/dev/null | grep -qi clang && echo yes || echo no)
+
 # Optional instrumentation toggles (enable via: make WERROR=1 SANITIZE=address COVERAGE=1)
 ifdef WERROR
 CFLAGS += -Werror
@@ -20,8 +23,13 @@ LDFLAGS += -fsanitize=$(SANITIZE)
 endif
 
 ifdef COVERAGE
+ifeq ($(IS_CLANG),yes)
+CFLAGS += -g -fprofile-instr-generate -fcoverage-mapping
+LDFLAGS += -fprofile-instr-generate -fcoverage-mapping
+else
 CFLAGS += -g --coverage
 LDFLAGS += --coverage
+endif
 endif
 PREFIX = /usr/local
 BINDIR_INSTALL = $(PREFIX)/bin
@@ -150,6 +158,7 @@ test-pipeline-smoke: $(PIPELINE_REGRESSION_TEST)
 .PHONY: path-validator
 path-validator: $(BINDIR)/path-validator
 
+
 # Mandatory regression test for secure editors
 test-secure-editors: $(TARGET)
 	@echo "Running mandatory secure editor regression test..."
@@ -209,7 +218,7 @@ tests: $(TARGET) $(LIB_OBJECTS) | $(OBJDIR)/$(TESTDIR)
 tests: $(TEST_TARGETS)
 
 # Run all tests
-test: $(LIB_OBJECTS) tests
+test: $(LIB_OBJECTS) tests $(BINDIR)/path-validator
 	@mkdir -p obj/tests
 	@echo "Running sudosh test suite (SUDOSH_TEST_MODE=1)..."
 	@for test in $(TEST_TARGETS); do \
@@ -359,10 +368,15 @@ rebuild: clean all
 debug: CFLAGS += -g -DDEBUG
 debug: $(TARGET)
 
-# Coverage build (requires gcov)
+# Coverage build (cross-platform GCC/Clang)
 coverage: clean
+ifeq ($(IS_CLANG),yes)
+coverage: CFLAGS += -g -fprofile-instr-generate -fcoverage-mapping
+coverage: LDFLAGS += -fprofile-instr-generate -fcoverage-mapping
+else
 coverage: CFLAGS += -g --coverage
 coverage: LDFLAGS += --coverage
+endif
 coverage: $(TARGET) tests
 
 # Run coverage analysis
@@ -371,9 +385,27 @@ coverage-report: coverage
 	@for test in $(TEST_TARGETS); do \
 		SUDOSH_TEST_MODE=1 $$test || exit 1; \
 	done
-	@echo "Generating coverage report..."
+ifeq ($(IS_CLANG),yes)
+	@echo "Generating LLVM coverage report..."
+	@rm -f default.profraw default.profdata
+	@LLVM_PROFDATA=$$(command -v llvm-profdata || true); \
+	LLVM_COV=$$(command -v llvm-cov || true); \
+	if [ -z "$$LLVM_PROFDATA" ] || [ -z "$$LLVM_COV" ]; then \
+		echo "llvm-profdata/llvm-cov not found in PATH"; \
+		echo "Skipping coverage report generation (objects still instrumented)"; \
+	else \
+		LLVM_PROFILE_FILE=default.profraw; export LLVM_PROFILE_FILE; \
+		for test in $(TEST_TARGETS); do \
+			SUDOSH_TEST_MODE=1 $$test >/dev/null 2>&1 || true; \
+		done; \
+		"$$LLVM_PROFDATA" merge -sparse default.profraw -o default.profdata; \
+		"$$LLVM_COV" report $(TARGET) $(LIB_OBJECTS) -instr-profile=default.profdata || true; \
+	fi
+else
+	@echo "Generating gcov report..."
 	gcov -o $(OBJDIR) $(addprefix $(SRCDIR)/,$(SOURCES))
 	@echo "Coverage files generated (*.gcov)"
+endif
 
 # Static analysis with cppcheck (if available)
 static-analysis:
