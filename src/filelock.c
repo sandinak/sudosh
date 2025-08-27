@@ -510,8 +510,12 @@ int cleanup_stale_locks(void) {
 
         /* Check if it's a lock file */
         if (strstr(entry->d_name, LOCK_FILE_EXTENSION)) {
-            char lock_file_path[MAX_LOCK_PATH_LENGTH];
-            snprintf(lock_file_path, sizeof(lock_file_path), "%s/%s", lock_dir_runtime, entry->d_name);
+            size_t path_len = strlen(lock_dir_runtime) + strlen(entry->d_name) + 2; /* '/' + NUL */
+            char *lock_file_path = malloc(path_len);
+            if (!lock_file_path) {
+                continue;
+            }
+            snprintf(lock_file_path, path_len, "%s/%s", lock_dir_runtime, entry->d_name);
 
             struct file_lock_info *lock_info = read_lock_metadata(lock_file_path);
             if (lock_info) {
@@ -527,6 +531,7 @@ int cleanup_stale_locks(void) {
                 }
                 free_file_lock_info(lock_info);
             }
+            free(lock_file_path);
         }
     }
 

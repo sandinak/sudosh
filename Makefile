@@ -185,6 +185,7 @@ $(TARGET): $(OBJECTS) | $(BINDIR)
 
 # Compile source files
 $(OBJDIR)/%.o: $(SRCDIR)/%.c | $(OBJDIR)
+	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # Compile test files (handle subdirectories) and include test headers
