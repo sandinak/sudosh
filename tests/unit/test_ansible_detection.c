@@ -79,8 +79,9 @@ static int test_ansible_confidence_threshold_and_details() {
     /* Confidence should be >=70 when multiple signals present per detect_ansible_session logic */
     ASSERT_TRUE(info->confidence_level >= 70);
     ASSERT_TRUE(info->is_ansible_session == 1);
-    /* detection_details should be non-empty in common paths */
-    ASSERT_TRUE(strlen(info->detection_details) >= 0);
+    /* Sanity: env var prefix should be counted and confidence bounded */
+    ASSERT_TRUE(info->env_var_count >= 1);
+    ASSERT_TRUE(info->confidence_level <= 100);
     clear_global_ansible();
     unsetenv("ANSIBLE_FOO");
     unsetenv("TERM");

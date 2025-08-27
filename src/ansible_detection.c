@@ -167,10 +167,10 @@ int check_ansible_environment_variables(struct ansible_detection_info *info) {
             *equals = '\0';  /* Null-terminate the variable name */
 
             if (is_ansible_environment_variable(var_copy)) {
-                /* Store the variable name */
-                strncpy(info->detected_env_vars[info->env_var_count],
-                       var_copy, 63);
-                info->detected_env_vars[info->env_var_count][63] = '\0';
+                /* Store the variable name safely */
+                snprintf(info->detected_env_vars[info->env_var_count],
+                         sizeof(info->detected_env_vars[info->env_var_count]),
+                         "%s", var_copy);
                 info->env_var_count++;
                 ansible_vars_found++;
             }
@@ -208,6 +208,7 @@ static pid_t get_process_parent_pid(pid_t pid) {
 
         if (fscanf(stat_file, "%d %s %c %d", &proc_pid, comm, &state, &ppid) == 4) {
             /* Successfully read parent PID */
+            (void)proc_pid; (void)comm; (void)state;
         }
         fclose(stat_file);
     }
@@ -436,11 +437,10 @@ int check_ansible_parent_process(struct ansible_detection_info *info) {
     /* Get parent process name */
     char *parent_name = get_parent_process_name(parent_pid);
     if (parent_name) {
-        strncpy(info->parent_process_name, parent_name, MAX_PROCESS_NAME_LENGTH - 1);
-        info->parent_process_name[MAX_PROCESS_NAME_LENGTH - 1] = '\0';
+        snprintf(info->parent_process_name, sizeof(info->parent_process_name), "%s", parent_name);
         free(parent_name);
     } else {
-        snprintf(info->parent_process_name, MAX_PROCESS_NAME_LENGTH, "%s", "unknown");
+        snprintf(info->parent_process_name, sizeof(info->parent_process_name), "%s", "unknown");
     }
 
     /* Walk up the process tree looking for Ansible */

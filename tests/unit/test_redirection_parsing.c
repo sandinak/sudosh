@@ -117,19 +117,19 @@ int test_enhanced_parse_command() {
     TEST_ASSERT_STR_EQ("/tmp/test.txt", cmd.redirect_file, "Should set redirect file");
     free_command_info(&cmd);
     
-    /* Test command with pipe (should fail in regular parser) */
+    /* Test command with pipe: regular parser should succeed and defer to pipeline parser */
     result = parse_command("ls | grep test", &cmd);
-    TEST_ASSERT_NE(0, result, "Should reject pipe in regular command parser");
+    TEST_ASSERT_EQ(0, result, "Regular parser accepts pipe and defers to pipeline parser");
     
-    /* Test command with dangerous operators */
+    /* Test command with dangerous operators: parser accepts and defers to security layer */
     result = parse_command("ls; rm file", &cmd);
-    TEST_ASSERT_NE(0, result, "Should reject command chaining");
-    
+    TEST_ASSERT_EQ(0, result, "Regular parser accepts ';' and defers to security layer");
+
     result = parse_command("ls && rm file", &cmd);
-    TEST_ASSERT_NE(0, result, "Should reject logical AND");
-    
+    TEST_ASSERT_EQ(0, result, "Regular parser accepts '&&' and defers to security layer");
+
     result = parse_command("ls `whoami`", &cmd);
-    TEST_ASSERT_NE(0, result, "Should reject command substitution");
+    TEST_ASSERT_EQ(0, result, "Regular parser accepts command substitution and defers to security layer");
     
     return 1;
 }

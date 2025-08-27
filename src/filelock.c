@@ -16,6 +16,8 @@
 
 /* Global variable to track file locking system status */
 static int file_locking_available = 0;
+/* Runtime-selected lock directory (defaults to LOCK_DIR, may change in tests) */
+static char lock_dir_runtime[MAX_LOCK_PATH_LENGTH] = LOCK_DIR;
 
 /**
  * Initialize file locking system
@@ -28,16 +30,19 @@ int init_file_locking(void) {
     /* Check if we're running in test mode */
     char *test_env = getenv("SUDOSH_TEST_MODE");
     if (test_env && strcmp(test_env, "1") == 0) {
-        /* Test mode: use temporary directory */
+        /* Test mode: use temporary directory; do not require root */
         snprintf(test_lock_dir, sizeof(test_lock_dir), "/tmp/sudosh_test_locks_%d", getpid());
         lock_dir = test_lock_dir;
     } else {
         lock_dir = LOCK_DIR;
     }
 
+    /* Persist runtime lock dir for subsequent helpers */
+    snprintf(lock_dir_runtime, sizeof(lock_dir_runtime), "%s", lock_dir);
+
     /* Create lock directory if it doesn't exist */
-    if (stat(lock_dir, &st) != 0) {
-        if (mkdir(lock_dir, 0755) != 0) {
+    if (stat(lock_dir_runtime, &st) != 0) {
+        if (mkdir(lock_dir_runtime, 0755) != 0) {
             if (errno != EEXIST) {
                 log_error("Failed to create lock directory");
                 return -1;
@@ -48,11 +53,8 @@ int init_file_locking(void) {
         return -1;
     }
 
-    /* Ensure proper permissions on lock directory */
-    if (chmod(lock_dir, 0755) != 0) {
-        log_error("Failed to set permissions on lock directory");
-        return -1;
-    }
+    /* Ensure proper permissions on lock directory (best-effort) */
+    (void)chmod(lock_dir_runtime, 0755);
 
     /* Clean up any stale locks from previous runs */
     cleanup_stale_locks();
@@ -139,11 +141,11 @@ static char *generate_lock_file_path(const char *canonical_path) {
     }
     safe_name[path_len] = '\0';
 
-    /* Create full lock file path */
-    size_t lock_path_len = strlen(LOCK_DIR) + strlen(safe_name) + strlen(LOCK_FILE_EXTENSION) + 2;
+    /* Create full lock file path using runtime-selected dir */
+    size_t lock_path_len = strlen(lock_dir_runtime) + strlen(safe_name) + strlen(LOCK_FILE_EXTENSION) + 2;
     char *lock_file_path = malloc(lock_path_len);
     if (lock_file_path) {
-        snprintf(lock_file_path, lock_path_len, "%s/%s%s", LOCK_DIR, safe_name, LOCK_FILE_EXTENSION);
+        snprintf(lock_file_path, lock_path_len, "%s/%s%s", lock_dir_runtime, safe_name, LOCK_FILE_EXTENSION);
     }
 
     free(safe_name);
@@ -492,7 +494,7 @@ struct file_lock_info *check_file_lock(const char *file_path) {
  * Clean up stale locks
  */
 int cleanup_stale_locks(void) {
-    DIR *lock_dir = opendir(LOCK_DIR);
+    DIR *lock_dir = opendir(lock_dir_runtime);
     if (!lock_dir) {
         return -1;
     }
@@ -509,7 +511,7 @@ int cleanup_stale_locks(void) {
         /* Check if it's a lock file */
         if (strstr(entry->d_name, LOCK_FILE_EXTENSION)) {
             char lock_file_path[MAX_LOCK_PATH_LENGTH];
-            snprintf(lock_file_path, sizeof(lock_file_path), "%s/%s", LOCK_DIR, entry->d_name);
+            snprintf(lock_file_path, sizeof(lock_file_path), "%s/%s", lock_dir_runtime, entry->d_name);
 
             struct file_lock_info *lock_info = read_lock_metadata(lock_file_path);
             if (lock_info) {

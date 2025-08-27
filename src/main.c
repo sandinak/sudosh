@@ -186,8 +186,9 @@ int main_loop(void) {
             global_ansible_info->is_ansible_session = 1;
             global_ansible_info->method = ANSIBLE_DETECTION_FORCED;
             global_ansible_info->confidence_level = 100;
-            strncpy(global_ansible_info->detection_details, "forced via command line",
-                   sizeof(global_ansible_info->detection_details) - 1);
+            snprintf(global_ansible_info->detection_details,
+                     sizeof(global_ansible_info->detection_details),
+                     "%s", "forced via command line");
         }
 
         if (global_ansible_info) {

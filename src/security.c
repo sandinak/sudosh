@@ -2012,7 +2012,17 @@ int validate_command_for_pipeline(const char *command) {
  * Validate that redirection is safe (only to allowed directories)
  */
 int validate_safe_redirection(const char *command) {
+    return validate_safe_redirection_with_length(command, command ? strlen(command) + 1 : 0);
+}
+
+int validate_safe_redirection_with_length(const char *command, size_t buffer_len) {
     if (!command) {
+        return 0;
+    }
+
+    /* If buffer_len indicates embedded null(s) beyond visible string, block */
+    size_t visible_len = strlen(command);
+    if (buffer_len > visible_len + 1) {
         return 0;
     }
 
@@ -2075,6 +2085,27 @@ int validate_safe_redirection(const char *command) {
         end++;
     }
     *end = '\0';
+
+    /* Scan the raw buffer window for control or non-ASCII to catch embedded null/poison */
+    size_t cmd_len = strnlen(command, buffer_len);
+    size_t offset = (size_t)(target - cmd_copy);
+    if (offset < cmd_len) {
+        /* target within bounds; scan from original command buffer at same offset */
+        const unsigned char *raw = (const unsigned char *)command + offset;
+        size_t limit = cmd_len - offset; /* up to reported end */
+        for (size_t i = 0; i < limit; i++) {
+            unsigned char c = raw[i];
+            if (c == '\0') { /* embedded null before logical end */
+                free(cmd_copy);
+                return 0;
+            }
+            if (c < 0x20 || c >= 0x80) {
+                free(cmd_copy);
+                return 0; /* control or non-ASCII in target segment */
+            }
+            if (c == ' ' || c == '\t' || c == '\n') break; /* end of token */
+        }
+    }
 
     /* Additional guardrail: block known unsafe read-sources with redirection */
     if (strstr(cmd_copy, "/etc/shadow") || strstr(cmd_copy, "/etc/sudoers")) {

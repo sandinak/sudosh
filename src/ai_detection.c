@@ -209,9 +209,9 @@ int detect_augment_session(struct ai_detection_info *info) {
             *equals = '\0';
             
             if (is_augment_environment_variable(var_copy)) {
-                strncpy(info->detected_env_vars[info->env_var_count],
-                       var_copy, 63);
-                info->detected_env_vars[info->env_var_count][63] = '\0';
+                snprintf(info->detected_env_vars[info->env_var_count],
+                         sizeof(info->detected_env_vars[info->env_var_count]),
+                         "%s", var_copy);
                 info->env_var_count++;
                 augment_vars_found++;
             }
@@ -255,9 +255,9 @@ int detect_copilot_session(struct ai_detection_info *info) {
             *equals = '\0';
             
             if (is_copilot_environment_variable(var_copy)) {
-                strncpy(info->detected_env_vars[info->env_var_count],
-                       var_copy, 63);
-                info->detected_env_vars[info->env_var_count][63] = '\0';
+                snprintf(info->detected_env_vars[info->env_var_count],
+                         sizeof(info->detected_env_vars[info->env_var_count]),
+                         "%s", var_copy);
                 info->env_var_count++;
                 copilot_vars_found++;
             }
@@ -301,9 +301,9 @@ int detect_chatgpt_session(struct ai_detection_info *info) {
             *equals = '\0';
             
             if (is_chatgpt_environment_variable(var_copy)) {
-                strncpy(info->detected_env_vars[info->env_var_count],
-                       var_copy, 63);
-                info->detected_env_vars[info->env_var_count][63] = '\0';
+                snprintf(info->detected_env_vars[info->env_var_count],
+                         sizeof(info->detected_env_vars[info->env_var_count]),
+                         "%s", var_copy);
                 info->env_var_count++;
                 chatgpt_vars_found++;
             }
