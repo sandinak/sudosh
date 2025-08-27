@@ -630,6 +630,10 @@ int load_aliases_from_shell_rc_files(void) {
                 if (!validate_alias_expansion_safety(name, val)) {
                     continue;
                 }
+                /* Respect first-seen precedence: if alias already exists, skip override */
+                if (get_alias_value(name) != NULL) {
+                    continue;
+                }
                 /* Add alias */
                 if (add_alias(name, val)) {
                     loaded_any = 1;
