@@ -136,10 +136,16 @@ int test_null_byte_injection_prevention() {
 
     /* Test null byte injection in redirection targets */
     char null_target[] = "/tmp/safe\0/etc/passwd";
-    /* Use validate_safe_redirection so the parser sees the entire buffer */
+
+    /* Build a command buffer that preserves the embedded null and trailing bytes */
     char cmd_with_redirect[64];
-    snprintf(cmd_with_redirect, sizeof(cmd_with_redirect), "echo x > %s", null_target);
-    TEST_ASSERT_EQ(0, validate_safe_redirection(cmd_with_redirect),
+    const char prefix[] = "echo x > ";
+    size_t pos = sizeof(prefix) - 1; /* do not copy the terminating null */
+    memcpy(cmd_with_redirect, prefix, pos);
+    memcpy(cmd_with_redirect + pos, null_target, sizeof(null_target));
+    size_t total_len = pos + sizeof(null_target); /* includes embedded null and tail */
+
+    TEST_ASSERT_EQ(0, validate_safe_redirection_with_length(cmd_with_redirect, total_len),
                    "Null byte injection in target should be handled safely");
 
     return 1;

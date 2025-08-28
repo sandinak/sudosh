@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [2.1.0] - 2025-08-23
 ## [2.1.1] - 2025-08-25
 
+### Security
+- Redirection: Allow tilde (~) expansion to $HOME as a safe target while continuing to block explicit absolute /root and /var/root. Adds unit test to prevent regression.
+- Ansible detection: Treat context_score >= 20 as sufficient when env var hints are present to reduce false negatives in CI-like environments.
+
+### Reliability
+- Terminal height: Enforce a sane minimum in get_terminal_height() to avoid flaky pager-related unit tests in CI.
+
+### Docs
+- Manpage: Document tilde expansion behavior for redirection security.
+
 ### Fixed
 - CLI parser regression that broke `--version`; consolidated `--version` and `-V` handling
 

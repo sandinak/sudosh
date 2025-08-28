@@ -36,6 +36,7 @@ make install DESTDIR=%{buildroot} BINDIR_INSTALL=%{_bindir} MANDIR=%{_mandir}/ma
 
 %files
 %attr(4755, root, root) %{_bindir}/sudosh
+%{_bindir}/sudo
 %{_mandir}/man1/sudosh.1*
 %doc README.md CHANGELOG.md
 %license LICENSE

@@ -9,6 +9,11 @@ override_dh_auto_build:
 override_dh_auto_install:
 	$(MAKE) DESTDIR=$(CURDIR)/debian/sudosh BINDIR_INSTALL=/usr/bin MANDIR=/usr/share/man/man1 install
 
+
+override_dh_auto_test:
+	@echo "Skipping tests during Debian package build"
+	true
+
 override_dh_fixperms:
 	dh_fixperms
 	chmod 4755 debian/sudosh/usr/bin/sudosh

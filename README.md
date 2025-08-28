@@ -158,6 +158,26 @@ sudo dpkg -i dist/sudosh_*.deb || sudo apt-get -f install
 ```
 
 RPM (RHEL/CentOS/Fedora/openSUSE):
+
+## PATH Security Validator (Standalone)
+
+A standalone helper binary is built alongside sudosh to validate and clean PATH securely.
+
+Examples:
+
+```bash
+# Quiet validation (exit code only): 0=secure, 1=issues
+./bin/path-validator -q -p "/bin:/usr/bin"
+
+# Detect insecure PATH (current dir is unsafe)
+./bin/path-validator -q -p ".:/usr/bin"   # exits 1
+
+# Print cleaned PATH from an unsafe input
+./bin/path-validator -c -p ".:/bin::/usr/bin"
+```
+
+Use --help to see full options.
+
 ```bash
 # Install build tools if you want to build yourself (optional)
 sudo dnf install -y make gcc rpm-build pam-devel

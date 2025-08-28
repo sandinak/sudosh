@@ -2,6 +2,19 @@
 
 This document contains the complete release history for Sudosh with detailed release notes for each version.
 
+## Version 2.1.2 - August 28, 2025
+
+### Security & Reliability
+- Allow tilde (~) redirection to $HOME while continuing to block explicit absolute /root and /var/root
+- Enforce a sane minimum terminal height to reduce CI flakiness
+- Fine-tune Ansible detection threshold to reduce false negatives in constrained environments
+
+### Tests & Docs
+- Add unit test for tilde expansion
+- Update manpage and changelog
+
+---
+
 ## Version 1.9.3 (Latest) - July 23, 2025
 
 ### 🚨 Critical Bugfix Release

@@ -9,6 +9,9 @@
 CC = gcc
 CFLAGS = -Wall -Wextra -std=c99 -O2
 
+# Detect clang vs gcc for coverage handling
+IS_CLANG := $(shell $(CC) --version 2>/dev/null | grep -qi clang && echo yes || echo no)
+
 # Optional instrumentation toggles (enable via: make WERROR=1 SANITIZE=address COVERAGE=1)
 ifdef WERROR
 CFLAGS += -Werror
@@ -20,15 +23,20 @@ LDFLAGS += -fsanitize=$(SANITIZE)
 endif
 
 ifdef COVERAGE
+ifeq ($(IS_CLANG),yes)
+CFLAGS += -g -fprofile-instr-generate -fcoverage-mapping
+LDFLAGS += -fprofile-instr-generate -fcoverage-mapping
+else
 CFLAGS += -g --coverage
 LDFLAGS += --coverage
+endif
 endif
 PREFIX = /usr/local
 BINDIR_INSTALL = $(PREFIX)/bin
 MANDIR = $(PREFIX)/share/man/man1
 # Build-time version (override with: make VERSION=x.y.z)
 # Fallback defaults to latest release when no tags are present
-VERSION ?= $(shell git describe --tags --always 2>/dev/null || echo 2.1.0)
+VERSION ?= 2.1.2
 CFLAGS += -DSUDOSH_VERSION=\"$(VERSION)\"
 # Provide build-info via environment variables passed by CI or set here
 export SUDOSH_BUILD_GIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
@@ -37,6 +45,16 @@ export SUDOSH_BUILD_USER ?= $(shell whoami)
 
 # Detect OS and set appropriate flags
 UNAME_S := $(shell uname -s)
+
+# Always use the system sudo (avoid repo-installed /usr/local/bin/sudo symlink)
+# Prefer /usr/bin/sudo, fallback to /bin/sudo, else plain 'sudo' if neither exists
+ifeq ($(wildcard /usr/bin/sudo),/usr/bin/sudo)
+SYSTEM_SUDO := /usr/bin/sudo
+else ifeq ($(wildcard /bin/sudo),/bin/sudo)
+SYSTEM_SUDO := /bin/sudo
+else
+SYSTEM_SUDO := sudo
+endif
 
 # Check for PAM availability
 PAM_AVAILABLE := $(shell echo '\#include <security/pam_appl.h>' | $(CC) -E - >/dev/null 2>&1 && echo yes || echo no)
@@ -150,6 +168,7 @@ test-pipeline-smoke: $(PIPELINE_REGRESSION_TEST)
 .PHONY: path-validator
 path-validator: $(BINDIR)/path-validator
 
+
 # Mandatory regression test for secure editors
 test-secure-editors: $(TARGET)
 	@echo "Running mandatory secure editor regression test..."
@@ -176,6 +195,7 @@ $(TARGET): $(OBJECTS) | $(BINDIR)
 
 # Compile source files
 $(OBJDIR)/%.o: $(SRCDIR)/%.c | $(OBJDIR)
+	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # Compile test files (handle subdirectories) and include test headers
@@ -209,7 +229,7 @@ tests: $(TARGET) $(LIB_OBJECTS) | $(OBJDIR)/$(TESTDIR)
 tests: $(TEST_TARGETS)
 
 # Run all tests
-test: $(LIB_OBJECTS) tests
+test: $(LIB_OBJECTS) tests $(BINDIR)/path-validator
 	@mkdir -p obj/tests
 	@echo "Running sudosh test suite (SUDOSH_TEST_MODE=1)..."
 	@for test in $(TEST_TARGETS); do \
@@ -359,10 +379,15 @@ rebuild: clean all
 debug: CFLAGS += -g -DDEBUG
 debug: $(TARGET)
 
-# Coverage build (requires gcov)
+# Coverage build (cross-platform GCC/Clang)
 coverage: clean
+ifeq ($(IS_CLANG),yes)
+coverage: CFLAGS += -g -fprofile-instr-generate -fcoverage-mapping
+coverage: LDFLAGS += -fprofile-instr-generate -fcoverage-mapping
+else
 coverage: CFLAGS += -g --coverage
 coverage: LDFLAGS += --coverage
+endif
 coverage: $(TARGET) tests
 
 # Run coverage analysis
@@ -371,9 +396,27 @@ coverage-report: coverage
 	@for test in $(TEST_TARGETS); do \
 		SUDOSH_TEST_MODE=1 $$test || exit 1; \
 	done
-	@echo "Generating coverage report..."
+ifeq ($(IS_CLANG),yes)
+	@echo "Generating LLVM coverage report..."
+	@rm -f default.profraw default.profdata
+	@LLVM_PROFDATA=$$(command -v llvm-profdata || true); \
+	LLVM_COV=$$(command -v llvm-cov || true); \
+	if [ -z "$$LLVM_PROFDATA" ] || [ -z "$$LLVM_COV" ]; then \
+		echo "llvm-profdata/llvm-cov not found in PATH"; \
+		echo "Skipping coverage report generation (objects still instrumented)"; \
+	else \
+		LLVM_PROFILE_FILE=default.profraw; export LLVM_PROFILE_FILE; \
+		for test in $(TEST_TARGETS); do \
+			SUDOSH_TEST_MODE=1 $$test >/dev/null 2>&1 || true; \
+		done; \
+		"$$LLVM_PROFDATA" merge -sparse default.profraw -o default.profdata; \
+		"$$LLVM_COV" report $(TARGET) $(LIB_OBJECTS) -instr-profile=default.profdata || true; \
+	fi
+else
+	@echo "Generating gcov report..."
 	gcov -o $(OBJDIR) $(addprefix $(SRCDIR)/,$(SOURCES))
 	@echo "Coverage files generated (*.gcov)"
+endif
 
 # Static analysis with cppcheck (if available)
 static-analysis:
@@ -393,11 +436,11 @@ test-suid: $(TARGET)
 	fi
 	@echo "Setting root ownership and suid bit on $(TARGET)..."
 ifeq ($(UNAME_S),Darwin)
-	sudo chown root:wheel $(TARGET)
+	$(SYSTEM_SUDO) chown root:wheel $(TARGET)
 else
-	sudo chown root:root $(TARGET)
+	$(SYSTEM_SUDO) chown root:root $(TARGET)
 endif
-	sudo chmod 4755 $(TARGET)
+	$(SYSTEM_SUDO) chmod 4755 $(TARGET)
 	@echo "Successfully configured $(TARGET) with:"
 ifeq ($(UNAME_S),Darwin)
 	@echo "  - Owner: root:wheel"
@@ -418,8 +461,8 @@ clean-suid: $(TARGET)
 		exit 0; \
 	fi
 	@if [ -u "$(TARGET)" ]; then \
-		sudo chmod 755 $(TARGET); \
-		sudo chown $(USER):$(shell id -gn) $(TARGET); \
+		$(SYSTEM_SUDO) chmod 755 $(TARGET); \
+		$(SYSTEM_SUDO) chown $(USER):$(shell id -gn) $(TARGET); \
 		echo "Suid privileges removed and ownership reset to $(USER):$(shell id -gn)"; \
 	else \
 		echo "$(TARGET) does not have suid privileges set."; \

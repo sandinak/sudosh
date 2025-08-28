@@ -486,6 +486,7 @@ int validate_command_with_length(const char *command, size_t buffer_len);
 int validate_secure_pipeline(const char *command);
 int validate_command_for_pipeline(const char *command);
 int validate_safe_redirection(const char *command);
+int validate_safe_redirection_with_length(const char *command, size_t buffer_len);
 int is_safe_redirection_target(const char *target);
 const char *get_redirection_error_message(const char *target);
 int is_text_processing_command(const char *cmd_name);

@@ -620,17 +620,13 @@ int is_sudoedit_command(const char *command) {
 int is_shell_command(const char *command) {
     if (!command) return 0;
 
-    /* List of shells and shell-like commands to block */
+    /* List of traditional shells to block/redirect */
     const char *shells[] = {
         "sh", "bash", "zsh", "csh", "tcsh", "ksh", "fish", "dash",
         "/bin/sh", "/bin/bash", "/bin/zsh", "/bin/csh", "/bin/tcsh",
         "/bin/ksh", "/bin/fish", "/bin/dash", "/usr/bin/bash",
         "/usr/bin/zsh", "/usr/bin/fish", "/usr/local/bin/bash",
         "/usr/local/bin/zsh", "/usr/local/bin/fish",
-        "python", "python3", "perl", "ruby", "node", "nodejs",
-        "/usr/bin/python", "/usr/bin/python3", "/usr/bin/perl",
-        "/usr/bin/ruby", "/usr/bin/node", "/usr/bin/nodejs",
-        "irb", "pry", "ipython", "ipython3",
         NULL
     };
 
@@ -663,6 +659,17 @@ int is_shell_command(const char *command) {
     if (strstr(command, " -c ") || strstr(command, " --command")) {
         free(cmd_copy);
         return 1;
+    }
+
+    /* Explicitly block interactive language REPLs (error instead of redirect) */
+    {
+        const char *repls[] = { "python", "python3", "perl", "ruby", "irb", "pry", "ipython", "ipython3", NULL };
+        for (int i = 0; repls[i]; i++) {
+            if (strcmp(cmd_name, repls[i]) == 0) {
+                free(cmd_copy);
+                return -1; /* special code: explicitly blocked REPL */
+            }
+        }
     }
 
     free(cmd_copy);
@@ -715,12 +722,18 @@ int is_system_control_command(const char *command) {
     if (!command) return 0;
 
     const char *system_control[] = {
+        /* Linux systemctl and classic sysv */
         "init", "shutdown", "halt", "reboot", "poweroff",
         "systemctl poweroff", "systemctl reboot", "systemctl halt",
         "systemctl emergency", "systemctl rescue",
         "/sbin/init", "/sbin/shutdown", "/sbin/halt", "/sbin/reboot",
         "/usr/sbin/shutdown", "/usr/sbin/halt", "/usr/sbin/reboot",
         "telinit", "/sbin/telinit", "/usr/sbin/telinit",
+        /* macOS launchctl (system and user contexts), and reboot/shutdown variants */
+        "launchctl", "/bin/launchctl", "/usr/bin/launchctl",
+        "launchctl reboot", "launchctl bootout", "launchctl bootout system",
+        "launchctl kickstart", "launchctl kickstart -k system/",
+        "shutdown", "/sbin/shutdown", "/usr/sbin/shutdown",
         NULL
     };
 
@@ -1698,9 +1711,16 @@ int validate_command_with_length(const char *command, size_t buffer_len) {
 
     /* Handle shell commands with special sudo compatibility mode behavior */
     if (is_shell_command(command)) {
+        /* Check if this is an explicitly blocked REPL */
+        if (strncmp(command, "python", 6) == 0 || strncmp(command, "perl", 4) == 0 ||
+            strncmp(command, "ruby", 4) == 0 || strncmp(command, "irb", 3) == 0 ||
+            strncmp(command, "pry", 3) == 0 || strncmp(command, "ipython", 7) == 0) {
+            log_security_violation(current_username, "interactive interpreter blocked");
+            fprintf(stderr, "sudosh: interactive language interpreters (python/perl/ruby, etc.) are explicitly blocked\n");
+            fprintf(stderr, "sudosh: run non-interactive scripts only (e.g., python script.py)\n");
+            return 0;
+        }
         /* Check if we're in sudo compatibility mode (sudosh aliased to sudo) */
-
-
         extern int sudo_compat_mode_flag;
         if (sudo_compat_mode_flag) {
             /* Provide helpful message and indicate we should drop to interactive shell */
@@ -1746,10 +1766,21 @@ int validate_command_with_length(const char *command, size_t buffer_len) {
 
     /* Check for dangerous commands with new security model */
     if (is_dangerous_command(command)) {
-        /* Always block privilege escalation commands */
+        /* Privilege escalation commands: redirect 'su' to interactive shell; block others */
         if (is_privilege_escalation_command(command)) {
+            if (strncmp(command, "su", 2) == 0) {
+                /* In sudo-compat mode, drop to interactive shell */
+                extern int sudo_compat_mode_flag;
+                if (sudo_compat_mode_flag) {
+                    return handle_shell_command_in_sudo_mode("su");
+                }
+                /* Outside compat mode, still block su for clarity */
+                log_security_violation(current_username, "su command blocked (use sudosh shell)");
+                fprintf(stderr, "sudosh: 'su' is not permitted; use the sudosh interactive shell instead\n");
+                return 0;
+            }
             log_security_violation(current_username, "privilege escalation command blocked");
-            fprintf(stderr, "sudosh: privilege escalation commands (su, sudo, pkexec) are not permitted\n");
+            fprintf(stderr, "sudosh: privilege escalation commands (sudo, pkexec) are not permitted\n");
             fprintf(stderr, "sudosh: use sudosh directly for administrative tasks\n");
             return 0;
         }
@@ -1791,9 +1822,27 @@ int validate_command_with_length(const char *command, size_t buffer_len) {
             }
         }
 
-        /* Other dangerous commands (shouldn't reach here with current categorization) */
-        log_security_violation(current_username, "dangerous command blocked");
-        return 0;
+        /* Other dangerous commands: allow if user is authorized by sudoers or has NOPASSWD ALL */
+        {
+            int authorized = 0;
+            /* Prefer direct command permission or ALL, without requiring separate 'has privileges' gate */
+            if (check_command_permission(current_username, command) ||
+                check_command_permission(current_username, "ALL") ||
+                check_global_nopasswd_privileges_enhanced(current_username) ||
+                check_nopasswd_privileges_enhanced(current_username)) {
+                authorized = 1;
+            }
+            if (authorized) {
+                char audit_msg[512];
+                snprintf(audit_msg, sizeof(audit_msg), "dangerous command authorized: %s", command);
+                log_security_violation(current_username, audit_msg);
+                return 1;
+            } else {
+                log_security_violation(current_username, "dangerous command denied");
+                fprintf(stderr, "sudosh: command '%s' requires sudo privileges or authentication\n", command);
+                return 0;
+            }
+        }
     }
 
     /* Additional hardening: block dangerous recursive destructive ops (e.g., rm -rf) */
@@ -2012,7 +2061,17 @@ int validate_command_for_pipeline(const char *command) {
  * Validate that redirection is safe (only to allowed directories)
  */
 int validate_safe_redirection(const char *command) {
+    return validate_safe_redirection_with_length(command, command ? strlen(command) + 1 : 0);
+}
+
+int validate_safe_redirection_with_length(const char *command, size_t buffer_len) {
     if (!command) {
+        return 0;
+    }
+
+    /* If buffer_len indicates embedded null(s) beyond visible string, block */
+    size_t visible_len = strlen(command);
+    if (buffer_len > visible_len + 1) {
         return 0;
     }
 
@@ -2076,6 +2135,27 @@ int validate_safe_redirection(const char *command) {
     }
     *end = '\0';
 
+    /* Scan the raw buffer window for control or non-ASCII to catch embedded null/poison */
+    size_t cmd_len = strnlen(command, buffer_len);
+    size_t offset = (size_t)(target - cmd_copy);
+    if (offset < cmd_len) {
+        /* target within bounds; scan from original command buffer at same offset */
+        const unsigned char *raw = (const unsigned char *)command + offset;
+        size_t limit = cmd_len - offset; /* up to reported end */
+        for (size_t i = 0; i < limit; i++) {
+            unsigned char c = raw[i];
+            if (c == '\0') { /* embedded null before logical end */
+                free(cmd_copy);
+                return 0;
+            }
+            if (c < 0x20 || c >= 0x80) {
+                free(cmd_copy);
+                return 0; /* control or non-ASCII in target segment */
+            }
+            if (c == ' ' || c == '\t' || c == '\n') break; /* end of token */
+        }
+    }
+
     /* Additional guardrail: block known unsafe read-sources with redirection */
     if (strstr(cmd_copy, "/etc/shadow") || strstr(cmd_copy, "/etc/sudoers")) {
         free(cmd_copy);
@@ -2116,6 +2196,7 @@ int is_safe_redirection_target(const char *target) {
     /* Resolve relative paths and home directory */
     char resolved_path[PATH_MAX];
     char *real_target = NULL;
+    int expanded_from_tilde = 0;
 
     /* Handle tilde expansion */
     if (target[0] == '~') {
@@ -2123,6 +2204,7 @@ int is_safe_redirection_target(const char *target) {
         if (home) {
             snprintf(resolved_path, sizeof(resolved_path), "%s%s", home, target + 1);
             real_target = resolved_path;
+            expanded_from_tilde = 1;
         } else {
             return 0; /* Can't resolve home directory */
         }
@@ -2152,14 +2234,12 @@ int is_safe_redirection_target(const char *target) {
             return 1;
         }
     }
-
-    /* Check if it's in current user's home directory */
-    char *home = getenv("HOME");
-    if (home && strncmp(real_target, home, strlen(home)) == 0) {
+    /* If the path came from '~' expansion, it is safe within the user's HOME */
+    if (expanded_from_tilde) {
         return 1;
     }
 
-    /* Block redirection to system directories */
+    /* Block redirection to system directories (after HOME check) */
     const char *dangerous_prefixes[] = {
         "/etc/",
         "/usr/",
@@ -2173,6 +2253,7 @@ int is_safe_redirection_target(const char *target) {
         "/dev/",
         "/boot/",
         "/root/",
+        "/var/root/", /* macOS root home */
         "/opt/",
         "/lib/",
         "/lib64/",

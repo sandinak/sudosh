@@ -4,6 +4,11 @@
 struct ansible_detection_info *global_ansible_info = NULL;
 struct ai_detection_info *global_ai_info = NULL;
 
+/* Ansible detection config for tests */
+int ansible_detection_enabled = 1;
+int ansible_detection_force = 0;
+int ansible_detection_verbose = 0;
+
 int test_mode = 1;
 
 /* Shell enhancements default for tests */

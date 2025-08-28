@@ -209,19 +209,22 @@ int parse_pipeline(const char *input, struct pipeline_info *pipeline) {
     in_quotes = 0;
     quote_char = 0;
     
-    for (char *p = input_copy; *p || cmd_index < pipeline->num_commands; p++) {
+    for (char *p = input_copy; *p || cmd_index < pipeline->num_commands; ) {
         if (*p && !in_quotes && (*p == '"' || *p == '\'')) {
             in_quotes = 1;
             quote_char = *p;
+            p++;
         } else if (*p && in_quotes && *p == quote_char) {
             in_quotes = 0;
             quote_char = 0;
+            p++;
         } else if ((!*p || (!in_quotes && *p == '|')) && cmd_index < pipeline->num_commands) {
             /* End of command found */
-            if (*p == '|') {
+            char c = *p; /* capture current char before any mutation */
+            if (c == '|') {
                 *p = '\0';
             }
-            
+
             /* Trim whitespace */
             while (isspace(*cmd_start)) cmd_start++;
             char *cmd_end = cmd_start + strlen(cmd_start) - 1;
@@ -229,20 +232,48 @@ int parse_pipeline(const char *input, struct pipeline_info *pipeline) {
                 *cmd_end = '\0';
                 cmd_end--;
             }
-            
+
             /* Parse this command */
             if (parse_command(cmd_start, &pipeline->commands[cmd_index].cmd) != 0) {
                 free(input_copy);
                 free_pipeline_info(pipeline);
                 return -1;
             }
-            
+            /* Ensure command string reflects the exact parsed segment */
+            if (pipeline->commands[cmd_index].cmd.command) {
+                free(pipeline->commands[cmd_index].cmd.command);
+            }
+            pipeline->commands[cmd_index].cmd.command = safe_strdup(cmd_start);
+
+            if (getenv("SUDOSH_DEBUG_PIPELINE")) {
+                fprintf(stderr, "DEBUG: parsed cmd[%d] = '%s'\n", cmd_index,
+                        pipeline->commands[cmd_index].cmd.command ? pipeline->commands[cmd_index].cmd.command : "(null)");
+            }
+
             cmd_index++;
+            if (c == '\0') {
+                /* Last command at true end of string */
+                break;
+            }
+            /* Advance past the pipe we just processed */
             cmd_start = p + 1;
+            p++;
+        } else {
+            p++;
         }
     }
-    
+
     free(input_copy);
+
+    if (getenv("SUDOSH_DEBUG_PIPELINE")) {
+        fprintf(stderr, "DEBUG: num_commands=%d\n", pipeline->num_commands);
+        for (int i = 0; i < pipeline->num_commands; i++) {
+            fprintf(stderr, "DEBUG: cmd[%d].command=%s argc=%d\n", i,
+                    pipeline->commands[i].cmd.command ? pipeline->commands[i].cmd.command : "(null)",
+                    pipeline->commands[i].cmd.argc);
+        }
+    }
+
     return 0;
 }
 
