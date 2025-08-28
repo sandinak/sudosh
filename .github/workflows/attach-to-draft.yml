@@ -1,0 +1,71 @@
+name: Attach Artifacts to Draft Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: Release tag to attach assets to
+        required: true
+        default: v2.1.2
+
+jobs:
+  deb:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+
+      - name: Install Debian deps
+        run: |
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
+            build-essential libpam0g-dev dpkg-dev debhelper devscripts fakeroot ca-certificates
+
+      - name: Build DEB
+        env:
+          WERROR: "1"
+        run: |
+          make clean-packages || true
+          make -j2 sudosh.1
+          make -j2 deb WERROR=1
+
+      - name: Upload DEB to Draft Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag_name }}
+          draft: true
+          files: |
+            dist/*.deb
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  rpm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+
+      - name: Build RPM in AlmaLinux 9 container
+        run: |
+          docker run --rm -v "$PWD":/src -w /src almalinux:9 bash -lc '
+            set -e; 
+            dnf -y -q install gcc make pam-devel rpm-build tar gzip which findutils git >/dev/null; 
+            git config --global --add safe.directory /src || true; 
+            make clean-packages >/dev/null || true; 
+            make -j2 rpm WERROR=1; 
+            ls -al dist;
+          '
+
+      - name: Upload RPMs to Draft Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag_name }}
+          draft: true
+          files: |
+            dist/*.rpm
+            dist/*.src.rpm
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+

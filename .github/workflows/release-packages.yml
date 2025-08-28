@@ -1,0 +1,64 @@
+name: Build and Attach Release Packages
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  build-deb:
+    name: Build DEB (amd64)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Debian build deps
+        run: |
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
+            build-essential libpam0g-dev dpkg-dev debhelper devscripts fakeroot ca-certificates
+
+      - name: Build DEB
+        env:
+          WERROR: "1"
+        run: |
+          make clean-packages || true
+          make -j2 sudosh.1
+          make -j2 deb WERROR=1
+          ls -al dist || true
+
+      - name: Upload DEB to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.deb
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-rpm:
+    name: Build RPM (el9, amd64 host)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build RPM in AlmaLinux 9 container
+        run: |
+          docker run --rm -v "$PWD":/src -w /src almalinux:9 bash -lc '
+            set -e; 
+            dnf -y -q install gcc make pam-devel rpm-build tar gzip which findutils git >/dev/null; 
+            git config --global --add safe.directory /src || true; 
+            make clean-packages >/dev/null || true; 
+            make -j2 rpm WERROR=1; 
+            ls -al dist;
+          '
+
+      - name: Upload RPMs to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.rpm
+            dist/*.src.rpm
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
