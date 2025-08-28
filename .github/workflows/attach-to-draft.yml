@@ -47,14 +47,14 @@ jobs:
             '
           fi
 
-      - name: Upload DEB to Release
-        uses: softprops/action-gh-release@v2
+      - name: Upload DEB assets to Release
+        uses: svenstaro/upload-release-action@v2
         with:
-          tag_name: ${{ inputs.tag_name }}
-          files: |
-            dist/*.deb
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          tag: ${{ inputs.tag_name }}
+          file: dist/*.deb
+          file_glob: true
+          overwrite: true
 
   rpm:
     runs-on: ubuntu-latest
@@ -97,13 +97,14 @@ jobs:
             ls -al dist;
           '
 
-      - name: Upload RPMs to Release
-        uses: softprops/action-gh-release@v2
+      - name: Upload RPM assets to Release
+        uses: svenstaro/upload-release-action@v2
         with:
-          tag_name: ${{ inputs.tag_name }}
-          files: |
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          tag: ${{ inputs.tag_name }}
+          file: |
             dist/*.rpm
             dist/*.src.rpm
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          file_glob: true
+          overwrite: true
 
