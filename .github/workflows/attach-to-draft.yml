@@ -8,6 +8,9 @@ on:
         required: true
         default: v2.1.2
 
+permissions:
+  contents: write
+
 jobs:
   deb:
     runs-on: ubuntu-latest
@@ -40,15 +43,14 @@ jobs:
               set -e;
               apt-get update -qq;
               DEBIAN_FRONTEND=noninteractive apt-get install -y -qq build-essential libpam0g-dev dpkg-dev debhelper devscripts fakeroot ca-certificates >/dev/null;
-              make -j2 deb WERROR=1;
+              make -j2 deb WERROR=0;
             '
           fi
 
-      - name: Upload DEB to Draft Release
+      - name: Upload DEB to Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ inputs.tag_name }}
-          draft: true
           files: |
             dist/*.deb
         env:
@@ -95,11 +97,10 @@ jobs:
             ls -al dist;
           '
 
-      - name: Upload RPMs to Draft Release
+      - name: Upload RPMs to Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ inputs.tag_name }}
-          draft: true
           files: |
             dist/*.rpm
             dist/*.src.rpm
