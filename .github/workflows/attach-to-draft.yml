@@ -39,7 +39,7 @@ jobs:
             make -j2 deb WERROR=1
           else
             docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
-            docker run --rm -v "$PWD":/src -w /src arm64v8/ubuntu:22.04 bash -lc '
+            docker run --platform linux/arm64/v8 --rm -v "$PWD":/src -w /src arm64v8/ubuntu:22.04 bash -lc '
               set -e;
               apt-get update -qq;
               DEBIAN_FRONTEND=noninteractive apt-get install -y -qq build-essential libpam0g-dev dpkg-dev debhelper devscripts fakeroot ca-certificates git >/dev/null;
@@ -105,9 +105,7 @@ jobs:
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           tag: ${{ inputs.tag_name }}
-          file: |
-            dist/*.rpm
-            dist/*.src.rpm
+          file: dist/*.{rpm,src.rpm}
           file_glob: true
           overwrite: true
 
