@@ -43,6 +43,7 @@ jobs:
               set -e;
               apt-get update -qq;
               DEBIAN_FRONTEND=noninteractive apt-get install -y -qq build-essential libpam0g-dev dpkg-dev debhelper devscripts fakeroot ca-certificates git >/dev/null;
+              git config --global --add safe.directory /src || true;
               make -j2 deb WERROR=0;
             '
           fi
