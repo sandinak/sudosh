@@ -11,6 +11,10 @@ on:
 jobs:
   deb:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [amd64, arm64]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -20,15 +24,25 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
-            build-essential libpam0g-dev dpkg-dev debhelper devscripts fakeroot ca-certificates
+            build-essential libpam0g-dev dpkg-dev debhelper devscripts fakeroot ca-certificates qemu-user-static binfmt-support
 
-      - name: Build DEB
+      - name: Build DEB (native or qemu)
         env:
           WERROR: "1"
         run: |
           make clean-packages || true
           make -j2 sudosh.1
-          make -j2 deb WERROR=1
+          if [ "${{ matrix.arch }}" = "amd64" ]; then
+            make -j2 deb WERROR=1
+          else
+            docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+            docker run --rm -v "$PWD":/src -w /src arm64v8/ubuntu:22.04 bash -lc '
+              set -e;
+              apt-get update -qq;
+              DEBIAN_FRONTEND=noninteractive apt-get install -y -qq build-essential libpam0g-dev dpkg-dev debhelper devscripts fakeroot ca-certificates >/dev/null;
+              make -j2 deb WERROR=1;
+            '
+          fi
 
       - name: Upload DEB to Draft Release
         uses: softprops/action-gh-release@v2
@@ -42,19 +56,42 @@ jobs:
 
   rpm:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - distro: el9
+            image: almalinux:9
+            arch: x86_64
+          - distro: el9
+            image: almalinux:9
+            arch: aarch64
+          - distro: el8
+            image: rockylinux:8
+            arch: x86_64
+          - distro: el8
+            image: rockylinux:8
+            arch: aarch64
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.ref_name }}
 
-      - name: Build RPM in AlmaLinux 9 container
+      - name: Build RPM in container
         run: |
-          docker run --rm -v "$PWD":/src -w /src almalinux:9 bash -lc '
-            set -e; 
-            dnf -y -q install gcc make pam-devel rpm-build tar gzip which findutils git >/dev/null; 
-            git config --global --add safe.directory /src || true; 
-            make clean-packages >/dev/null || true; 
-            make -j2 rpm WERROR=1; 
+          if [ "${{ matrix.arch }}" = "aarch64" ]; then
+            docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+            EMU_PREFIX="--platform linux/arm64/v8"
+          else
+            EMU_PREFIX=""
+          fi
+          docker run $EMU_PREFIX --rm -v "$PWD":/src -w /src ${{ matrix.image }} bash -lc '
+            set -e;
+            dnf -y -q install gcc make pam-devel rpm-build tar gzip which findutils git >/dev/null || \
+              (yum -y -q install gcc make pam-devel rpm-build tar gzip which findutils git >/dev/null || true);
+            git config --global --add safe.directory /src || true;
+            make clean-packages >/dev/null || true;
+            make -j2 rpm WERROR=1;
             ls -al dist;
           '
 
