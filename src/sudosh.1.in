@@ -180,7 +180,7 @@ Full shell redirection with comprehensive security controls:
 .IP \(bu 2
 \fBPipeline Redirection\fR: \fBcat file | grep pattern > output\fR
 .IP \(bu 2
-\fBSecurity Validation\fR: Only allows redirection to safe directories (\fI/tmp/\fR, \fI/var/tmp/\fR, home directories)
+\fBSecurity Validation\fR: Only allows redirection to safe directories (\fI/tmp/\fR, \fI/var/tmp/\fR, home directories). Tilde expansion (\fI~\fR) resolves to the current user's \fI$HOME\fR and is allowed; explicit absolute paths to \fI/root\fR or \fI/var/root\fR remain blocked.
 .IP \(bu 2
 \fBDetailed Error Messages\fR: Specific feedback for blocked directory types:
 .RS
