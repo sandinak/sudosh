@@ -46,6 +46,16 @@ export SUDOSH_BUILD_USER ?= $(shell whoami)
 # Detect OS and set appropriate flags
 UNAME_S := $(shell uname -s)
 
+# Always use the system sudo (avoid repo-installed /usr/local/bin/sudo symlink)
+# Prefer /usr/bin/sudo, fallback to /bin/sudo, else plain 'sudo' if neither exists
+ifeq ($(wildcard /usr/bin/sudo),/usr/bin/sudo)
+SYSTEM_SUDO := /usr/bin/sudo
+else ifeq ($(wildcard /bin/sudo),/bin/sudo)
+SYSTEM_SUDO := /bin/sudo
+else
+SYSTEM_SUDO := sudo
+endif
+
 # Check for PAM availability
 PAM_AVAILABLE := $(shell echo '\#include <security/pam_appl.h>' | $(CC) -E - >/dev/null 2>&1 && echo yes || echo no)
 
@@ -426,11 +436,11 @@ test-suid: $(TARGET)
 	fi
 	@echo "Setting root ownership and suid bit on $(TARGET)..."
 ifeq ($(UNAME_S),Darwin)
-	sudo chown root:wheel $(TARGET)
+	$(SYSTEM_SUDO) chown root:wheel $(TARGET)
 else
-	sudo chown root:root $(TARGET)
+	$(SYSTEM_SUDO) chown root:root $(TARGET)
 endif
-	sudo chmod 4755 $(TARGET)
+	$(SYSTEM_SUDO) chmod 4755 $(TARGET)
 	@echo "Successfully configured $(TARGET) with:"
 ifeq ($(UNAME_S),Darwin)
 	@echo "  - Owner: root:wheel"
@@ -451,8 +461,8 @@ clean-suid: $(TARGET)
 		exit 0; \
 	fi
 	@if [ -u "$(TARGET)" ]; then \
-		sudo chmod 755 $(TARGET); \
-		sudo chown $(USER):$(shell id -gn) $(TARGET); \
+		$(SYSTEM_SUDO) chmod 755 $(TARGET); \
+		$(SYSTEM_SUDO) chown $(USER):$(shell id -gn) $(TARGET); \
 		echo "Suid privileges removed and ownership reset to $(USER):$(shell id -gn)"; \
 	else \
 		echo "$(TARGET) does not have suid privileges set."; \

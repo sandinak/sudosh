@@ -16,6 +16,16 @@ introduces intelligent shell redirection when aliased to 'sudo', enhanced text p
 
 Unlike traditional sudo which executes single commands, sudosh provides an interactive shell session where multiple commands can be executed with elevated privileges while maintaining full audit trails and advanced security protections. When users attempt shell commands through sudo aliases, sudosh provides educational guidance and seamlessly transitions them to a secure interactive environment.
 
+.PP
+.B Setuid requirement and install policy
+.PP
+sudosh must be installed with the setuid root bit to enforce policies. Non-suid fallback to the system sudo has been removed. The \fBmake install\fR target requires root privileges and should be executed via the real system sudo (e.g., /usr/bin/sudo), not the sudosh symlink.
+
+.PP
+.B Dangerous command authorization
+.PP
+Administrative or destructive commands (e.g., make install, chmod/chown on system paths, mount/umount, firewall changes) are allowed only when the user is authorized by sudoers (explicit rule or ALL). NOPASSWD rules are honored (no prompt); otherwise, a password prompt is required. Shells and privilege escalation tools (sh/bash/zsh, su, pkexec) remain blocked or redirected to the sudosh shell for safety.
+
 .B sudosh
 includes protection against recent CVE vulnerabilities including CVE-2023-22809 (sudoedit privilege escalation), CVE-2022-3715 (bash heap buffer overflow), and various Shellshock variants. It features enhanced environment sanitization, null byte injection detection, comprehensive command validation, and intelligent security messaging to prevent exploits while educating users.
 
@@ -98,6 +108,14 @@ Run command as target user under sudosh validation.
 .PP
 Many sudo flags are intentionally unsupported for security (-E, -H, -i, -s, etc.).
 Use \fB--verbose\fP (not \fB-v\fP) to enable verbose logging while in compat mode.
+
+.SS Privilege escalation and shells
+.IP \(bu 2
+\fBsu\fR and \fBsu -\fR invoked via sudosh (including sudo-compat) redirect to the sudosh interactive shell; direct \fBsu\fR execution is not permitted.
+.IP \(bu 2
+Direct shells (bash, sh, zsh, etc.) are blocked; in sudo-compat mode they redirect to the sudosh interactive shell with guidance.
+.IP \(bu 2
+Interactive language interpreters (python, perl, ruby, irb, ipython, etc.) are explicitly blocked and do not redirect. Run non-interactive scripts instead (e.g., \fBpython script.py\fR) subject to validation.
 
 
 .SH USAGE

@@ -2902,7 +2902,9 @@ void cleanup_color_config(void) {
 int get_terminal_height(void) {
     struct winsize w;
     if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &w) == 0) {
-        return w.ws_row;
+        /* Some environments report 0 or very small rows; enforce a sane minimum */
+        if (w.ws_row >= 24) return w.ws_row;
+        return 24;
     }
     return 24; /* Default fallback */
 }

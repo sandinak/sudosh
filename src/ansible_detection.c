@@ -572,9 +572,9 @@ struct ansible_detection_info *detect_ansible_session(void) {
     if (env_vars_found > 0 && parent_result > 0) {
         info->confidence_level = 98;  /* Very high confidence */
         info->method = ANSIBLE_DETECTED_ENV_VAR;  /* Primary method */
-    } else if (env_vars_found > 0 && context_score > 20) {
+    } else if (env_vars_found > 0 && context_score >= 20) {
         info->confidence_level = 90;
-    } else if (parent_result > 0 && context_score > 20) {
+    } else if (parent_result > 0 && context_score >= 20) {
         info->confidence_level = 85;
     }
 
