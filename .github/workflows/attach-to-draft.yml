@@ -42,7 +42,7 @@ jobs:
             docker run --rm -v "$PWD":/src -w /src arm64v8/ubuntu:22.04 bash -lc '
               set -e;
               apt-get update -qq;
-              DEBIAN_FRONTEND=noninteractive apt-get install -y -qq build-essential libpam0g-dev dpkg-dev debhelper devscripts fakeroot ca-certificates >/dev/null;
+              DEBIAN_FRONTEND=noninteractive apt-get install -y -qq build-essential libpam0g-dev dpkg-dev debhelper devscripts fakeroot ca-certificates git >/dev/null;
               make -j2 deb WERROR=0;
             '
           fi
@@ -89,8 +89,11 @@ jobs:
           fi
           docker run $EMU_PREFIX --rm -v "$PWD":/src -w /src ${{ matrix.image }} bash -lc '
             set -e;
-            dnf -y -q install gcc make pam-devel rpm-build tar gzip which findutils git >/dev/null || \
-              (yum -y -q install gcc make pam-devel rpm-build tar gzip which findutils git >/dev/null || true);
+            if command -v dnf >/dev/null 2>&1; then
+              dnf -y -q install gcc make pam-devel rpm-build tar gzip which findutils git >/dev/null;
+            else
+              yum -y -q install gcc make pam-devel rpm-build tar gzip which findutils git >/dev/null;
+            fi
             git config --global --add safe.directory /src || true;
             make clean-packages >/dev/null || true;
             make -j2 rpm WERROR=1;
