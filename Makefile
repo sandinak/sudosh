@@ -36,7 +36,7 @@ BINDIR_INSTALL = $(PREFIX)/bin
 MANDIR = $(PREFIX)/share/man/man1
 # Build-time version (override with: make VERSION=x.y.z)
 # Fallback defaults to latest release when no tags are present
-VERSION ?= $(shell git describe --tags --always 2>/dev/null || echo 2.1.0)
+VERSION ?= 2.1.2
 CFLAGS += -DSUDOSH_VERSION=\"$(VERSION)\"
 # Provide build-info via environment variables passed by CI or set here
 export SUDOSH_BUILD_GIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
