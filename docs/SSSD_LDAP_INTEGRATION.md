@@ -2,32 +2,39 @@ SSSD/LDAP Integration Status and Guidance
 
 Overview
 - Sudosh aims for full sudo parity for SSSD/LDAP managed rules without relying on `sudo -l`.
-- Current state: foundational SSSD plumbing exists and NSS fallbacks work, but comprehensive rule parsing like sudoers/LDAP is in progress.
+- Current state: library-first SSSD sudo integration is implemented (dynamic `libsss_sudo.so`); a segmented sudo responder socket fallback is provided for hosts without the library. No `sudo -l` or `getent` calls are used.
 
-Goals
-- Parse SSSD/LDAP sudo rules directly (host/user/netgroup cmnd specs), similar to sudo’s internals.
-- No dependency on `sudo -l` for rule discovery.
-- Deterministic, testable behavior with security-first defaults.
+Behavior and order of operations
+1) Try to load `libsss_sudo.so` (symbols: `sss_sudo_send_recv`, etc.). If present, we use it to fetch sudo rules and convert to Sudosh’s internal structures.
+2) If the library is unavailable or incomplete, connect to the SSSD sudo responder socket using the segmented protocol (native-endian headers + NUL-delimited segments) observed in the field.
+3) Parse TLVs for `sudoCommand`, `sudoRunAsUser`, and options (e.g., `!authenticate`). A heuristic string scan is used as a last resort for environments that interleave LDAP attributes.
+
+Environment flags (for debugging/forcing behavior)
+- `SUDOSH_SSSD_FORCE_SOCKET=1`: skip libsss probe and use the socket path.
+- `SUDOSH_SSSD_SOCKET_SEGMENTED=1`: ensure segmented mode is used (helpful on responders that require it).
+- `SUDOSH_DEBUG_SSSD=1`: verbose logging for socket I/O, headers, payload prefixes (hex dump).
+- `SUDOSH_SSSD_REPLAY=/path/to/trace`: developer-only replay of captured exchanges for offline debugging.
+
+Security considerations
+- Sudosh never shells out to `sudo -l` or `getent` for rule discovery, preventing privilege confusion and TOCTOU concerns.
+- Setuid/escalation for SSSD queries is minimal and dropped promptly; operations are logged with detail when debugging is enabled.
 
 What works today
-- NSS-based user/group checks for sudo-like decisions (without sudo).
-- Rule output command categorization (Always Safe, Always Blocked, Conditionally Blocked) consistent with v2 tests.
-- Sudo-compat mode behavior for flags, without `sudo -E` support by design.
+- Library-first and socket fallback rule discovery.
+- NSS-based user/group checks for sudo-like decisions without sudo.
+- Rule output command categorization (Always Safe, Always Blocked, Conditionally Blocked) consistent with tests.
 
-What’s coming
-- Full SSSD rule parsing, including order/negation precedence, per-sudoers semantics.
-- Remote directory and netgroup lookups with safe timeouts and caching.
-- Extensive unit/integration/regression tests and docs.
+Roadmap: full rule parity
+- Implement complete SSSD rule semantics (order, negation, host/netgroup, Cmnd_Alias, RunAs constraints) mirroring sudo.
+- Expand fixtures and regression tests to achieve parity across LDAP-backed deployments.
 
 How to run without sudo -l
-- Use sudosh -r/--rules to display effective categories; these do not call sudo.
-- For LDAP/SSSD environments, ensure sssd and nsswitch are configured; sudosh will not shell out to sudo.
+- Use `sudosh -r/--rules` to display effective rule categories; these do not call sudo.
+- Ensure SSSD and nsswitch are configured; Sudosh will not shell out to sudo.
 
 Testing notes
-- CI tests do not require SSSD; they validate NSS fallbacks and rule output formatting.
-- Security tests enforce that sudo-compat mode rejects `-E` and that insecure shells/editors are blocked.
+- CI tests validate TLV decoding and do not require a live SSSD responder.
+- Security tests enforce sudo-compat mode behaviors (e.g., reject `-E`) and hardened editors/shells logic.
 
-Contact/Contrib
-- Please file issues/PRs describing your SSSD layout (filters, cn, host/network specs).
-- We will expand the parser with fixtures to cover your scenarios.
-
+Contributing / Feedback
+- Please share your SSSD sudo schema usage (filters, attributes, host/network specs). We’ll extend parsing and tests to cover your scenarios.
