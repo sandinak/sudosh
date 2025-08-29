@@ -637,14 +637,29 @@ seg_fail:
     /* Resolve UID */
     uid_t uid = getuid();
 
-    /* Resolve groups for the current user */
+    /* Resolve groups for the current user (portable across Linux/macOS) */
     gid_t groups_buf[256];
-    int ngroups = sizeof(groups_buf) / sizeof(groups_buf[0]);
+    int ngroups = (int)(sizeof(groups_buf) / sizeof(groups_buf[0]));
+#ifdef __APPLE__
+    {
+        /* macOS prototype: int getgrouplist(const char *, int, int *, int *) */
+        int igroups[256];
+        int ign = (int)(sizeof(igroups) / sizeof(igroups[0]));
+        if (getgrouplist(username, (int)getgid(), igroups, &ign) < 0) {
+            ign = 1;
+            igroups[0] = (int)getgid();
+        }
+        ngroups = ign > 256 ? 256 : ign;
+        for (int i = 0; i < ngroups; i++) groups_buf[i] = (gid_t)igroups[i];
+    }
+#else
+    /* Linux prototype: int getgrouplist(const char *, gid_t, gid_t *, int *) */
     if (getgrouplist(username, getgid(), groups_buf, &ngroups) < 0) {
         /* If it failed, clamp to known group */
         ngroups = 1;
         groups_buf[0] = getgid();
     }
+#endif
 
     /* Hostname and FQDN */
     char fqdn[256];
