@@ -30,6 +30,8 @@
 #include <errno.h>
 #include <stdint.h>
 #include <arpa/inet.h>
+#include <netinet/in.h>
+#include <ifaddrs.h>
 #include <ctype.h>
 #include <time.h>
 #include <fnmatch.h>
@@ -1286,6 +1288,77 @@ io_error:
     #undef APPEND_DATA
 }
 
+/* IPv4 CIDR match: returns 1 if ip_str (dotted) is in cidr (like 192.168.1.0/24). 0 otherwise */
+static int ipv4_in_cidr(const char *ip_str, const char *cidr)
+{
+    if (!ip_str || !cidr) return 0;
+    const char *slash = strchr(cidr, '/');
+    if (!slash) return 0;
+    char net_str[64]; size_t nlen = (size_t)(slash - cidr);
+    if (nlen >= sizeof(net_str)) return 0;
+    memcpy(net_str, cidr, nlen); net_str[nlen] = '\0';
+    int prefix = atoi(slash + 1);
+    if (prefix < 0 || prefix > 32) return 0;
+    struct in_addr ip, net;
+    if (inet_aton(ip_str, &ip) == 0) return 0;
+    if (inet_aton(net_str, &net) == 0) return 0;
+    uint32_t mask = (prefix == 0) ? 0 : htonl(0xFFFFFFFFu << (32 - prefix));
+    return (ip.s_addr & mask) == (net.s_addr & mask);
+}
+
+/* Get local host IPv4 addresses (comma-separated into buf). Returns count. */
+static int get_local_ipv4_list(char *buf, size_t buflen)
+{
+    if (!buf || buflen == 0) return 0;
+    buf[0] = '\0'; int count = 0; size_t off = 0;
+    struct ifaddrs *ifaddr = NULL;
+    if (getifaddrs(&ifaddr) == -1) return 0;
+    for (struct ifaddrs *ifa = ifaddr; ifa; ifa = ifa->ifa_next) {
+        if (!ifa->ifa_addr) continue;
+        if (ifa->ifa_addr->sa_family != AF_INET) continue;
+        char addr[INET_ADDRSTRLEN];
+        const char *res = inet_ntop(AF_INET, &((struct sockaddr_in*)ifa->ifa_addr)->sin_addr, addr, sizeof(addr));
+        if (!res) continue;
+        size_t len = strlen(addr);
+        if (off + len + 1 >= buflen) break;
+        if (off > 0) { buf[off++] = ','; }
+        memcpy(buf + off, addr, len); off += len; buf[off] = '\0';
+        count++;
+    }
+    freeifaddrs(ifaddr);
+    return count;
+}
+
+/* Host match: ALL, hostname/FQDN wildcards, IPv4, CIDR, with negation handling */
+static int sssd_host_matches(const char *pattern, const char *shortname, const char *fqdn)
+{
+    if (!pattern) return 0;
+    int neg = (pattern[0] == '!');
+    const char *pat = neg ? pattern + 1 : pattern;
+    int match = 0;
+    if (strcmp(pat, "ALL") == 0) match = 1;
+    else if (fnmatch(pat, shortname, 0) == 0 || fnmatch(pat, fqdn, 0) == 0) match = 1;
+    else {
+        /* Try IPv4 and CIDR */
+        char local_ips[1024]; get_local_ipv4_list(local_ips, sizeof(local_ips));
+        /* iterate CSV */
+        const char *p = local_ips; char ip[64]; size_t k = 0;
+        for (size_t i = 0; ; ++i) {
+            char c = p[i];
+            if (c == ',' || c == '\0') {
+                ip[k] = '\0';
+                if (ip[0]) {
+                    if (strcmp(pat, ip) == 0 || ipv4_in_cidr(ip, pat)) { match = 1; }
+                }
+                k = 0; if (c == '\0') break; else continue;
+            } else if (k < sizeof(ip)-1) {
+                ip[k++] = c;
+            }
+        }
+    }
+    return neg ? !match : match;
+}
+
 /**
  * Free SSSD sudo result structure
  */
@@ -1344,6 +1417,26 @@ static int sssd_command_matches(const char *pattern, const char *command)
     return 0;
 }
 
+
+
+/* User/Host/runas/time/order filters for a rule; hostname inputs must be provided */
+static int sssd_rule_applies(const struct sss_sudo_rule *r, const char *username, const char *short_host, const char *fqdn)
+{
+    if (!r || !username || !short_host || !fqdn) return 0;
+    /* time window */
+    time_t nowt = time(NULL);
+    if (r->not_before && nowt < r->not_before) return 0;
+    if (r->not_after && nowt > r->not_after) return 0;
+    /* user: minimal support: ALL or exact user; %group later */
+    if (r->user && strcmp(r->user, "ALL") != 0 && strcmp(r->user, username) != 0) {
+        if (r->user[0] != '%') return 0; /* group support TBD next */
+    }
+    /* host: if present, must match */
+    if (r->host && !sssd_host_matches(r->host, short_host, fqdn)) return 0;
+    /* runas defaults handled earlier; detailed runas resolution will be added next */
+    return 1;
+}
+
 /* Check a specific command against SSSD rules (socket/lib query).
  * Conservative precedence: any matching negative (!pattern) denies;
  * otherwise a matching positive or ALL allows; else deny. */
@@ -1352,10 +1445,16 @@ int check_command_permission_sssd(const char *username, const char *command)
     if (!username || !command) return 0;
     struct sss_sudo_result *res = query_sssd_sudo_rules(username);
     if (!res || res->error_code != SSS_SUDO_ERROR_OK) { if (res) free_sss_sudo_result(res); return 0; }
+
+    char hostname[256], fqdn[256];
+    if (gethostname(hostname, sizeof(hostname)) != 0) snprintf(hostname, sizeof(hostname), "%s", "localhost");
+    resolve_fqdn(hostname, fqdn, sizeof(fqdn));
+
     int any_positive = 0;
     int any_negative = 0;
     for (struct sss_sudo_rule *r = res->rules; r; r = r->next) {
         if (!r->command) continue;
+        if (!sssd_rule_applies(r, username, hostname, fqdn)) continue;
         const char *pat = r->command;
         int is_neg = (pat[0] == '!');
         if (is_neg) pat++;
