@@ -102,6 +102,166 @@ static void *sssd_memmem(const void *haystack, size_t hay_len, const void *needl
     return NULL;
 }
 
+/* Rule context used while parsing a single SSSD sudo rule */
+struct sss_rule_ctx {
+    char runas_user[128];
+    char runas_group[128];
+
+    int nopasswd;
+    int noexec;
+    int setenv_allow;
+    int env_reset;
+    int log_input;
+    int log_output;
+    int requiretty;
+    int lecture;
+
+    int timestamp_timeout;   /* minutes, -1 unset */
+    int verifypw;            /* 0 unset, 1 always, 2 any, 3 never */
+    int umask_value;         /* -1 unset */
+
+    char secure_path[256];
+    char cwd[256];
+    char chroot_dir[256];
+    char selinux_role[64];
+    char selinux_type[64];
+    char apparmor_profile[64];
+
+    char env_keep[512];
+    char env_check[512];
+    char env_delete[512];
+
+    char iolog_dir[256];
+    char iolog_file[128];
+    char iolog_group[64];
+    int  iolog_mode;         /* -1 unset */
+
+    time_t not_before;       /* 0 unset */
+    time_t not_after;        /* 0 unset */
+    long   order;            /* -1 unset */
+
+    char user[128];          /* sudoUser value if present */
+    char host[256];          /* sudoHost value if present */
+};
+
+static void ctx_init_defaults(struct sss_rule_ctx *ctx)
+{
+    memset(ctx, 0, sizeof(*ctx));
+    snprintf(ctx->runas_user, sizeof(ctx->runas_user), "%s", "ALL");
+    ctx->runas_group[0] = '\0';
+    ctx->timestamp_timeout = -1;
+    ctx->verifypw = 0;
+    ctx->umask_value = -1;
+    ctx->iolog_mode = -1;
+    ctx->order = -1;
+}
+
+static int parse_octal_mode(const char *s)
+{
+    if (!s || !*s) return -1;
+    int mode = 0;
+    for (const char *p = s; *p; ++p) {
+        if (*p < '0' || *p > '7') return -1;
+        mode = (mode << 3) + (*p - '0');
+        if (mode > 07777) return -1;
+    }
+    return mode;
+}
+
+static long parse_long(const char *s)
+{
+    if (!s) return -1;
+    char *end = NULL;
+    long v = strtol(s, &end, 10);
+    if (end && *end == '\0') return v;
+    return -1;
+}
+
+static UNUSED time_t parse_time_string(const char *s)
+{
+    if (!s) return 0;
+    /* Try epoch seconds */
+    char *end = NULL;
+    long long v = strtoll(s, &end, 10);
+    if (end && *end == '\0' && v > 0) return (time_t)v;
+    /* Try YYYYMMDDHHMMSS (optionally with Z) */
+    size_t n = strlen(s);
+    if (n == 14 || (n == 15 && s[14] == 'Z')) {
+        struct tm tmv; memset(&tmv, 0, sizeof(tmv));
+        char buf[16]; size_t copy = n > 14 ? 14 : n; memcpy(buf, s, copy); buf[14] = '\0';
+        char y[5], mo[3], d[3], h[3], mi[3], se[3];
+        memcpy(y, buf, 4); y[4]='\0'; memcpy(mo, buf+4, 2); mo[2]='\0'; memcpy(d, buf+6, 2); d[2]='\0';
+        memcpy(h, buf+8, 2); h[2]='\0'; memcpy(mi, buf+10, 2); mi[2]='\0'; memcpy(se, buf+12, 2); se[2]='\0';
+        tmv.tm_year = atoi(y) - 1900; tmv.tm_mon = atoi(mo) - 1; tmv.tm_mday = atoi(d);
+        tmv.tm_hour = atoi(h); tmv.tm_min = atoi(mi); tmv.tm_sec = atoi(se);
+        /* Treat as UTC */
+        return timegm(&tmv);
+    }
+    return 0;
+}
+
+static void ctx_apply_option(struct sss_rule_ctx *ctx, const char *opt)
+{
+    if (!ctx || !opt || !*opt) return;
+    /* Handle !authenticate first */
+    if (strcmp(opt, "!authenticate") == 0) { ctx->nopasswd = 1; return; }
+    if (strcmp(opt, "authenticate") == 0) { ctx->nopasswd = 0; return; }
+
+    if (strcmp(opt, "noexec") == 0) { ctx->noexec = 1; return; }
+    if (strcmp(opt, "setenv") == 0) { ctx->setenv_allow = 1; return; }
+    if (strcmp(opt, "!setenv") == 0) { ctx->setenv_allow = 0; return; }
+    if (strcmp(opt, "env_reset") == 0) { ctx->env_reset = 1; return; }
+    if (strcmp(opt, "log_input") == 0) { ctx->log_input = 1; return; }
+    if (strcmp(opt, "log_output") == 0) { ctx->log_output = 1; return; }
+    if (strcmp(opt, "requiretty") == 0) { ctx->requiretty = 1; return; }
+    if (strcmp(opt, "lecture") == 0) { ctx->lecture = 1; return; }
+
+    const char *eq = strchr(opt, '=');
+    if (!eq) return;
+    size_t keylen = (size_t)(eq - opt);
+    const char *val = eq + 1;
+    if (keylen == 11 && strncmp(opt, "secure_path", 11) == 0) {
+        snprintf(ctx->secure_path, sizeof(ctx->secure_path), "%s", val);
+    } else if (keylen == 3 && strncmp(opt, "cwd", 3) == 0) {
+        snprintf(ctx->cwd, sizeof(ctx->cwd), "%s", val);
+    } else if (keylen == 6 && strncmp(opt, "chroot", 6) == 0) {
+        snprintf(ctx->chroot_dir, sizeof(ctx->chroot_dir), "%s", val);
+    } else if (keylen == 7 && strncmp(opt, "env_keep", 8) == 0) {
+        snprintf(ctx->env_keep, sizeof(ctx->env_keep), "%s", val);
+    } else if (keylen == 8 && strncmp(opt, "env_check", 9) == 0) {
+        snprintf(ctx->env_check, sizeof(ctx->env_check), "%s", val);
+    } else if (keylen == 9 && strncmp(opt, "env_delete", 10) == 0) {
+        snprintf(ctx->env_delete, sizeof(ctx->env_delete), "%s", val);
+    } else if (keylen == 5 && strncmp(opt, "umask", 5) == 0) {
+        int m = parse_octal_mode(val); if (m >= 0) ctx->umask_value = m;
+    } else if (keylen == 16 && strncmp(opt, "timestamp_timeout", 16) == 0) {
+        long t = parse_long(val); if (t >= 0) ctx->timestamp_timeout = (int)t;
+    } else if (keylen == 13 && strncmp(opt, "passwd_timeout", 13) == 0) {
+        long t = parse_long(val); if (t >= 0) ctx->timestamp_timeout = (int)t;
+    } else if (keylen == 8 && strncmp(opt, "verifypw", 8) == 0) {
+        if (strcmp(val, "always") == 0) ctx->verifypw = 1;
+        else if (strcmp(val, "any") == 0) ctx->verifypw = 2;
+        else if (strcmp(val, "never") == 0) ctx->verifypw = 3;
+    } else if (keylen == 8 && strncmp(opt, "iolog_dir", 9) == 0) {
+        snprintf(ctx->iolog_dir, sizeof(ctx->iolog_dir), "%s", val);
+    } else if (keylen == 9 && strncmp(opt, "iolog_file", 10) == 0) {
+        snprintf(ctx->iolog_file, sizeof(ctx->iolog_file), "%s", val);
+    } else if (keylen == 10 && strncmp(opt, "iolog_group", 11) == 0) {
+        snprintf(ctx->iolog_group, sizeof(ctx->iolog_group), "%s", val);
+    } else if (keylen == 10 && strncmp(opt, "iolog_mode", 10) == 0) {
+        int m = parse_octal_mode(val); if (m >= 0) ctx->iolog_mode = m;
+    } else if (keylen == 4 && strncmp(opt, "role", 4) == 0) {
+        snprintf(ctx->selinux_role, sizeof(ctx->selinux_role), "%s", val);
+    } else if (keylen == 4 && strncmp(opt, "type", 4) == 0) {
+        snprintf(ctx->selinux_type, sizeof(ctx->selinux_type), "%s", val);
+    } else if (keylen == 16 && strncmp(opt, "apparmor_profile", 16) == 0) {
+        snprintf(ctx->apparmor_profile, sizeof(ctx->apparmor_profile), "%s", val);
+    }
+}
+
+/* Forward declaration to allow helper to reference rule struct defined later */
+struct sss_sudo_rule;
+
 /* SSSD socket paths */
 #define SSSD_NSS_SOCKET "/var/lib/sss/pipes/nss"
 #define SSSD_SUDO_SOCKET "/var/lib/sss/pipes/sudo"
@@ -109,15 +269,102 @@ static void *sssd_memmem(const void *haystack, size_t hay_len, const void *needl
 /* SSSD sudo protocol definitions (minimal vendored) */
 /* Local rule/result structures used by sudosh */
 struct sss_sudo_rule {
-    char *user;
-    char *host;
-    char *command;
-    char *runas_user;
-    char *runas_group;
-    char *options;
-    int nopasswd;
+    /* Identities and scope */
+    char *user;             /* sudoUser (original; may be ALL or patterns) */
+    char *host;             /* sudoHost (original; may be ALL or patterns) */
+
+    /* Commands */
+    char *command;          /* Single command captured (backward compat) */
+
+    /* RunAs */
+    char *runas_user;       /* Primary runas user (default ALL/root) */
+    char *runas_group;      /* Primary runas group (optional) */
+
+    /* Options (parsed flags) */
+    int nopasswd;           /* from !authenticate */
+    int noexec;             /* disallow execve in sub-commands */
+    int setenv_allow;       /* allow user to override env */
+    int env_reset;          /* reset environment */
+    int log_input;          /* iolog input */
+    int log_output;         /* iolog output */
+    int requiretty;         /* require a tty */
+    int lecture;            /* show lecture */
+
+    int timestamp_timeout;  /* minutes; -1 = unset */
+    int verifypw;           /* 0=unset, 1=always, 2=any, 3=never */
+    int umask_value;        /* -1 if unset, else 0..0777 */
+
+    char *secure_path;
+    char *cwd;
+    char *chroot_dir;
+    char *selinux_role;
+    char *selinux_type;
+    char *apparmor_profile;
+
+    /* env lists (comma-separated as captured) */
+    char *env_keep;
+    char *env_check;
+    char *env_delete;
+
+    /* iolog settings */
+    char *iolog_dir;
+    char *iolog_file;
+    char *iolog_group;
+    int   iolog_mode; /* octal mode, e.g., 0600; -1 unset */
+
+    /* Time bounds and order */
+    time_t not_before;      /* 0 if unset */
+    time_t not_after;       /* 0 if unset */
+    long   order;           /* sudoOrder; -1 if unset */
+
     struct sss_sudo_rule *next;
 };
+
+/* Define the postdef copier now that struct is known */
+static void copy_ctx_to_rule_postdef(const struct sss_rule_ctx *ctx, const char *username, struct sss_sudo_rule *rule);
+
+/* Now that struct sss_sudo_rule is defined, provide a thin wrapper */
+static void copy_ctx_to_rule(const struct sss_rule_ctx *ctx, const char *username, struct sss_sudo_rule *rule)
+{
+    copy_ctx_to_rule_postdef(ctx, username, rule);
+}
+
+
+static void copy_ctx_to_rule_postdef(const struct sss_rule_ctx *ctx, const char *username, struct sss_sudo_rule *rule)
+{
+    rule->runas_user = ctx->runas_user[0] ? safe_strdup(ctx->runas_user) : safe_strdup("ALL");
+    rule->runas_group = ctx->runas_group[0] ? safe_strdup(ctx->runas_group) : NULL;
+    rule->nopasswd = ctx->nopasswd;
+    rule->noexec = ctx->noexec;
+    rule->setenv_allow = ctx->setenv_allow;
+    rule->env_reset = ctx->env_reset;
+    rule->log_input = ctx->log_input;
+    rule->log_output = ctx->log_output;
+    rule->requiretty = ctx->requiretty;
+    rule->lecture = ctx->lecture;
+    rule->timestamp_timeout = ctx->timestamp_timeout;
+    rule->verifypw = ctx->verifypw;
+    rule->umask_value = ctx->umask_value;
+    rule->secure_path = ctx->secure_path[0] ? safe_strdup(ctx->secure_path) : NULL;
+    rule->cwd = ctx->cwd[0] ? safe_strdup(ctx->cwd) : NULL;
+    rule->chroot_dir = ctx->chroot_dir[0] ? safe_strdup(ctx->chroot_dir) : NULL;
+    rule->selinux_role = ctx->selinux_role[0] ? safe_strdup(ctx->selinux_role) : NULL;
+    rule->selinux_type = ctx->selinux_type[0] ? safe_strdup(ctx->selinux_type) : NULL;
+    rule->apparmor_profile = ctx->apparmor_profile[0] ? safe_strdup(ctx->apparmor_profile) : NULL;
+    rule->env_keep = ctx->env_keep[0] ? safe_strdup(ctx->env_keep) : NULL;
+    rule->env_check = ctx->env_check[0] ? safe_strdup(ctx->env_check) : NULL;
+    rule->env_delete = ctx->env_delete[0] ? safe_strdup(ctx->env_delete) : NULL;
+    rule->iolog_dir = ctx->iolog_dir[0] ? safe_strdup(ctx->iolog_dir) : NULL;
+    rule->iolog_file = ctx->iolog_file[0] ? safe_strdup(ctx->iolog_file) : NULL;
+    rule->iolog_group = ctx->iolog_group[0] ? safe_strdup(ctx->iolog_group) : NULL;
+    rule->iolog_mode = ctx->iolog_mode;
+    rule->not_before = ctx->not_before;
+    rule->not_after = ctx->not_after;
+    rule->order = ctx->order;
+    /* Preserve who we queried as fallback */
+    rule->user = ctx->user[0] ? safe_strdup(ctx->user) : safe_strdup(username);
+    rule->host = ctx->host[0] ? safe_strdup(ctx->host) : NULL;
+}
 
 struct sss_sudo_result {
     uint32_t num_rules;
@@ -514,7 +761,7 @@ static struct sss_sudo_result *query_sssd_sudo_rules(const char *username) {
             if (read_from_socket(fd2, payload, pl) != 0) { free(payload); goto seg_fail; }
             hex_dump_debug(payload, pl);
             /* Parse TLVs */
-            size_t pos = 0; char current_runas[128]; int current_nopasswd = 0; (void)snprintf(current_runas, sizeof(current_runas), "ALL");
+            size_t pos = 0; char current_runas[128]; (void)snprintf(current_runas, sizeof(current_runas), "ALL");
             while (pos + 8 <= pl) {
                 uint32_t t_net,l_net; memcpy(&t_net, payload + pos, 4); pos += 4; memcpy(&l_net, payload + pos, 4); pos += 4;
                 uint32_t t = ntohl(t_net);
@@ -522,16 +769,27 @@ static struct sss_sudo_result *query_sssd_sudo_rules(const char *username) {
                 if (lvl > pl - pos) break;
                 const uint8_t *val = payload + pos; pos += lvl;
                 sssd_dbg("socket: TLV t=0x%x len=%u", t, lvl);
+                static struct sss_rule_ctx ctx; /* static to avoid large stack on loop */
                 if (t == (uint32_t)SSS_SUDO_RUNASUSER) {
-                    size_t cplen = (lvl < sizeof(current_runas)-1) ? lvl : sizeof(current_runas)-1; memcpy(current_runas, val, cplen); current_runas[cplen] = '\0';
+                    size_t cplen = (lvl < sizeof(ctx.runas_user)-1) ? lvl : sizeof(ctx.runas_user)-1; memcpy(ctx.runas_user, val, cplen); ctx.runas_user[cplen] = '\0';
                 } else if (t == (uint32_t)SSS_SUDO_OPTION) {
-                    if (lvl > 0) { if (sssd_memmem(val, lvl, "!authenticate", 13)) current_nopasswd = 1; else if (sssd_memmem(val, lvl, "authenticate", 12)) current_nopasswd = 0; }
+                    /* Options may be a comma- or newline-separated list; be liberal */
+                    size_t i = 0;
+                    while (i < lvl) {
+                        /* extract token */
+                        char token[256]; size_t tp = 0;
+                        while (i < lvl && (val[i] == ' ' || val[i] == '\n' || val[i] == '\t' || val[i] == ',')) i++;
+                        while (i < lvl && tp < sizeof(token)-1 && val[i] != ',' && val[i] != '\n' && val[i] != '\0') token[tp++] = (char)val[i++];
+                        token[tp] = '\0';
+                        if (tp > 0) ctx_apply_option(&ctx, token);
+                        while (i < lvl && (val[i] == ',' || val[i] == '\n' || val[i] == '\0')) i++;
+                    }
                 } else if (t == (uint32_t)SSS_SUDO_COMMAND) {
                     struct sss_sudo_rule *rule = calloc(1, sizeof(struct sss_sudo_rule));
                     if (rule) {
-                        rule->user = safe_strdup(username); rule->runas_user = safe_strdup(current_runas);
+                        copy_ctx_to_rule(&ctx, username, rule);
                         char *cmdstr = malloc(lvl + 1); if (cmdstr) { memcpy(cmdstr, val, lvl); cmdstr[lvl] = '\0'; rule->command = cmdstr; }
-                        rule->nopasswd = current_nopasswd; rule->next = result->rules; result->rules = rule; result->num_rules++;
+                        rule->next = result->rules; result->rules = rule; result->num_rules++;
                     }
                 }
             }
@@ -886,10 +1144,9 @@ int sssd_parse_sudo_payload_for_test(const uint8_t *payload, size_t pl, const ch
         }
         hex_dump_debug(payload, rlen);
 
-        /* Parse payload TLVs. Minimal parse: look for command strings and runas options. */
+        /* Parse payload TLVs. Minimal parse: look for command strings and runas/options. */
         size_t pos = 0;
         char current_runas[128];
-        int current_nopasswd = 0;
         (void)snprintf(current_runas, sizeof(current_runas), "ALL");
         while (pos + 8 <= rlen) {
             uint32_t t, l;
@@ -905,17 +1162,17 @@ int sssd_parse_sudo_payload_for_test(const uint8_t *payload, size_t pl, const ch
                 memcpy(current_runas, val, cplen);
                 current_runas[cplen] = '\0';
             } else if (t == (uint32_t)SSS_SUDO_COMMAND) {
+                struct sss_rule_ctx ctx; ctx_init_defaults(&ctx);
+                snprintf(ctx.runas_user, sizeof(ctx.runas_user), "%s", current_runas);
                 struct sss_sudo_rule *rule = calloc(1, sizeof(struct sss_sudo_rule));
                 if (rule) {
-                    rule->user = safe_strdup(username);
-                    rule->runas_user = safe_strdup(current_runas);
+                    copy_ctx_to_rule(&ctx, username, rule);
                     /* Ensure command is NUL-terminated */
                     char *cmdstr = malloc(l + 1);
                     if (cmdstr) {
                         memcpy(cmdstr, val, l); cmdstr[l] = '\0';
                         rule->command = cmdstr;
                     }
-                    rule->nopasswd = current_nopasswd;
                     if (!result->rules) {
                         result->rules = rule;
                     } else {
@@ -934,13 +1191,7 @@ int sssd_parse_sudo_payload_for_test(const uint8_t *payload, size_t pl, const ch
                 (void)val; (void)l;
             } else if (t == (uint32_t)SSS_SUDO_OPTION) {
                 /* Minimal handling: detect !authenticate for NOPASSWD */
-                if (l > 0) {
-                    if (sssd_memmem(val, l, "!authenticate", sizeof("!authenticate")-1)) {
-                        current_nopasswd = 1;
-                    } else if (sssd_memmem(val, l, "authenticate", sizeof("authenticate")-1)) {
-                        current_nopasswd = 0;
-                    }
-                }
+                (void)val; (void)l;
             } else {
                 /* Unhandled TLV; continue */
             }
@@ -978,7 +1229,20 @@ static void free_sss_sudo_result(struct sss_sudo_result *result) {
         free(rule->command);
         free(rule->runas_user);
         free(rule->runas_group);
-        free(rule->options);
+
+        free(rule->secure_path);
+        free(rule->cwd);
+        free(rule->chroot_dir);
+        free(rule->selinux_role);
+        free(rule->selinux_type);
+        free(rule->apparmor_profile);
+        free(rule->env_keep);
+        free(rule->env_check);
+        free(rule->env_delete);
+        free(rule->iolog_dir);
+        free(rule->iolog_file);
+        free(rule->iolog_group);
+
         free(rule);
 
         rule = next;
