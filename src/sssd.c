@@ -17,12 +17,68 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <dlfcn.h>
+#include <stdarg.h>
+#include <netdb.h>
+
+
+#include <poll.h>
+
+#include "../third_party/sssd/sss_cli_min.h"
+
 #include <sys/types.h>
 #include <errno.h>
 #include <stdint.h>
 #include <arpa/inet.h>
 #include <ctype.h>
 #include <time.h>
+#include "sssd_replay_dev.h"
+#include "sssd_test_api.h"
+
+
+
+/* Debug logging for SSSD integration (enabled via SUDOSH_DEBUG_SSSD=1) */
+static int sssd_debug_enabled = -1;
+static void sssd_dbg(const char *fmt, ...) {
+    if (sssd_debug_enabled == -1) {
+        const char *e = getenv("SUDOSH_DEBUG_SSSD");
+        sssd_debug_enabled = (e && *e == '1') ? 1 : 0;
+    }
+    if (!sssd_debug_enabled) return;
+    va_list ap;
+    va_start(ap, fmt);
+    fprintf(stderr, "[sudosh][sssd] ");
+    vfprintf(stderr, fmt, ap);
+    fprintf(stderr, "\n");
+    va_end(ap);
+}
+
+/* Helpers for socket parity */
+static void resolve_fqdn(const char *host_in, char *fqdn_out, size_t outsz) {
+    if (!host_in || !fqdn_out || outsz == 0) return;
+    struct addrinfo hints; memset(&hints, 0, sizeof(hints));
+    hints.ai_flags = AI_CANONNAME;
+    struct addrinfo *res = NULL;
+    int rc = getaddrinfo(host_in, NULL, &hints, &res);
+    if (rc == 0 && res) {
+        if (res->ai_canonname && res->ai_canonname[0] != '\0') {
+            snprintf(fqdn_out, outsz, "%s", res->ai_canonname);
+        } else {
+            snprintf(fqdn_out, outsz, "%s", host_in);
+        }
+        freeaddrinfo(res);
+    } else {
+        snprintf(fqdn_out, outsz, "%s", host_in);
+    }
+}
+static void hex_dump_debug(const uint8_t *buf, size_t len) {
+    if (!buf || !len) return;
+    if (sssd_debug_enabled != 1) return;
+    size_t max = len < 64 ? len : 64;
+    fprintf(stderr, "[sudosh][sssd] socket: payload[0..%zu]=", max);
+    for (size_t i = 0; i < max; i++) fprintf(stderr, "%02x", buf[i]);
+    fprintf(stderr, "\n");
+}
 
 /* Attribute for marking intentionally unused static functions to satisfy -Werror */
 #if defined(__GNUC__) || defined(__clang__)
@@ -35,24 +91,8 @@
 #define SSSD_NSS_SOCKET "/var/lib/sss/pipes/nss"
 #define SSSD_SUDO_SOCKET "/var/lib/sss/pipes/sudo"
 
-/* SSSD sudo protocol definitions */
-#define SSS_SUDO_GET_SUDORULES 0x0001
-#define SSS_SUDO_USER          0x0001
-#define SSS_SUDO_UID           0x0002
-#define SSS_SUDO_GROUPS        0x0004
-#define SSS_SUDO_NETGROUPS     0x0008
-#define SSS_SUDO_HOSTNAME      0x0010
-#define SSS_SUDO_COMMAND       0x0020
-#define SSS_SUDO_RUNASUSER     0x0040
-#define SSS_SUDO_RUNASGROUP    0x0080
-
-/* SSSD sudo response codes */
-#define SSS_SUDO_ERROR_OK           0
-#define SSS_SUDO_ERROR_NOENT        1
-#define SSS_SUDO_ERROR_FATAL        2
-#define SSS_SUDO_ERROR_NOMEM        3
-
-/* SSSD sudo rule structure */
+/* SSSD sudo protocol definitions (minimal vendored) */
+/* Local rule/result structures used by sudosh */
 struct sss_sudo_rule {
     char *user;
     char *host;
@@ -64,7 +104,6 @@ struct sss_sudo_rule {
     struct sss_sudo_rule *next;
 };
 
-/* SSSD sudo result structure */
 struct sss_sudo_result {
     uint32_t num_rules;
     struct sss_sudo_rule *rules;
@@ -72,11 +111,193 @@ struct sss_sudo_result {
     char *error_message;
 };
 
+/* SSSD sudo responder command IDs (native-endian on wire) */
+#define SSS_SUDO_GET_VERSION   0x0001
+#define SSS_SUDO_GET_SUDORULES 0x00C1
+#define SSS_SUDO_SET_RUNAS     0x00C2
+/* Attribute type IDs (minimal set used by our client). Note: These values
+ * mirror sudo’s usage for the SSSD sudo responder; they are treated as TLV types here.
+ */
+#define SSS_SUDO_USER          0x0001
+#define SSS_SUDO_UID           0x0002
+#define SSS_SUDO_GROUPS        0x0003
+#define SSS_SUDO_HOSTNAME      0x0004
+#define SSS_SUDO_COMMAND       0x0005
+#define SSS_SUDO_RUNASUSER     0x0006
+/* (duplicated block removed) */
+
+/* Vendored minimal libsss sudo API structs to interop via dlopen (from sudo 1.9.x) */
+/* Forward declarations for privilege helpers used in lib path */
+static int escalate_for_sssd_query(uid_t *saved_euid);
+static void drop_after_sssd_query(int escalated, uid_t saved_euid);
+
+struct libsss_sudo_attr {
+    char *name;
+    char **values;
+    unsigned int num_values;
+};
+struct libsss_sudo_rule {
+    unsigned int num_attrs;
+    struct libsss_sudo_attr *attrs;
+};
+struct libsss_sudo_result {
+    unsigned int num_rules;
+    struct libsss_sudo_rule *rules;
+};
+
+/* Forward decls for dev replay helpers */
+int parse_and_replay_strace(const char *trace_path, int fd);
+
+typedef int  (*lib_sss_sudo_send_recv_t)(uid_t, const char*, const char*,
+
+                                         uint32_t*, struct libsss_sudo_result**);
+/* defaults not required for now */
+typedef void (*lib_sss_sudo_free_result_t)(struct libsss_sudo_result*);
+    /* Define error codes early for use below */
+    #ifndef SSS_SUDO_ERROR_OK
+    #define SSS_SUDO_ERROR_OK           0
+    #define SSS_SUDO_ERROR_NOENT        1
+    #define SSS_SUDO_ERROR_FATAL        2
+    #define SSS_SUDO_ERROR_NOMEM        3
+    #endif
+/* Exposed for unit tests */
+#ifdef SUDOSH_TEST_MODE
+int sssd_parse_sudo_payload_for_test(const uint8_t *payload, size_t pl, const char *unused_username, int *out_rules);
+#endif
+
+
+typedef int  (*lib_sss_sudo_get_values_t)(struct libsss_sudo_rule*, const char*,
+                                          char***);
+typedef void (*lib_sss_sudo_free_values_t)(char**);
+
+/* Try libsss_sudo.so first; if successful, convert to our local result format */
+static struct sss_sudo_result *query_sssd_sudo_rules_via_lib(const char *username) {
+    const char *candidates[] = {
+        "/usr/lib64/libsss_sudo.so",
+        "/usr/lib64/sssd/libsss_sudo.so",
+        "/usr/lib/sssd/libsss_sudo.so",
+        "libsss_sudo.so",
+        NULL
+    };
+    void *handle = NULL;
+    lib_sss_sudo_send_recv_t fn_send_recv = NULL;
+    lib_sss_sudo_free_result_t fn_free_result = NULL;
+    lib_sss_sudo_get_values_t fn_get_values = NULL;
+    lib_sss_sudo_free_values_t fn_free_values = NULL;
+
+    for (int i = 0; candidates[i]; i++) {
+        handle = dlopen(candidates[i], RTLD_LAZY);
+        if (handle) break;
+
+    }
+    if (!handle) {
+        sssd_dbg("libsss_sudo: not found");
+        return NULL;
+    }
+
+    fn_send_recv = (lib_sss_sudo_send_recv_t)dlsym(handle, "sss_sudo_send_recv");
+    fn_free_result = (lib_sss_sudo_free_result_t)dlsym(handle, "sss_sudo_free_result");
+    fn_get_values = (lib_sss_sudo_get_values_t)dlsym(handle, "sss_sudo_get_values");
+    fn_free_values = (lib_sss_sudo_free_values_t)dlsym(handle, "sss_sudo_free_values");
+    if (!fn_send_recv || !fn_free_result || !fn_get_values || !fn_free_values) {
+        sssd_dbg("libsss_sudo: missing symbols (%p %p %p %p)", (void*)fn_send_recv, (void*)fn_free_result, (void*)fn_get_values, (void*)fn_free_values);
+        dlclose(handle);
+        return NULL;
+    }
+
+    uint32_t sss_error = 0;
+    struct libsss_sudo_result *libres = NULL;
+    uid_t uid = getuid();
+    char hostbuf[256];
+    if (gethostname(hostbuf, sizeof(hostbuf)) != 0) {
+        snprintf(hostbuf, sizeof(hostbuf), "%s", "localhost");
+    }
+    /* escalate euid to root if setuid is in effect, required for SSSD socket */
+    uid_t saved_euid = geteuid();
+    int escalated = escalate_for_sssd_query(&saved_euid);
+    sssd_dbg("libsss_sudo: escalate=%d euid_before=%lu host=%s", escalated, (unsigned long)saved_euid, hostbuf);
+    int rc = fn_send_recv(uid, username, hostbuf, &sss_error, &libres);
+    sssd_dbg("libsss_sudo: send_recv rc=%d error=%u libres=%p", rc, (unsigned)sss_error, (void*)libres);
+    drop_after_sssd_query(escalated, saved_euid);
+    if (rc != 0 || sss_error != 0 || libres == NULL) {
+        if (libres) fn_free_result(libres);
+        dlclose(handle);
+        return NULL;
+    }
+
+    /* Convert to our local result */
+    struct sss_sudo_result *out = calloc(1, sizeof(struct sss_sudo_result));
+    if (!out) {
+        fn_free_result(libres);
+        dlclose(handle);
+        return NULL;
+    }
+
+    for (unsigned int i = 0; i < libres->num_rules; i++) {
+        struct libsss_sudo_rule *r = &libres->rules[i];
+        char **cmnds = NULL, **runasusers = NULL, **opts = NULL;
+        int ret;
+
+        /* sudoCommand list */
+        ret = fn_get_values(r, "sudoCommand", &cmnds);
+        if (ret != 0) continue;
+        /* sudoRunAsUser or sudoRunAs */
+        ret = fn_get_values(r, "sudoRunAsUser", &runasusers);
+        if (ret == ENOENT) {
+            (void)fn_get_values(r, "sudoRunAs", &runasusers);
+        }
+        /* sudoOption (for !authenticate) */
+        ret = fn_get_values(r, "sudoOption", &opts);
+        int nopass = 0;
+        if (ret == 0 && opts) {
+            for (char **p = opts; *p; ++p) {
+                if (strcmp(*p, "!authenticate") == 0) { nopass = 1; break; }
+            }
+        }
+
+        const char *runas = (runasusers && runasusers[0]) ? runasusers[0] : "ALL";
+        if (cmnds) {
+            for (char **c = cmnds; *c; ++c) {
+                struct sss_sudo_rule *nr = calloc(1, sizeof(struct sss_sudo_rule));
+                if (!nr) break;
+                nr->user = safe_strdup(username);
+                nr->runas_user = safe_strdup(runas);
+                nr->command = safe_strdup(*c);
+                nr->nopasswd = nopass;
+                if (!out->rules) {
+                    out->rules = nr;
+                } else {
+                    struct sss_sudo_rule *tail = out->rules;
+                    while (tail->next) tail = tail->next;
+                    tail->next = nr;
+                }
+                out->num_rules++;
+            }
+        }
+
+        if (cmnds) fn_free_values(cmnds);
+        if (runasusers) fn_free_values(runasusers);
+        if (opts) fn_free_values(opts);
+    }
+
+    out->error_code = (out->num_rules > 0) ? SSS_SUDO_ERROR_OK : SSS_SUDO_ERROR_NOENT;
+    fn_free_result(libres);
+    dlclose(handle);
+    return out;
+}
+
+#define SSS_SUDO_RUNASGROUP    0x0007
+#define SSS_SUDO_OPTION        0x0008
+
+/* SSSD sudo response codes */
+#define SSS_SUDO_ERROR_OK           0
+#define SSS_SUDO_ERROR_NOENT        1
+#define SSS_SUDO_ERROR_FATAL        2
+#define SSS_SUDO_ERROR_NOMEM        3
+
 /**
  * Write data to socket with proper error handling
  */
-/* unused: reserved for future SSSD socket client */
-#if 0
 static int write_to_socket(int fd, const void *data, size_t len) {
     const char *ptr = (const char *)data;
     size_t written = 0;
@@ -86,17 +307,19 @@ static int write_to_socket(int fd, const void *data, size_t len) {
             if (errno == EINTR) continue;
             return -1;
         }
-        written += result;
+        if (result == 0) {
+            return -1; /* Should not happen for write */
+        }
+        written += (size_t)result;
     }
+    sssd_dbg("socket: write complete fd=%d total=%zu", fd, len);
+
     return 0;
 }
-#endif
 
 /**
  * Read data from socket with proper error handling
  */
-/* unused: reserved for future SSSD socket client */
-#if 0
 static int read_from_socket(int fd, void *data, size_t len) {
     char *ptr = (char *)data;
     size_t bytes_read = 0;
@@ -105,30 +328,31 @@ static int read_from_socket(int fd, void *data, size_t len) {
         if (result < 0) {
             if (errno == EINTR) continue;
             return -1;
+        sssd_dbg("socket: read progress fd=%d total=%zu/%zu", fd, bytes_read, len);
+
         }
         if (result == 0) return -1; /* EOF */
-        bytes_read += result;
+        bytes_read += (size_t)result;
     }
     return 0;
 }
-#endif
 
 /**
  * Check if SSSD is available and running
  */
 static int is_sssd_available(void) {
     struct stat st;
-    
+
     /* Check if SSSD NSS socket exists */
     if (stat(SSSD_NSS_SOCKET, &st) == 0) {
         return 1;
     }
-    
+
     /* Check if SSSD sudo socket exists */
     if (stat(SSSD_SUDO_SOCKET, &st) == 0) {
         return 1;
     }
-    
+
     /* Check if SSSD service is running via systemctl */
     FILE *fp = popen("systemctl is-active sssd 2>/dev/null", "r");
     if (fp) {
@@ -141,20 +365,64 @@ static int is_sssd_available(void) {
         }
         pclose(fp);
     }
-    
+
     return 0;
 }
 
 /**
  * Get user information from SSSD
- * This is a simplified implementation - real SSSD integration would use
- * the SSSD client libraries or D-Bus interface
  */
+/* Temporary escalation helpers for SSSD sudo socket access (requires root) */
+static int escalate_for_sssd_query(uid_t *saved_euid) {
+    uid_t real_uid = getuid();
+    uid_t effective_uid = geteuid();
+    if (effective_uid == 0) {
+        return 0; /* already root */
+    }
+    if (real_uid == effective_uid) {
+        return -1; /* not setuid, cannot escalate */
+    }
+    *saved_euid = effective_uid;
+    if (seteuid(0) != 0) {
+        return -1;
+    }
+    return 1;
+}
+static void drop_after_sssd_query(int escalated, uid_t saved_euid) {
+    if (escalated == 1) {
+        if (seteuid(saved_euid) != 0) {
+            /* best-effort drop */
+        }
+    }
+}
+
+/* Native-endian sudo responder header helpers */
+static int sss_sudo_send_cmd(int fd, uint32_t cmd, const void *body, uint32_t body_len) {
+    uint32_t hdr[4];
+    hdr[0] = 16u + body_len;
+    hdr[1] = cmd;
+    hdr[2] = 0;
+    hdr[3] = 0;
+    if (write_to_socket(fd, hdr, sizeof(hdr)) != 0) return -1;
+    if (body_len > 0 && write_to_socket(fd, body, body_len) != 0) return -1;
+    return 0;
+}
+
+static int sss_sudo_read_hdr(int fd, uint32_t *len_out, uint32_t *cmd_out, uint32_t *status_out) {
+    uint32_t rhdr[4];
+    struct pollfd pfd; pfd.fd = fd; pfd.events = POLLIN; int prc = poll(&pfd, 1, 2000);
+    if (prc <= 0) { sssd_dbg("socket: poll rc=%d revents=0x%x", prc, (unsigned)pfd.revents); return -1; }
+    if (read_from_socket(fd, rhdr, sizeof(rhdr)) != 0) return -1;
+    *len_out = rhdr[0]; *cmd_out = rhdr[1]; *status_out = rhdr[2];
+    sssd_dbg("socket: sss_hdr len=%u cmd=0x%x status=%u", *len_out, *cmd_out, *status_out);
+    return 0;
+}
+
 struct user_info *get_user_info_sssd(const char *username) {
     if (!username || !is_sssd_available()) {
         return NULL;
     }
-    
+
     /* For now, fall back to standard getpwnam which may use SSSD
      * if NSS is configured properly */
     return get_user_info(username);
@@ -163,8 +431,6 @@ struct user_info *get_user_info_sssd(const char *username) {
 /**
  * Connect to SSSD sudo socket
  */
-/* unused: reserved for future SSSD socket client */
-#if 0
 static int connect_to_sssd_sudo(void) {
     int sock_fd;
     struct sockaddr_un addr;
@@ -179,64 +445,490 @@ static int connect_to_sssd_sudo(void) {
     }
     return sock_fd;
 }
-#endif
 
 /**
- * Query SSSD sudo rules using alternative methods since direct socket requires root
+ * Query SSSD sudo rules using the SSSD sudo responder socket (no sudo -l or getent)
+ * Minimal TLV protocol client, modeled after sudo's SSSD integration.
+ * Note: This implementation vendors only the minimal protocol needed to list commands.
  */
 static struct sss_sudo_result *query_sssd_sudo_rules(const char *username) {
+    int fd = -1;
     struct sss_sudo_result *result = NULL;
-    char command[512];
-    FILE *fp;
-    char buffer[1024];
+    char hostname[256];
 
     if (!username) {
         return NULL;
     }
 
-    /* Alternative approach: Use NSS or other methods to query SSSD sudo rules
-     * Since direct socket access requires root privileges */
 
-    /* Allocate result structure */
-    result = calloc(1, sizeof(struct sss_sudo_result));
-    if (!result) {
-        return NULL;
+    const char *seg = getenv("SUDOSH_SSSD_SOCKET_SEGMENTED");
+    if (seg && *seg) {
+        int fd2 = connect_to_sssd_sudo();
+        if (fd2 < 0) {
+            result->error_code = SSS_SUDO_ERROR_NOENT;
+            return result;
+        }
+        /* 1) GET_VERSION with body {1} */
+        uint32_t one = 1;
+        if (sss_sudo_send_cmd(fd2, SSS_SUDO_GET_VERSION, &one, sizeof(one)) != 0) goto seg_fail;
+        {
+            uint32_t l,c,s; if (sss_sudo_read_hdr(fd2, &l, &c, &s) != 0 || s != 0) goto seg_fail;
+            /* Drain body if present */
+            if (l > 16) { uint8_t sink[64]; size_t rem = l - 16; while (rem) { size_t ch = rem > sizeof(sink) ? sizeof(sink) : rem; if (read_from_socket(fd2, sink, ch) != 0) goto seg_fail; rem -= ch; } }
+        }
+        /* 2) SET_RUNAS root */
+        char runas_root[9] = {0,0,0,0,'r','o','o','t',0};
+        if (sss_sudo_send_cmd(fd2, SSS_SUDO_SET_RUNAS, runas_root, sizeof(runas_root)) != 0) goto seg_fail;
+        { uint32_t l,c,s; if (sss_sudo_read_hdr(fd2, &l, &c, &s) != 0 || s != 0) goto seg_fail; if (l > 16) { uint8_t sink[64]; size_t rem = l - 16; while (rem) { size_t ch = rem > sizeof(sink) ? sizeof(sink) : rem; if (read_from_socket(fd2, sink, ch) != 0) goto seg_fail; rem -= ch; } } }
+        /* 3) GET_SUDORULES with runas root again */
+        if (sss_sudo_send_cmd(fd2, SSS_SUDO_GET_SUDORULES, runas_root, sizeof(runas_root)) != 0) goto seg_fail;
+        { uint32_t l,c,s; if (sss_sudo_read_hdr(fd2, &l, &c, &s) != 0 || s != 0) goto seg_fail; if (l > 16) { uint8_t sink[64]; size_t rem = l - 16; while (rem) { size_t ch = rem > sizeof(sink) ? sizeof(sink) : rem; if (read_from_socket(fd2, sink, ch) != 0) goto seg_fail; rem -= ch; } } }
+        /* 4) GET_VERSION again as seen in strace */
+        if (sss_sudo_send_cmd(fd2, SSS_SUDO_GET_VERSION, &one, sizeof(one)) != 0) goto seg_fail;
+        { uint32_t l,c,s; if (sss_sudo_read_hdr(fd2, &l, &c, &s) != 0 || s != 0) goto seg_fail; if (l > 16) { uint8_t sink[64]; size_t rem = l - 16; while (rem) { size_t ch = rem > sizeof(sink) ? sizeof(sink) : rem; if (read_from_socket(fd2, sink, ch) != 0) goto seg_fail; rem -= ch; } } }
+        /* 5) GET_SUDORULES with username tagged body (observed 4-byte prefix + name\0) */
+        char ubuf[256]; size_t ulen = snprintf(ubuf+4, sizeof(ubuf)-4, "%s", username);
+        if (ulen >= sizeof(ubuf)-4) goto seg_fail;
+        ubuf[4+ulen] = '\0';
+        /* Keep the 4-byte prefix zero; matches payload we saw */
+        memset(ubuf, 0, 4);
+        if (sss_sudo_send_cmd(fd2, SSS_SUDO_GET_SUDORULES, ubuf, (uint32_t)(5+ulen)) != 0) goto seg_fail;
+        {
+            uint32_t l,c,s; if (sss_sudo_read_hdr(fd2, &l, &c, &s) != 0 || s != 0 || l <= 16) goto seg_fail;
+            uint32_t pl = l - 16; uint8_t *payload = malloc(pl); if (!payload) goto seg_fail;
+            if (read_from_socket(fd2, payload, pl) != 0) { free(payload); goto seg_fail; }
+            hex_dump_debug(payload, pl);
+            /* Parse TLVs */
+            size_t pos = 0; char current_runas[128]; int current_nopasswd = 0; (void)snprintf(current_runas, sizeof(current_runas), "ALL");
+            while (pos + 8 <= pl) {
+                uint32_t t_net,l_net; memcpy(&t_net, payload + pos, 4); pos += 4; memcpy(&l_net, payload + pos, 4); pos += 4;
+                uint32_t t = ntohl(t_net);
+                uint32_t lvl = ntohl(l_net);
+                if (lvl > pl - pos) break;
+                const uint8_t *val = payload + pos; pos += lvl;
+                sssd_dbg("socket: TLV t=0x%x len=%u", t, lvl);
+                if (t == (uint32_t)SSS_SUDO_RUNASUSER) {
+                    size_t cplen = (lvl < sizeof(current_runas)-1) ? lvl : sizeof(current_runas)-1; memcpy(current_runas, val, cplen); current_runas[cplen] = '\0';
+                } else if (t == (uint32_t)SSS_SUDO_OPTION) {
+                    if (lvl > 0) { if (memmem(val, lvl, "!authenticate", 13)) current_nopasswd = 1; else if (memmem(val, lvl, "authenticate", 12)) current_nopasswd = 0; }
+                } else if (t == (uint32_t)SSS_SUDO_COMMAND) {
+                    struct sss_sudo_rule *rule = calloc(1, sizeof(struct sss_sudo_rule));
+                    if (rule) {
+                        rule->user = safe_strdup(username); rule->runas_user = safe_strdup(current_runas);
+                        char *cmdstr = malloc(lvl + 1); if (cmdstr) { memcpy(cmdstr, val, lvl); cmdstr[lvl] = '\0'; rule->command = cmdstr; }
+                        rule->nopasswd = current_nopasswd; rule->next = result->rules; result->rules = rule; result->num_rules++;
+                    }
+                }
+            }
+            /* Fallback heuristic: scan for attribute names and null-terminated values */
+            if (result->num_rules == 0) {
+                const char *needle_cmd = "sudoCommand";
+                const char *needle_runas = "sudoRunAsUser";
+                const char *needle_opt = "authenticate";
+                char current_runas2[128]; (void)snprintf(current_runas2, sizeof(current_runas2), "ALL");
+                int current_nopasswd2 = 0;
+                size_t scan = 0;
+                while (scan + 12 < pl) {
+                    void *p = memmem(payload + scan, pl - scan, needle_cmd, strlen(needle_cmd) + 1);
+                    void *r = memmem(payload + scan, pl - scan, needle_runas, strlen(needle_runas) + 1);
+                    void *o = memmem(payload + scan, pl - scan, needle_opt, strlen(needle_opt) + 1);
+                    size_t next = pl;
+                    if (p) { size_t pos2 = (uint8_t*)p - payload + strlen(needle_cmd) + 1; while (pos2 < pl && payload[pos2] == '\0') pos2++; size_t start = pos2; while (pos2 < pl && payload[pos2] != '\0') pos2++; if (pos2 > start) { char *cmd = malloc(pos2 - start + 1); if (cmd) { memcpy(cmd, payload + start, pos2 - start); cmd[pos2 - start] = '\0'; struct sss_sudo_rule *rule = calloc(1, sizeof(struct sss_sudo_rule)); if (rule) { rule->user = safe_strdup(username); rule->runas_user = safe_strdup(current_runas2); rule->command = cmd; rule->nopasswd = current_nopasswd2; rule->next = result->rules; result->rules = rule; result->num_rules++; } else { free(cmd); } } } next = (uint8_t*)p - payload + 1; }
+                    if (r) { size_t pos2 = (uint8_t*)r - payload + strlen(needle_runas) + 1; while (pos2 < pl && payload[pos2] == '\0') pos2++; size_t start = pos2; while (pos2 < pl && payload[pos2] != '\0') pos2++; if (pos2 > start) { size_t cplen2 = (pos2 - start) < sizeof(current_runas2)-1 ? (pos2 - start) : sizeof(current_runas2)-1; memcpy(current_runas2, payload + start, cplen2); current_runas2[cplen2] = '\0'; } size_t nr = (uint8_t*)r - payload + 1; if (nr < next) next = nr; }
+                    if (o) { if ((uint8_t*)o > payload && *((uint8_t*)o - 1) == '!') current_nopasswd2 = 1; else current_nopasswd2 = 0; size_t no = (uint8_t*)o - payload + 1; if (no < next) next = no; }
+                    if (next >= pl) { break; } else { scan = next; }
+                }
+            }
+            free(payload);
+            close(fd2);
+            result->error_code = (result->num_rules > 0) ? SSS_SUDO_ERROR_OK : SSS_SUDO_ERROR_NOENT;
+            return result;
+        }
+seg_fail:
+        close(fd2);
+        result->error_code = SSS_SUDO_ERROR_FATAL;
+        return result;
     }
 
-    /* Try to query SSSD using sss_cache or other tools */
-    snprintf(command, sizeof(command),
-             "timeout 2 getent -s sss sudoers %s 2>/dev/null || "
-             "timeout 2 sss_cache -E 2>/dev/null", username);
 
-    fp = popen(command, "r");
-    if (fp) {
-        while (fgets(buffer, sizeof(buffer), fp)) {
-            /* Parse any output that might indicate sudo rules */
-            if (strstr(buffer, username)) {
-                /* Found username in SSSD sudoers response; record minimal rule indicator */
+    /* Try libsss_sudo first for exact parity unless forced to use socket */
+    if (getenv("SUDOSH_SSSD_FORCE_SOCKET") == NULL) {
+        struct sss_sudo_result *libres = query_sssd_sudo_rules_via_lib(username);
+        if (libres) {
+            sssd_dbg("libsss_sudo: using library results num=%u", (unsigned)libres->num_rules);
+            return libres;
+        }
+    }
+
+    /* Prepare result container */
+    result = calloc(1, sizeof(struct sss_sudo_result));
+    /* Dev: If replay file is provided, use it to speak exactly like sudo */
+    const char *replay = getenv("SUDOSH_SSSD_REPLAY");
+    if (replay && *replay) {
+        /* We need an open socket first */
+        uid_t saved_euid_r = geteuid();
+        int escalated_r = escalate_for_sssd_query(&saved_euid_r);
+        int fd_r = connect_to_sssd_sudo();
+        int r = -1;
+        if (fd_r >= 0) {
+            r = parse_and_replay_strace(replay, fd_r);
+            close(fd_r);
+        }
+        drop_after_sssd_query(escalated_r, saved_euid_r);
+        sssd_dbg("replay: result=%d", r);
+        result->error_code = (r == 0) ? SSS_SUDO_ERROR_OK : SSS_SUDO_ERROR_FATAL;
+        return result;
+    }
+
+    if (!result) return NULL;
+
+    /* Resolve hostname */
+    if (gethostname(hostname, sizeof(hostname)) != 0) {
+        (void)snprintf(hostname, sizeof(hostname), "%s", "localhost");
+    }
+
+    /* Connect to SSSD sudo responder (may require root euid) */
+    uid_t saved_euid = geteuid();
+    int escalated = escalate_for_sssd_query(&saved_euid);
+    sssd_dbg("socket: escalate=%d euid_before=%lu", escalated, (unsigned long)saved_euid);
+
+    fd = connect_to_sssd_sudo();
+    if (fd < 0) {
+        drop_after_sssd_query(escalated, saved_euid);
+        result->error_code = SSS_SUDO_ERROR_NOENT;
+        return result;
+    }
+
+    /*
+     * Vendor-minimal TLV protocol (attribution: based on sudo's SSSD sudo responder client):
+     * Request framing (all fields in network byte order):
+     *   uint32_t cmd   = SSS_SUDO_GET_SUDORULES
+     *   uint32_t nattrs = number of TLV attributes
+     *   Repeated nattrs times:
+     *       uint32_t type (e.g., SSS_SUDO_USER, SSS_SUDO_HOSTNAME, ...)
+     *       uint32_t length
+     *       uint8_t[length] value (no NUL terminator required)
+     * Response framing:
+     *   uint32_t status (SSS_SUDO_ERROR_OK,...)
+     *   uint32_t length (payload length)
+     *   uint8_t[length] payload TLVs containing sudo rules and options
+     */
+
+    /* Build request matching sudo parity as closely as possible */
+    char reqbuf[16384];
+    size_t off = 0;
+    /* body begins with attr_count; command is only in SSSD header */
+
+    /* Resolve UID */
+    uid_t uid = getuid();
+
+    /* Resolve groups for the current user */
+    gid_t groups_buf[256];
+    int ngroups = sizeof(groups_buf) / sizeof(groups_buf[0]);
+    if (getgrouplist(username, getgid(), groups_buf, &ngroups) < 0) {
+        /* If it failed, clamp to known group */
+        ngroups = 1;
+        groups_buf[0] = getgid();
+    }
+
+    /* Hostname and FQDN */
+    char fqdn[256];
+    resolve_fqdn(hostname, fqdn, sizeof(fqdn));
+
+    /* Compute attribute count: USER, UID, GROUPS, HOSTNAME, RUNASUSER (+FQDN if different) */
+    uint32_t attr_count = 5;
+    if (strcmp(fqdn, hostname) != 0) {
+        /* Some SSSD setups include a separate canonical host TLV; we include both */
+        attr_count += 1; /* second HOSTNAME entry with FQDN */
+    }
+
+    /* Helper to append bytes safely */
+    #define APPEND_DATA(ptr,len) do { \
+        if (off + (len) > sizeof(reqbuf)) { goto io_error; } \
+        memcpy(reqbuf + off, (ptr), (len)); \
+        off += (len); \
+    } while (0)
+
+    /* attr count only (command goes in SSSD header) */
+    {
+        uint32_t nattrs = htonl(attr_count);
+        APPEND_DATA(&nattrs, sizeof(nattrs));
+    }
+
+    /* TLV: HOSTNAME (short) */
+    {
+        uint32_t t = htonl((uint32_t)SSS_SUDO_HOSTNAME);
+        uint32_t l = htonl((uint32_t)(strlen(hostname) + 1));
+        APPEND_DATA(&t, sizeof(t));
+        APPEND_DATA(&l, sizeof(l));
+        APPEND_DATA(hostname, strlen(hostname) + 1);
+    }
+
+    /* TLV: HOSTNAME (FQDN) if different */
+    if (strcmp(fqdn, hostname) != 0) {
+        uint32_t t = htonl((uint32_t)SSS_SUDO_HOSTNAME);
+        uint32_t l = htonl((uint32_t)(strlen(fqdn) + 1));
+        APPEND_DATA(&t, sizeof(t));
+        APPEND_DATA(&l, sizeof(l));
+        APPEND_DATA(fqdn, strlen(fqdn) + 1);
+    }
+
+    /* TLV: USER */
+    {
+        uint32_t t = htonl((uint32_t)SSS_SUDO_USER);
+        uint32_t l = htonl((uint32_t)(strlen(username) + 1));
+        APPEND_DATA(&t, sizeof(t));
+        APPEND_DATA(&l, sizeof(l));
+        APPEND_DATA(username, strlen(username) + 1);
+    }
+
+    /* TLV: UID (decimal string, NUL-terminated) */
+    {
+        char uidstr[32];
+        int ulen = snprintf(uidstr, sizeof(uidstr), "%lu", (unsigned long)uid);
+        if (ulen < 0) goto io_error;
+        uidstr[ulen] = '\0';
+        uint32_t t = htonl((uint32_t)SSS_SUDO_UID);
+        uint32_t l = htonl((uint32_t)(ulen + 1));
+        APPEND_DATA(&t, sizeof(t));
+        APPEND_DATA(&l, sizeof(l));
+        APPEND_DATA(uidstr, (size_t)(ulen + 1));
+    }
+
+    /* TLV: GROUPS (comma-separated gid list, NUL-terminated) */
+    {
+        char gstr[2048];
+        size_t gpos = 0;
+        sssd_dbg("socket: building request HOST/HOSTFQDN/USER/UID/GROUPS/RUNAS count=%u", attr_count);
+        for (int gi = 0; gi < ngroups; gi++) {
+            char tmp[32];
+            int w = snprintf(tmp, sizeof(tmp), gi == 0 ? "%lu" : ",%lu", (unsigned long)groups_buf[gi]);
+            if (w < 0) goto io_error;
+            if (gpos + (size_t)w >= sizeof(gstr) - 1) break;
+            memcpy(gstr + gpos, tmp, (size_t)w);
+            gpos += (size_t)w;
+#ifdef SUDOSH_TEST_MODE
+int sssd_parse_sudo_payload_for_test(const uint8_t *payload, size_t pl, const char *unused_username, int *out_rules) {
+    if (!payload || !out_rules) {
+        return -1;
+    }
+    *out_rules = 0;
+    size_t pos = 0; char current_runas[64]; snprintf(current_runas, sizeof(current_runas), "ALL");
+    while (pos + 8 <= pl) {
+        uint32_t t_net,l_net; memcpy(&t_net, payload + pos, 4); pos += 4; memcpy(&l_net, payload + pos, 4); pos += 4;
+        uint32_t t = ntohl(t_net); uint32_t l = ntohl(l_net);
+        if (l > pl - pos) break;
+        const uint8_t *val = payload + pos; pos += l;
+        if (t == (uint32_t)SSS_SUDO_RUNASUSER) {
+            size_t cplen = (l < sizeof(current_runas)-1) ? l : sizeof(current_runas)-1; memcpy(current_runas, val, cplen); current_runas[cplen] = '\0';
+        } else if (t == (uint32_t)SSS_SUDO_OPTION) {
+            /* ignore in test helper */
+        } else if (t == (uint32_t)SSS_SUDO_COMMAND) {
+            (*out_rules)++;
+        }
+    }
+    return 0;
+}
+#endif /* SUDOSH_TEST_MODE */
+
+        }
+        gstr[gpos] = '\0';
+        uint32_t t = htonl((uint32_t)SSS_SUDO_GROUPS);
+        uint32_t l = htonl((uint32_t)(gpos + 1));
+        APPEND_DATA(&t, sizeof(t));
+        APPEND_DATA(&l, sizeof(l));
+        APPEND_DATA(gstr, gpos + 1);
+    }
+
+    /* TLV: RUNASUSER (default root), NUL-terminated */
+    {
+        const char *runas = "root";
+        uint32_t t = htonl((uint32_t)SSS_SUDO_RUNASUSER);
+        uint32_t l = htonl((uint32_t)(strlen(runas) + 1));
+        APPEND_DATA(&t, sizeof(t));
+        APPEND_DATA(&l, sizeof(l));
+        APPEND_DATA(runas, strlen(runas) + 1);
+    }
+
+    sssd_dbg("socket: write len=%zu", off);
+
+    /* Remove GET_VERSION probe: some responders may not expect it on sudo pipe */
+    (void)0;
+        sssd_dbg("socket: body send size=%zu", off);
+
+    /* Debug: dump first 64 bytes of the body we will send */
+    hex_dump_debug((const uint8_t *)reqbuf, off);
+
+
+
+    /* Send request using SSSD client protocol header */
+    {
+        uint32_t hdr[4];
+        hdr[0] = (uint32_t)(SSS_NSS_HEADER_SIZE + off);
+        /* Optional override for command ID via env (decimal or hex) */
+        uint32_t cmd_id = (uint32_t)SSS_SUDO_GET_SUDORULES;
+        const char *e_cmd = getenv("SUDOSH_SSSD_SUDO_CMD_ID");
+        if (e_cmd && *e_cmd) {
+            if (strncmp(e_cmd, "0x", 2) == 0 || strncmp(e_cmd, "0X", 2) == 0) {
+                cmd_id = (uint32_t)strtoul(e_cmd, NULL, 16);
+            } else {
+                cmd_id = (uint32_t)strtoul(e_cmd, NULL, 10);
+            }
+        }
+        /* sudo responder expects native byte order header fields */
+        hdr[1] = cmd_id;
+        hdr[2] = 0;
+        hdr[3] = 0;
+
+
+
+
+        sssd_dbg("socket: write header+body ok; waiting for reply header (%zu bytes)", sizeof(uint32_t) * 4);
+
+        if (write_to_socket(fd, hdr, sizeof(hdr)) != 0) {
+            sssd_dbg("socket: wrote header %u bytes", (unsigned)sizeof(hdr));
+
+            sssd_dbg("socket: write header failed");
+            goto io_error;
+        }
+        if (write_to_socket(fd, reqbuf, off) != 0) {
+            sssd_dbg("socket: wrote body %zu bytes", off);
+
+            sssd_dbg("socket: write body failed");
+        /* Wait up to 2 seconds for readable data */
+        struct pollfd pfd; pfd.fd = fd; pfd.events = POLLIN;
+        int prc = poll(&pfd, 1, 2000);
+        if (prc <= 0) {
+            sssd_dbg("socket: poll for reply header rc=%d revents=0x%x errno=%d (%s)", prc, (unsigned)pfd.revents, errno, strerror(errno));
+            goto io_error;
+        }
+
+            goto io_error;
+        sssd_dbg("socket: waiting to read reply header (%zu bytes)", sizeof(uint32_t) * 4);
+        }
+        /* Read SSSD reply header */
+        uint32_t rhdr[4];
+        if (read_from_socket(fd, rhdr, sizeof(rhdr)) != 0) {
+            sssd_dbg("socket: read reply header failed: errno=%d (%s)", errno, strerror(errno));
+
+            sssd_dbg("socket: read reply header failed");
+            goto io_error;
+        }
+        /* sudo responder uses native-endian header fields */
+        uint32_t rlen_total = rhdr[0];
+        uint32_t rcmd = rhdr[1];
+        uint32_t rstat = rhdr[2];
+        sssd_dbg("socket: sss_hdr len=%u cmd=0x%x status=%u", rlen_total, rcmd, rstat);
+        if (rlen_total < SSS_NSS_HEADER_SIZE) {
+            result->error_code = SSS_SUDO_ERROR_FATAL;
+            close(fd);
+            drop_after_sssd_query(escalated, saved_euid);
+            return result;
+        }
+        uint32_t status = rstat;
+        uint32_t rlen = rlen_total - SSS_NSS_HEADER_SIZE;
+        sssd_dbg("socket: status=%u rlen=%u", status, rlen);
+
+
+
+
+
+        if (status != SSS_SUDO_ERROR_OK) {
+            result->error_code = status;
+            close(fd);
+            drop_after_sssd_query(escalated, saved_euid);
+            return result;
+        }
+        if (rlen == 0 || rlen > (1u<<22)) { /* sanity */
+            result->error_code = SSS_SUDO_ERROR_NOENT;
+            close(fd);
+            drop_after_sssd_query(escalated, saved_euid);
+            return result;
+            sssd_dbg("socket: will read payload %u bytes", rlen);
+
+        }
+        /* Read payload */
+        uint8_t *payload = malloc(rlen);
+        if (!payload) { goto io_error; }
+        if (read_from_socket(fd, payload, rlen) != 0) {
+            free(payload);
+            goto io_error;
+        }
+        hex_dump_debug(payload, rlen);
+
+        /* Parse payload TLVs. Minimal parse: look for command strings and runas options. */
+        size_t pos = 0;
+        char current_runas[128];
+        int current_nopasswd = 0;
+        (void)snprintf(current_runas, sizeof(current_runas), "ALL");
+        while (pos + 8 <= rlen) {
+            uint32_t t, l;
+            memcpy(&t, payload + pos, 4); pos += 4;
+            memcpy(&l, payload + pos, 4); pos += 4;
+            t = ntohl(t); l = ntohl(l);
+            if (l > rlen - pos) break; /* malformed */
+            const uint8_t *val = payload + pos;
+            pos += l;
+
+            if (t == (uint32_t)SSS_SUDO_RUNASUSER) {
+                size_t cplen = (l < sizeof(current_runas)-1) ? l : sizeof(current_runas)-1;
+                memcpy(current_runas, val, cplen);
+                current_runas[cplen] = '\0';
+            } else if (t == (uint32_t)SSS_SUDO_COMMAND) {
                 struct sss_sudo_rule *rule = calloc(1, sizeof(struct sss_sudo_rule));
                 if (rule) {
                     rule->user = safe_strdup(username);
-                    rule->command = safe_strdup("(detected via SSSD)");
-                    rule->runas_user = safe_strdup("ALL");
+                    rule->runas_user = safe_strdup(current_runas);
+                    /* Ensure command is NUL-terminated */
+                    char *cmdstr = malloc(l + 1);
+                    if (cmdstr) {
+                        memcpy(cmdstr, val, l); cmdstr[l] = '\0';
+                        rule->command = cmdstr;
+                    }
+                    rule->nopasswd = current_nopasswd;
+                    if (!result->rules) {
+                        result->rules = rule;
+                    } else {
+                        struct sss_sudo_rule *tail = result->rules;
+                        while (tail->next) tail = tail->next;
+                        tail->next = rule;
+                    }
+                    result->num_rules++;
 
-                    result->rules = rule;
-                    result->num_rules = 1;
-                    result->error_code = SSS_SUDO_ERROR_OK;
-                    break;
                 }
+            } else if (t == (uint32_t)SSS_SUDO_UID) {
+                /* ignore for listing */
+                (void)val; (void)l;
+            } else if (t == (uint32_t)SSS_SUDO_GROUPS) {
+                /* ignore groups list for now */
+                (void)val; (void)l;
+            } else if (t == (uint32_t)SSS_SUDO_OPTION) {
+                /* Minimal handling: detect !authenticate for NOPASSWD */
+                if (l > 0) {
+                    if (memmem(val, l, "!authenticate", sizeof("!authenticate")-1)) {
+                        current_nopasswd = 1;
+                    } else if (memmem(val, l, "authenticate", sizeof("authenticate")-1)) {
+                        current_nopasswd = 0;
+                    }
+                }
+            } else {
+                /* Unhandled TLV; continue */
             }
         }
-        pclose(fp);
+        free(payload);
+        result->error_code = (result->num_rules > 0) ? SSS_SUDO_ERROR_OK : SSS_SUDO_ERROR_NOENT;
+        close(fd);
+        drop_after_sssd_query(escalated, saved_euid);
+        return result;
     }
 
-    /* If no rules found through NSS, try to detect SSSD sudo capability */
-    if (result->num_rules == 0) {
-        /* Do not infer sudo privileges or example rules from ambient SSSD socket presence */
-        (void)username; /* retained for interface consistency */
-    }
-
+io_error:
+    if (fd >= 0) close(fd);
+    drop_after_sssd_query(escalated, saved_euid);
+    result->error_code = SSS_SUDO_ERROR_FATAL;
     return result;
+
+    #undef APPEND_DATA
 }
 
 /**
@@ -350,27 +1042,28 @@ int check_sssd_privileges(const char *username) {
     if (!username || !is_sssd_available()) {
         return 0;
     }
-    
+
     /* Try multiple methods to check SSSD sudo privileges */
-    
+
+
     /* Method 1: Direct SSSD sudo rules query */
     if (check_sssd_sudo_rules(username)) {
         return 1;
     }
-    
+
     /* Method 2: LDAP search for sudo rules */
     if (check_sssd_ldap_sudo(username)) {
         return 1;
     }
-    
+
     /* Method 3: Check if user is in admin groups via SSSD */
     struct group *admin_groups[] = {
         getgrnam("wheel"),
-        getgrnam("sudo"), 
+        getgrnam("sudo"),
         getgrnam("admin"),
         NULL
     };
-    
+
     for (int i = 0; admin_groups[i]; i++) {
         struct group *grp = admin_groups[i];
         if (grp && grp->gr_mem) {
@@ -381,7 +1074,7 @@ int check_sssd_privileges(const char *username) {
             }
         }
     }
-    
+
     return 0;
 }
 
@@ -392,13 +1085,13 @@ int init_sssd_connection(void) {
     if (!is_sssd_available()) {
         return 0;
     }
-    
+
     /* In a full implementation, this would:
      * 1. Connect to SSSD D-Bus interface
      * 2. Initialize SSSD client libraries
      * 3. Set up authentication context
      */
-    
+
     return 1;
 }
 
@@ -414,11 +1107,11 @@ void cleanup_sssd_connection(void) {
  */
 static char *get_hostname(void) {
     static char hostname[256];
-    
+
     if (gethostname(hostname, sizeof(hostname)) == 0) {
         return hostname;
     }
-    
+
     return "localhost";
 }
 
@@ -429,11 +1122,11 @@ int check_sssd_privileges_with_host(const char *username, const char *hostname) 
     if (!username) {
         return 0;
     }
-    
+
     if (!hostname) {
         hostname = get_hostname();
     }
-    
+
     /* For now, delegate to the simpler check */
     return check_sssd_privileges(username);
 }
