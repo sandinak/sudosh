@@ -1273,19 +1273,31 @@ static int sssd_command_matches(const char *pattern, const char *command)
     return 0;
 }
 
-/* Check a specific command against SSSD rules (socket/lib query). Returns 1 if allowed. */
+/* Check a specific command against SSSD rules (socket/lib query).
+ * Conservative precedence: any matching negative (!pattern) denies;
+ * otherwise a matching positive or ALL allows; else deny. */
 int check_command_permission_sssd(const char *username, const char *command)
 {
     if (!username || !command) return 0;
     struct sss_sudo_result *res = query_sssd_sudo_rules(username);
     if (!res || res->error_code != SSS_SUDO_ERROR_OK) { if (res) free_sss_sudo_result(res); return 0; }
-    int allowed = 0;
+    int any_positive = 0;
+    int any_negative = 0;
     for (struct sss_sudo_rule *r = res->rules; r; r = r->next) {
-        if (r->command && sssd_command_matches(r->command, command)) { allowed = 1; break; }
-        if (r->command && strcmp(r->command, "ALL") == 0) { allowed = 1; break; }
+        if (!r->command) continue;
+        const char *pat = r->command;
+        int is_neg = (pat[0] == '!');
+        if (is_neg) pat++;
+        if (strcmp(pat, "ALL") == 0 && !is_neg) {
+            any_positive = 1; continue;
+        }
+        if (sssd_command_matches(pat, command)) {
+            if (is_neg) any_negative = 1; else any_positive = 1;
+        }
     }
     free_sss_sudo_result(res);
-    return allowed;
+    if (any_negative) return 0;
+    return any_positive ? 1 : 0;
 }
 
 /**
