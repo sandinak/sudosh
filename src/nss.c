@@ -570,5 +570,21 @@ int check_command_permission_nss(const char *username, const char *command) {
         free_sudoers_config(sudoers_config);
     }
 
+    /* If not allowed via files, try SSSD direct rules if configured */
+    if (!is_allowed) {
+        struct nss_config *nss_config = read_nss_config();
+        if (nss_config) {
+            struct nss_source *src = nss_config->sudoers_sources;
+            while (src && !is_allowed) {
+                if (src->type == NSS_SOURCE_SSSD) {
+                    extern int check_command_permission_sssd(const char *username, const char *command);
+                    is_allowed = check_command_permission_sssd(username, command);
+                }
+                src = src->next;
+            }
+            free_nss_config(nss_config);
+        }
+    }
+
     return is_allowed;
 }

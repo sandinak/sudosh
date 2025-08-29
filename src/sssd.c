@@ -1252,6 +1252,39 @@ static void free_sss_sudo_result(struct sss_sudo_result *result) {
     free(result);
 }
 
+/* Simple command matcher: supports EXACT, basename match, and basic globs via fnmatch if available */
+static int sssd_command_matches(const char *pattern, const char *command)
+{
+    if (!pattern || !command) return 0;
+    /* Exact or prefix-equal when pattern is ALL */
+    if (strcmp(pattern, "ALL") == 0) return 1;
+    if (strcmp(pattern, command) == 0) return 1;
+    /* Compare basenames */
+    const char *pb = strrchr(pattern, '/'); pb = pb ? pb + 1 : pattern;
+    const char *cb = strrchr(command, '/'); cb = cb ? cb + 1 : command;
+    if (strcmp(pb, cb) == 0) return 1;
+#ifdef FNM_PATHNAME
+    if (fnmatch(pattern, command, 0) == 0) return 1;
+    if (fnmatch(pb, cb, 0) == 0) return 1;
+#endif
+    return 0;
+}
+
+/* Check a specific command against SSSD rules (socket/lib query). Returns 1 if allowed. */
+int check_command_permission_sssd(const char *username, const char *command)
+{
+    if (!username || !command) return 0;
+    struct sss_sudo_result *res = query_sssd_sudo_rules(username);
+    if (!res || res->error_code != SSS_SUDO_ERROR_OK) { if (res) free_sss_sudo_result(res); return 0; }
+    int allowed = 0;
+    for (struct sss_sudo_rule *r = res->rules; r; r = r->next) {
+        if (r->command && sssd_command_matches(r->command, command)) { allowed = 1; break; }
+        if (r->command && strcmp(r->command, "ALL") == 0) { allowed = 1; break; }
+    }
+    free_sss_sudo_result(res);
+    return allowed;
+}
+
 /**
  * Check if user has SSSD sudo rules
  */
