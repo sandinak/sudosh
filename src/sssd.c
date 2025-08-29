@@ -87,6 +87,21 @@ static void hex_dump_debug(const uint8_t *buf, size_t len) {
 #define UNUSED
 #endif
 
+/* Portable memmem replacement for platforms without a prototype (e.g., macOS) */
+static void *sssd_memmem(const void *haystack, size_t hay_len, const void *needle, size_t needle_len)
+{
+    if (!haystack || !needle || needle_len == 0 || hay_len < needle_len) return NULL;
+    const unsigned char *h = (const unsigned char *)haystack;
+    const unsigned char *n = (const unsigned char *)needle;
+    size_t last = hay_len - needle_len;
+    for (size_t i = 0; i <= last; i++) {
+        if (h[i] == n[0] && memcmp(h + i, n, needle_len) == 0) {
+            return (void *)(h + i);
+        }
+    }
+    return NULL;
+}
+
 /* SSSD socket paths */
 #define SSSD_NSS_SOCKET "/var/lib/sss/pipes/nss"
 #define SSSD_SUDO_SOCKET "/var/lib/sss/pipes/sudo"
@@ -510,7 +525,7 @@ static struct sss_sudo_result *query_sssd_sudo_rules(const char *username) {
                 if (t == (uint32_t)SSS_SUDO_RUNASUSER) {
                     size_t cplen = (lvl < sizeof(current_runas)-1) ? lvl : sizeof(current_runas)-1; memcpy(current_runas, val, cplen); current_runas[cplen] = '\0';
                 } else if (t == (uint32_t)SSS_SUDO_OPTION) {
-                    if (lvl > 0) { if (memmem(val, lvl, "!authenticate", 13)) current_nopasswd = 1; else if (memmem(val, lvl, "authenticate", 12)) current_nopasswd = 0; }
+                    if (lvl > 0) { if (sssd_memmem(val, lvl, "!authenticate", 13)) current_nopasswd = 1; else if (sssd_memmem(val, lvl, "authenticate", 12)) current_nopasswd = 0; }
                 } else if (t == (uint32_t)SSS_SUDO_COMMAND) {
                     struct sss_sudo_rule *rule = calloc(1, sizeof(struct sss_sudo_rule));
                     if (rule) {
@@ -529,9 +544,9 @@ static struct sss_sudo_result *query_sssd_sudo_rules(const char *username) {
                 int current_nopasswd2 = 0;
                 size_t scan = 0;
                 while (scan + 12 < pl) {
-                    void *p = memmem(payload + scan, pl - scan, needle_cmd, strlen(needle_cmd) + 1);
-                    void *r = memmem(payload + scan, pl - scan, needle_runas, strlen(needle_runas) + 1);
-                    void *o = memmem(payload + scan, pl - scan, needle_opt, strlen(needle_opt) + 1);
+                    void *p = sssd_memmem(payload + scan, pl - scan, needle_cmd, strlen(needle_cmd) + 1);
+                    void *r = sssd_memmem(payload + scan, pl - scan, needle_runas, strlen(needle_runas) + 1);
+                    void *o = sssd_memmem(payload + scan, pl - scan, needle_opt, strlen(needle_opt) + 1);
                     size_t next = pl;
                     if (p) { size_t pos2 = (uint8_t*)p - payload + strlen(needle_cmd) + 1; while (pos2 < pl && payload[pos2] == '\0') pos2++; size_t start = pos2; while (pos2 < pl && payload[pos2] != '\0') pos2++; if (pos2 > start) { char *cmd = malloc(pos2 - start + 1); if (cmd) { memcpy(cmd, payload + start, pos2 - start); cmd[pos2 - start] = '\0'; struct sss_sudo_rule *rule = calloc(1, sizeof(struct sss_sudo_rule)); if (rule) { rule->user = safe_strdup(username); rule->runas_user = safe_strdup(current_runas2); rule->command = cmd; rule->nopasswd = current_nopasswd2; rule->next = result->rules; result->rules = rule; result->num_rules++; } else { free(cmd); } } } next = (uint8_t*)p - payload + 1; }
                     if (r) { size_t pos2 = (uint8_t*)r - payload + strlen(needle_runas) + 1; while (pos2 < pl && payload[pos2] == '\0') pos2++; size_t start = pos2; while (pos2 < pl && payload[pos2] != '\0') pos2++; if (pos2 > start) { size_t cplen2 = (pos2 - start) < sizeof(current_runas2)-1 ? (pos2 - start) : sizeof(current_runas2)-1; memcpy(current_runas2, payload + start, cplen2); current_runas2[cplen2] = '\0'; } size_t nr = (uint8_t*)r - payload + 1; if (nr < next) next = nr; }
@@ -905,9 +920,9 @@ int sssd_parse_sudo_payload_for_test(const uint8_t *payload, size_t pl, const ch
             } else if (t == (uint32_t)SSS_SUDO_OPTION) {
                 /* Minimal handling: detect !authenticate for NOPASSWD */
                 if (l > 0) {
-                    if (memmem(val, l, "!authenticate", sizeof("!authenticate")-1)) {
+                    if (sssd_memmem(val, l, "!authenticate", sizeof("!authenticate")-1)) {
                         current_nopasswd = 1;
-                    } else if (memmem(val, l, "authenticate", sizeof("authenticate")-1)) {
+                    } else if (sssd_memmem(val, l, "authenticate", sizeof("authenticate")-1)) {
                         current_nopasswd = 0;
                     }
                 }
