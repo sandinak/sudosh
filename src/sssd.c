@@ -1358,6 +1358,24 @@ static int sssd_host_matches(const char *pattern, const char *shortname, const c
     }
     return neg ? !match : match;
 }
+/* User in group (via gr_mem or primary gid) */
+static int sssd_user_in_group(const char *username, const char *groupname)
+{
+    if (!username || !groupname) return 0;
+    struct group *gr = getgrnam(groupname);
+    if (!gr) return 0;
+    /* check member list */
+    if (gr->gr_mem) {
+        for (char **m = gr->gr_mem; *m; ++m) {
+            if (strcmp(*m, username) == 0) return 1;
+        }
+    }
+    /* check primary gid */
+    struct passwd *pw = getpwnam(username);
+    if (pw && gr->gr_gid == pw->pw_gid) return 1;
+    return 0;
+}
+
 
 /**
  * Free SSSD sudo result structure
@@ -1427,13 +1445,17 @@ static int sssd_rule_applies(const struct sss_sudo_rule *r, const char *username
     time_t nowt = time(NULL);
     if (r->not_before && nowt < r->not_before) return 0;
     if (r->not_after && nowt > r->not_after) return 0;
-    /* user: minimal support: ALL or exact user; %group later */
+    /* user: support ALL, exact user, and %group */
     if (r->user && strcmp(r->user, "ALL") != 0 && strcmp(r->user, username) != 0) {
-        if (r->user[0] != '%') return 0; /* group support TBD next */
+        if (r->user[0] == '%') {
+            if (!sssd_user_in_group(username, r->user + 1)) return 0;
+        } else {
+            return 0;
+        }
     }
     /* host: if present, must match */
     if (r->host && !sssd_host_matches(r->host, short_host, fqdn)) return 0;
-    /* runas defaults handled earlier; detailed runas resolution will be added next */
+    /* TODO: runas user/group filtering */
     return 1;
 }
 
