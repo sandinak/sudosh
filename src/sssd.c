@@ -1489,6 +1489,77 @@ static void sssd_insert_sorted_by_order(struct sss_sudo_rule **head, struct sss_
     if (!prev) { nr->next = *head; *head = nr; }
     else { nr->next = cur; prev->next = nr; }
 }
+/* Variant: rule applies with explicit target runas user/group */
+static int sssd_rule_applies_as(const struct sss_sudo_rule *r, const char *username, const char *short_host, const char *fqdn, const char *target_runas_user, const char *target_runas_group)
+{
+    if (!r || !username || !short_host || !fqdn) return 0;
+    /* time window */
+    time_t nowt = time(NULL);
+    if (r->not_before && nowt < r->not_before) return 0;
+    if (r->not_after && nowt > r->not_after) return 0;
+    /* user */
+    if (r->user && strcmp(r->user, "ALL") != 0 && strcmp(r->user, username) != 0) {
+        if (r->user[0] == '%') {
+            if (!sssd_user_in_group(username, r->user + 1)) return 0;
+        } else {
+            return 0;
+        }
+    }
+    /* host */
+    if (r->host && !sssd_host_matches(r->host, short_host, fqdn)) return 0;
+    /* runas */
+    const char *tr_u = (target_runas_user && target_runas_user[0]) ? target_runas_user : "root";
+    if (r->runas_user && r->runas_user[0]) {
+        if (strcmp(r->runas_user, "ALL") != 0 && strcmp(r->runas_user, tr_u) != 0) return 0;
+    }
+    if (r->runas_group && r->runas_group[0]) {
+        if (strcmp(r->runas_group, "ALL") != 0) {
+            const char *tr_g = NULL;
+            if (target_runas_group && target_runas_group[0]) {
+                tr_g = target_runas_group;
+            } else {
+                struct passwd *rpw = getpwnam(tr_u);
+                if (!rpw) return 0;
+                struct group *rg = getgrgid(rpw->pw_gid);
+                if (!rg || !rg->gr_name) return 0;
+                tr_g = rg->gr_name;
+            }
+            if (strcmp(r->runas_group, tr_g) != 0) return 0;
+        }
+    }
+    return 1;
+}
+
+int check_command_permission_sssd_as(const char *username, const char *command, const char *runas_user, const char *runas_group)
+{
+    if (!username || !command) return 0;
+    struct sss_sudo_result *res = query_sssd_sudo_rules(username);
+    if (!res || res->error_code != SSS_SUDO_ERROR_OK) { if (res) free_sss_sudo_result(res); return 0; }
+
+    /* Order rules by sudoOrder */
+    struct sss_sudo_rule *sorted = NULL;
+    for (struct sss_sudo_rule *r = res->rules; r; ) {
+        struct sss_sudo_rule *next = r->next; r->next = NULL; sssd_insert_sorted_by_order(&sorted, r); r = next;
+    }
+    res->rules = sorted;
+
+    char hostname[256], fqdn[256];
+    if (gethostname(hostname, sizeof(hostname)) != 0) snprintf(hostname, sizeof(hostname), "%s", "localhost");
+    resolve_fqdn(hostname, fqdn, sizeof(fqdn));
+
+    int any_positive = 0, any_negative = 0;
+    for (struct sss_sudo_rule *r = res->rules; r; r = r->next) {
+        if (!r->command) continue;
+        if (!sssd_rule_applies_as(r, username, hostname, fqdn, runas_user, runas_group)) continue;
+        const char *pat = r->command; int is_neg = (pat[0] == '!'); if (is_neg) pat++;
+        if (!is_neg && strcmp(pat, "ALL") == 0) { any_positive = 1; continue; }
+        if (sssd_command_matches(pat, command)) { if (is_neg) any_negative = 1; else any_positive = 1; }
+    }
+    free_sss_sudo_result(res);
+    if (any_negative) return 0;
+    return any_positive ? 1 : 0;
+}
+
 
 /* Check a specific command against SSSD rules (socket/lib query).
  * Conservative precedence: any matching negative (!pattern) denies;
