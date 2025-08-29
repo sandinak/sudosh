@@ -499,6 +499,7 @@ static struct sss_sudo_result *query_sssd_sudo_rules_via_lib(const char *usernam
     for (unsigned int i = 0; i < libres->num_rules; i++) {
         struct libsss_sudo_rule *r = &libres->rules[i];
         char **cmnds = NULL, **runasusers = NULL, **opts = NULL;
+        char **runasgrps = NULL, **hosts = NULL, **users = NULL, **orders = NULL, **nb = NULL, **na = NULL;
         int ret;
 
         /* sudoCommand list */
@@ -506,27 +507,91 @@ static struct sss_sudo_result *query_sssd_sudo_rules_via_lib(const char *usernam
         if (ret != 0) continue;
         /* sudoRunAsUser or sudoRunAs */
         ret = fn_get_values(r, "sudoRunAsUser", &runasusers);
-        if (ret == ENOENT) {
-            (void)fn_get_values(r, "sudoRunAs", &runasusers);
-        }
-        /* sudoOption (for !authenticate) */
+        if (ret == ENOENT) { (void)fn_get_values(r, "sudoRunAs", &runasusers); }
+        (void)fn_get_values(r, "sudoRunAsGroup", &runasgrps);
+        /* sudoUser and sudoHost */
+        (void)fn_get_values(r, "sudoUser", &users);
+        (void)fn_get_values(r, "sudoHost", &hosts);
+        /* sudoOption */
         ret = fn_get_values(r, "sudoOption", &opts);
-        int nopass = 0;
+        int nopass = 0; int noexec=0,setenv_allow=0,env_reset=0,log_in=0,log_out=0,requiretty=0,lecture=0; int umask_value=-1; int ts_timeout=-1, verifypw=0; int iolog_mode=-1;
+        const char *secure_path=NULL,*cwd=NULL,*chroot_dir=NULL,*sel_role=NULL,*sel_type=NULL,*app_prof=NULL,*env_keep=NULL,*env_check=NULL,*env_delete=NULL,*iolog_dir=NULL,*iolog_file=NULL,*iolog_group=NULL;
         if (ret == 0 && opts) {
             for (char **p = opts; *p; ++p) {
-                if (strcmp(*p, "!authenticate") == 0) { nopass = 1; break; }
+                if (!*p) continue;
+                if (strcmp(*p, "!authenticate") == 0) { nopass = 1; continue; }
+                /* Reuse ctx parser by feeding a temp ctx */
+                struct sss_rule_ctx tmp; ctx_init_defaults(&tmp);
+                ctx_apply_option(&tmp, *p);
+                /* accumulate */
+                if (tmp.noexec) noexec = 1;
+                if (tmp.setenv_allow) setenv_allow = 1;
+                if (tmp.env_reset) env_reset = 1;
+                if (tmp.log_input) log_in = 1;
+                if (tmp.log_output) log_out = 1;
+                if (tmp.requiretty) requiretty = 1;
+                if (tmp.lecture) lecture = 1;
+                if (tmp.umask_value >= 0) umask_value = tmp.umask_value;
+                if (tmp.timestamp_timeout >= 0) ts_timeout = tmp.timestamp_timeout;
+                if (tmp.verifypw) verifypw = tmp.verifypw;
+                if (tmp.iolog_mode >= 0) iolog_mode = tmp.iolog_mode;
+                if (tmp.secure_path[0]) secure_path = *p + (strchr(*p,'=')? (strchr(*p,'=')-(*p)+1) : 0);
+                if (tmp.cwd[0]) cwd = *p + (strchr(*p,'=')? (strchr(*p,'=')-(*p)+1) : 0);
+                if (tmp.chroot_dir[0]) chroot_dir = *p + (strchr(*p,'=')? (strchr(*p,'=')-(*p)+1) : 0);
+                if (tmp.selinux_role[0]) sel_role = *p + (strchr(*p,'=')? (strchr(*p,'=')-(*p)+1) : 0);
+                if (tmp.selinux_type[0]) sel_type = *p + (strchr(*p,'=')? (strchr(*p,'=')-(*p)+1) : 0);
+                if (tmp.apparmor_profile[0]) app_prof = *p + (strchr(*p,'=')? (strchr(*p,'=')-(*p)+1) : 0);
+                if (tmp.env_keep[0]) env_keep = *p + (strchr(*p,'=')? (strchr(*p,'=')-(*p)+1) : 0);
+                if (tmp.env_check[0]) env_check = *p + (strchr(*p,'=')? (strchr(*p,'=')-(*p)+1) : 0);
+                if (tmp.env_delete[0]) env_delete = *p + (strchr(*p,'=')? (strchr(*p,'=')-(*p)+1) : 0);
+                if (tmp.iolog_dir[0]) iolog_dir = *p + (strchr(*p,'=')? (strchr(*p,'=')-(*p)+1) : 0);
+                if (tmp.iolog_file[0]) iolog_file = *p + (strchr(*p,'=')? (strchr(*p,'=')-(*p)+1) : 0);
+                if (tmp.iolog_group[0]) iolog_group = *p + (strchr(*p,'=')? (strchr(*p,'=')-(*p)+1) : 0);
             }
+        }
+        /* Order and time bounds */
+        long order = -1; time_t not_before = 0, not_after = 0;
+        if (fn_get_values(r, "sudoOrder", &orders) == 0 && orders && orders[0]) {
+            order = parse_long(orders[0]);
+        }
+        if (fn_get_values(r, "sudoNotBefore", &nb) == 0 && nb && nb[0]) {
+            not_before = parse_time_string(nb[0]);
+        }
+        if (fn_get_values(r, "sudoNotAfter", &na) == 0 && na && na[0]) {
+            not_after = parse_time_string(na[0]);
         }
 
         const char *runas = (runasusers && runasusers[0]) ? runasusers[0] : "ALL";
+        const char *rungrp = (runasgrps && runasgrps[0]) ? runasgrps[0] : NULL;
+        const char *uhost = (hosts && hosts[0]) ? hosts[0] : NULL;
+        const char *uuser = (users && users[0]) ? users[0] : username;
         if (cmnds) {
             for (char **c = cmnds; *c; ++c) {
                 struct sss_sudo_rule *nr = calloc(1, sizeof(struct sss_sudo_rule));
                 if (!nr) break;
-                nr->user = safe_strdup(username);
+                nr->user = uuser ? safe_strdup(uuser) : safe_strdup(username);
+                nr->host = uhost ? safe_strdup(uhost) : NULL;
                 nr->runas_user = safe_strdup(runas);
+                nr->runas_group = rungrp ? safe_strdup(rungrp) : NULL;
                 nr->command = safe_strdup(*c);
                 nr->nopasswd = nopass;
+                nr->noexec = noexec; nr->setenv_allow = setenv_allow; nr->env_reset = env_reset;
+                nr->log_input = log_in; nr->log_output = log_out; nr->requiretty = requiretty; nr->lecture = lecture;
+                nr->umask_value = umask_value; nr->timestamp_timeout = ts_timeout; nr->verifypw = verifypw;
+                nr->secure_path = secure_path ? safe_strdup(secure_path) : NULL;
+                nr->cwd = cwd ? safe_strdup(cwd) : NULL;
+                nr->chroot_dir = chroot_dir ? safe_strdup(chroot_dir) : NULL;
+                nr->selinux_role = sel_role ? safe_strdup(sel_role) : NULL;
+                nr->selinux_type = sel_type ? safe_strdup(sel_type) : NULL;
+                nr->apparmor_profile = app_prof ? safe_strdup(app_prof) : NULL;
+                nr->env_keep = env_keep ? safe_strdup(env_keep) : NULL;
+                nr->env_check = env_check ? safe_strdup(env_check) : NULL;
+                nr->env_delete = env_delete ? safe_strdup(env_delete) : NULL;
+                nr->iolog_dir = iolog_dir ? safe_strdup(iolog_dir) : NULL;
+                nr->iolog_file = iolog_file ? safe_strdup(iolog_file) : NULL;
+                nr->iolog_group = iolog_group ? safe_strdup(iolog_group) : NULL;
+                nr->iolog_mode = iolog_mode;
+                nr->order = order; nr->not_before = not_before; nr->not_after = not_after;
                 if (!out->rules) {
                     out->rules = nr;
                 } else {
@@ -540,6 +605,12 @@ static struct sss_sudo_result *query_sssd_sudo_rules_via_lib(const char *usernam
 
         if (cmnds) fn_free_values(cmnds);
         if (runasusers) fn_free_values(runasusers);
+        if (runasgrps) fn_free_values(runasgrps);
+        if (hosts) fn_free_values(hosts);
+        if (users) fn_free_values(users);
+        if (orders) fn_free_values(orders);
+        if (nb) fn_free_values(nb);
+        if (na) fn_free_values(na);
         if (opts) fn_free_values(opts);
     }
 
