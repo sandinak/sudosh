@@ -1455,7 +1455,19 @@ static int sssd_rule_applies(const struct sss_sudo_rule *r, const char *username
     }
     /* host: if present, must match */
     if (r->host && !sssd_host_matches(r->host, short_host, fqdn)) return 0;
-    /* TODO: runas user/group filtering */
+    /* runas filtering: default target is root */
+    const char *target_runas = "root";
+    if (r->runas_user && r->runas_user[0]) {
+        if (strcmp(r->runas_user, "ALL") != 0 && strcmp(r->runas_user, target_runas) != 0) return 0;
+    }
+    if (r->runas_group && r->runas_group[0]) {
+        if (strcmp(r->runas_group, "ALL") != 0) {
+            struct passwd *rpw = getpwnam(target_runas);
+            if (!rpw) return 0;
+            struct group *rg = getgrgid(rpw->pw_gid);
+            if (!rg || !rg->gr_name || strcmp(r->runas_group, rg->gr_name) != 0) return 0;
+        }
+    }
     return 1;
 }
 
