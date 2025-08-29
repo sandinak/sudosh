@@ -32,6 +32,7 @@
 #include <arpa/inet.h>
 #include <ctype.h>
 #include <time.h>
+#include <fnmatch.h>
 #include "sssd_replay_dev.h"
 #include "sssd_test_api.h"
 
@@ -1144,10 +1145,9 @@ int sssd_parse_sudo_payload_for_test(const uint8_t *payload, size_t pl, const ch
         }
         hex_dump_debug(payload, rlen);
 
-        /* Parse payload TLVs. Minimal parse: look for command strings and runas/options. */
+        /* Parse payload TLVs. Collect options/runas before each COMMAND. */
         size_t pos = 0;
-        char current_runas[128];
-        (void)snprintf(current_runas, sizeof(current_runas), "ALL");
+        struct sss_rule_ctx ctx; ctx_init_defaults(&ctx);
         while (pos + 8 <= rlen) {
             uint32_t t, l;
             memcpy(&t, payload + pos, 4); pos += 4;
@@ -1158,12 +1158,23 @@ int sssd_parse_sudo_payload_for_test(const uint8_t *payload, size_t pl, const ch
             pos += l;
 
             if (t == (uint32_t)SSS_SUDO_RUNASUSER) {
-                size_t cplen = (l < sizeof(current_runas)-1) ? l : sizeof(current_runas)-1;
-                memcpy(current_runas, val, cplen);
-                current_runas[cplen] = '\0';
+                size_t cplen = (l < sizeof(ctx.runas_user)-1) ? l : sizeof(ctx.runas_user)-1;
+                memcpy(ctx.runas_user, val, cplen); ctx.runas_user[cplen] = '\0';
+            } else if (t == (uint32_t)SSS_SUDO_RUNASGROUP) {
+                size_t cplen = (l < sizeof(ctx.runas_group)-1) ? l : sizeof(ctx.runas_group)-1;
+                memcpy(ctx.runas_group, val, cplen); ctx.runas_group[cplen] = '\0';
+            } else if (t == (uint32_t)SSS_SUDO_OPTION) {
+                /* tokenise by comma/newline */
+                size_t i = 0;
+                while (i < l) {
+                    char token[256]; size_t tp = 0;
+                    while (i < l && (val[i] == ' ' || val[i] == '\n' || val[i] == '\t' || val[i] == ',')) i++;
+                    while (i < l && tp < sizeof(token)-1 && val[i] != ',' && val[i] != '\n' && val[i] != '\0') token[tp++] = (char)val[i++];
+                    token[tp] = '\0';
+                    if (tp > 0) ctx_apply_option(&ctx, token);
+                    while (i < l && (val[i] == ',' || val[i] == '\n' || val[i] == '\0')) i++;
+                }
             } else if (t == (uint32_t)SSS_SUDO_COMMAND) {
-                struct sss_rule_ctx ctx; ctx_init_defaults(&ctx);
-                snprintf(ctx.runas_user, sizeof(ctx.runas_user), "%s", current_runas);
                 struct sss_sudo_rule *rule = calloc(1, sizeof(struct sss_sudo_rule));
                 if (rule) {
                     copy_ctx_to_rule(&ctx, username, rule);
@@ -1181,19 +1192,11 @@ int sssd_parse_sudo_payload_for_test(const uint8_t *payload, size_t pl, const ch
                         tail->next = rule;
                     }
                     result->num_rules++;
-
                 }
-            } else if (t == (uint32_t)SSS_SUDO_UID) {
-                /* ignore for listing */
-                (void)val; (void)l;
-            } else if (t == (uint32_t)SSS_SUDO_GROUPS) {
-                /* ignore groups list for now */
-                (void)val; (void)l;
-            } else if (t == (uint32_t)SSS_SUDO_OPTION) {
-                /* Minimal handling: detect !authenticate for NOPASSWD */
-                (void)val; (void)l;
+                /* reset context minimally between rules? keep cumulative options until next runas/option */
             } else {
-                /* Unhandled TLV; continue */
+                /* ignore other TLVs here */
+                (void)val; (void)l;
             }
         }
         free(payload);
