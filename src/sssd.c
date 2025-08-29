@@ -34,6 +34,7 @@
 #include <ifaddrs.h>
 #include <ctype.h>
 #include <time.h>
+#include <limits.h>
 #include <fnmatch.h>
 #include "sssd_replay_dev.h"
 #include "sssd_test_api.h"
@@ -1466,9 +1467,27 @@ static int sssd_rule_applies(const struct sss_sudo_rule *r, const char *username
             if (!rpw) return 0;
             struct group *rg = getgrgid(rpw->pw_gid);
             if (!rg || !rg->gr_name || strcmp(r->runas_group, rg->gr_name) != 0) return 0;
-        }
+    }
     }
     return 1;
+}
+
+/* Stable insertion into a list sorted by sudoOrder (unset=-1 goes last) */
+static void sssd_insert_sorted_by_order(struct sss_sudo_rule **head, struct sss_sudo_rule *nr)
+{
+    if (!head || !nr) return;
+    if (!*head) { *head = nr; return; }
+    long order = nr->order;
+    struct sss_sudo_rule *prev = NULL, *cur = *head;
+    while (cur) {
+        long curord = cur->order;
+        long a = (order < 0) ? LONG_MAX : order;
+        long b = (curord < 0) ? LONG_MAX : curord;
+        if (a < b) break;
+        prev = cur; cur = cur->next;
+    }
+    if (!prev) { nr->next = *head; *head = nr; }
+    else { nr->next = cur; prev->next = nr; }
 }
 
 /* Check a specific command against SSSD rules (socket/lib query).
@@ -1479,6 +1498,13 @@ int check_command_permission_sssd(const char *username, const char *command)
     if (!username || !command) return 0;
     struct sss_sudo_result *res = query_sssd_sudo_rules(username);
     if (!res || res->error_code != SSS_SUDO_ERROR_OK) { if (res) free_sss_sudo_result(res); return 0; }
+
+    /* Order rules by sudoOrder for consistent precedence */
+    struct sss_sudo_rule *sorted = NULL;
+    for (struct sss_sudo_rule *r = res->rules; r; ) {
+        struct sss_sudo_rule *next = r->next; r->next = NULL; sssd_insert_sorted_by_order(&sorted, r); r = next;
+    }
+    res->rules = sorted;
 
     char hostname[256], fqdn[256];
     if (gethostname(hostname, sizeof(hostname)) != 0) snprintf(hostname, sizeof(hostname), "%s", "localhost");
