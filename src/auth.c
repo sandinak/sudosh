@@ -1086,7 +1086,13 @@ int check_command_permission(const char *username, const char *command) {
     /* Use the new NSS-based command permission checking */
     int is_allowed = check_command_permission_nss(username, command);
 
-    /* If NSS-based checking fails, fall back to the old sudo -l method as last resort */
+    /* If NSS-based checking fails, try SSSD direct (in case NSS sudoers excludes it but SSSD provides rules) */
+    if (!is_allowed) {
+        extern int check_command_permission_sssd(const char *username, const char *command);
+        is_allowed = check_command_permission_sssd(username, command);
+    }
+
+    /* If still not allowed, safe fallback (no sudo -l to avoid fork bombs) */
     if (!is_allowed) {
         is_allowed = check_command_permission_sudo_fallback(username, command);
     }

@@ -59,8 +59,12 @@ endif
 # Check for PAM availability
 PAM_AVAILABLE := $(shell echo '\#include <security/pam_appl.h>' | $(CC) -E - >/dev/null 2>&1 && echo yes || echo no)
 
+# Enable test mode for objects compiled from tests/* to expose test helpers
+TEST_CFLAGS = $(CFLAGS) -DSUDOSH_TEST_MODE=1
+
 ifeq ($(UNAME_S),Linux)
     CFLAGS += -D_GNU_SOURCE
+    LDFLAGS += -ldl
     ifeq ($(PAM_AVAILABLE),yes)
         LDFLAGS += -lpam -lpam_misc
     else
@@ -100,7 +104,7 @@ BINDIR = bin
 TESTDIR = tests
 
 # Source files
-SOURCES = main.c auth.c command.c logging.c security.c utils.c nss.c sudoers.c sssd.c filelock.c shell_enhancements.c shell_env.c config.c pipeline.c ansible_detection.c ai_detection.c dangerous_commands.c editor_detection.c
+SOURCES = main.c auth.c command.c logging.c security.c utils.c nss.c sudoers.c sssd.c sssd_replay_dev.c filelock.c shell_enhancements.c shell_env.c config.c pipeline.c ansible_detection.c ai_detection.c dangerous_commands.c editor_detection.c
 OBJECTS = $(SOURCES:%.c=$(OBJDIR)/%.o)
 
 # Test files (now organized in subdirectories)
@@ -119,8 +123,13 @@ SECURITY_TEST_BINARIES = $(SECURITY_TEST_SOURCES:$(TESTDIR)/security/%.c=$(BINDI
 
 # Library objects (excluding main.c for testing)
 # Note: test_globals.c has been removed; keep only real library sources here
-LIB_SOURCES = auth.c command.c logging.c security.c utils.c nss.c sudoers.c sssd.c filelock.c shell_enhancements.c shell_env.c config.c pipeline.c ansible_detection.c ai_detection.c dangerous_commands.c editor_detection.c
+LIB_SOURCES = auth.c command.c logging.c security.c utils.c nss.c sudoers.c sssd.c sssd_replay_dev.c filelock.c shell_enhancements.c shell_env.c config.c pipeline.c ansible_detection.c ai_detection.c dangerous_commands.c editor_detection.c
 LIB_OBJECTS = $(LIB_SOURCES:%.c=$(OBJDIR)/%.o)
+# Include test-only parser helper when building tests
+ifeq ($(filter tests,$(MAKECMDGOALS)),tests)
+LIB_SOURCES += sssd_test_api.c
+endif
+
 # Test support sources providing globals for link stage
 TEST_SUPPORT_SOURCES = tests/support/test_globals.c
 TEST_SUPPORT_OBJECTS = $(TEST_SUPPORT_SOURCES:%.c=$(OBJDIR)/%.o)
@@ -201,7 +210,11 @@ $(OBJDIR)/%.o: $(SRCDIR)/%.c | $(OBJDIR)
 # Compile test files (handle subdirectories) and include test headers
 $(OBJDIR)/$(TESTDIR)/%.o: $(TESTDIR)/%.c | $(OBJDIR)
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -I$(SRCDIR) -I$(TESTDIR) -I$(TESTDIR)/security -c $< -o $@
+	$(CC) $(TEST_CFLAGS) -I$(SRCDIR) -I$(TESTDIR) -I$(TESTDIR)/security -c $< -o $@
+
+# Link test that depends on sssd_test_api
+$(BINDIR)/test_sssd_payload_parser: $(OBJDIR)/$(TESTDIR)/unit/test_sssd_payload_parser.o $(LIB_OBJECTS) $(TEST_SUPPORT_OBJECTS) | $(BINDIR)
+	$(CC) $^ -o $@ $(LDFLAGS)
 
 # Ensure test directory exists
 $(OBJDIR)/$(TESTDIR):
