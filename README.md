@@ -194,6 +194,18 @@ Note: If your distro defaults to /usr/bin for install, sudosh’s Makefile insta
 ### **Package Installation**
 
 #### **RPM-based Systems (RHEL, CentOS, Fedora, openSUSE)**
+
+### SSSD sudo integration (no sudo -l)
+Sudosh discovers sudo rules without invoking `sudo -l` or `getent`.
+- Preferred: dynamic `libsss_sudo.so` (sss_sudo_send_recv)
+- Fallback: SSSD sudo responder socket (segmented protocol)
+- Env flags:
+  - `SUDOSH_SSSD_FORCE_SOCKET=1` force socket path
+  - `SUDOSH_SSSD_SOCKET_SEGMENTED=1` ensure segmented mode
+  - `SUDOSH_DEBUG_SSSD=1` verbose socket diagnostics
+  - `SUDOSH_SSSD_REPLAY=/path/to/trace` developer replay mode
+See docs/SSSD_LDAP_INTEGRATION.md for details.
+
 ```bash
 # Build RPM package
 make rpm

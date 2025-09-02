@@ -395,6 +395,14 @@ void get_sssd_sudo_rules_detailed(const char *username, char *output, size_t out
 int check_command_permission(const char *username, const char *command);
 int check_command_permission_sudo_fallback(const char *username, const char *command);
 
+	/* SSSD permission check (no sudo -l) */
+	int check_command_permission_sssd(const char *username, const char *command);
+
+
+	/* SSSD permission check with explicit runas */
+	int check_command_permission_sssd_as(const char *username, const char *command, const char *runas_user, const char *runas_group);
+
+
 /* Enhanced authentication functions for editor environments */
 int should_require_authentication(const char *username, const char *command);
 int check_nopasswd_privileges_with_command(const char *username, const char *command);
