@@ -364,10 +364,10 @@ Direct Sudoers Rules:
     ALL = (ALL) NOPASSWD: ALL  [Source: /etc/sudoers.d/username]
     ALL = (ALL) NOPASSWD: /usr/bin/ls, /usr/bin/cat  [Source: /etc/sudoers.d/specific_commands]
 
-Group-Based Privileges:
+Group-Based Privileges (only with -ll):
     Group 'admin': (ALL) ALL  [Source: group membership]
 
-System-Wide Group Rules:
+System-Wide Group Rules (only with -ll):
     ALL = (ALL) ALL  [Source: %admin group rule in /etc/sudoers]
 
 Summary:
