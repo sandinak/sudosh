@@ -54,9 +54,9 @@ List available commands from sudoers configuration with comprehensive source att
 .IP \(bu 2
 \fBDirect Sudoers Rules\fR: Explicit rules for the specific user with source file paths
 .IP \(bu 2
-\fBGroup-Based Privileges\fR: Shows admin groups the user belongs to
+\fBGroup-Based Privileges\fR: Shows admin groups the user belongs to (only with -ll)
 .IP \(bu 2
-\fBSystem-Wide Group Rules\fR: Sudoers rules that apply to groups the user is in
+\fBSystem-Wide Group Rules\fR: Sudoers rules that apply to groups the user is in (only with -ll)
 .IP \(bu 2
 \fBSummary\fR: Clear indication of privilege types and authorization status
 .RE

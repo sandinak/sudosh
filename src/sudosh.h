@@ -402,6 +402,32 @@ int check_command_permission_sudo_fallback(const char *username, const char *com
 	/* SSSD permission check with explicit runas */
 	int check_command_permission_sssd_as(const char *username, const char *command, const char *runas_user, const char *runas_group);
 
+	/* Effective options computed from SSSD for an allowed command */
+	struct sssd_effective_opts {
+		int allowed;              /* 1 if allowed */
+		int env_reset;
+		int setenv_allow;
+		int noexec;
+		int requiretty;
+		int lecture;
+		int log_input;
+		int log_output;
+		int umask_value;         /* -1 if unset */
+		int timestamp_timeout;   /* minutes; -1 if unset */
+		int verifypw;            /* 0=unset, 1=always, 2=any, 3=never */
+		char *secure_path;
+		char *cwd;
+		char *chroot_dir;
+		char *selinux_role;
+		char *selinux_type;
+		char *apparmor_profile;
+	};
+
+	/* Compute effective options for username/command; returns 1 if allowed and fills out */
+	int sssd_compute_effective_options(const char *username, const char *command, struct sssd_effective_opts *out);
+	int sssd_compute_effective_options_as(const char *username, const char *command, const char *runas_user, const char *runas_group, struct sssd_effective_opts *out);
+	void sssd_free_effective_options(struct sssd_effective_opts *opts);
+
 
 /* Enhanced authentication functions for editor environments */
 int should_require_authentication(const char *username, const char *command);

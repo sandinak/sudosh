@@ -944,33 +944,7 @@ void list_available_commands_basic(const char *username) {
     }
     printf("\n");
 
-    /* Show group-based privileges */
-    printf("Group-Based Privileges:\n");
-    const char *admin_groups[] = {"wheel", "sudo", "admin", NULL};
-
-    for (int i = 0; admin_groups[i]; i++) {
-        struct group *grp = getgrnam(admin_groups[i]);
-        if (grp && grp->gr_mem) {
-            int is_member = 0;
-            for (char **member = grp->gr_mem; member && *member; member++) {
-                if (*member && strcmp(*member, username) == 0) {
-                    is_member = 1;
-                    found_group_privileges = 1;
-                    found_any_rules = 1;
-                    break;
-                }
-            }
-
-            if (is_member) {
-                printf("    Group '%s': (ALL) ANY  [Source: group membership]\n", admin_groups[i]);
-            }
-        }
-    }
-
-    if (!found_group_privileges) {
-        printf("    User %s is not a member of any admin groups (wheel, sudo, admin)\n", username);
-    }
-    printf("\n");
+    /* Group-based privileges are only shown for -ll detailed view */
 
     /* Summary */
     if (found_any_rules) {
@@ -1130,33 +1104,7 @@ void list_available_commands(const char *username) {
     }
     printf("\n");
 
-    /* Show group-based privileges */
-    printf("Group-Based Privileges:\n");
-    const char *admin_groups[] = {"wheel", "sudo", "admin", NULL};
-
-    for (int i = 0; admin_groups[i]; i++) {
-        struct group *grp = getgrnam(admin_groups[i]);
-        if (grp && grp->gr_mem) {
-            int is_member = 0;
-            for (char **member = grp->gr_mem; member && *member; member++) {
-                if (*member && strcmp(*member, username) == 0) {
-                    is_member = 1;
-                    found_group_privileges = 1;
-                    found_any_rules = 1;
-                    break;
-                }
-            }
-
-            if (is_member) {
-                printf("    Group '%s': (ALL) ANY  [Source: group membership]\n", admin_groups[i]);
-            }
-        }
-    }
-
-    if (!found_group_privileges) {
-        printf("    User %s is not a member of any admin groups (wheel, sudo, admin)\n", username);
-    }
-    printf("\n");
+    /* Group-based privileges are only shown for -ll detailed view */
 
     /* Show system-wide sudoers rules that might apply through groups */
     printf("System-Wide Group Rules:\n");
