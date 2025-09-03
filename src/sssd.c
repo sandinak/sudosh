@@ -1489,6 +1489,14 @@ static void sssd_insert_sorted_by_order(struct sss_sudo_rule **head, struct sss_
     if (!prev) { nr->next = *head; *head = nr; }
     else { nr->next = cur; prev->next = nr; }
 }
+
+/* Decls: keep here to satisfy references from command.c; full defs at end of file */
+int sssd_compute_effective_options(const char *username, const char *command, struct sssd_effective_opts *out);
+int sssd_compute_effective_options_as(const char *username, const char *command, const char *runas_user, const char *runas_group, struct sssd_effective_opts *out);
+void sssd_free_effective_options(struct sssd_effective_opts *opts);
+
+
+
 /* Variant: rule applies with explicit target runas user/group */
 static int sssd_rule_applies_as(const struct sss_sudo_rule *r, const char *username, const char *short_host, const char *fqdn, const char *target_runas_user, const char *target_runas_group)
 {
@@ -1552,6 +1560,8 @@ int check_command_permission_sssd_as(const char *username, const char *command, 
         if (!r->command) continue;
         if (!sssd_rule_applies_as(r, username, hostname, fqdn, runas_user, runas_group)) continue;
         const char *pat = r->command; int is_neg = (pat[0] == '!'); if (is_neg) pat++;
+
+
         if (!is_neg && strcmp(pat, "ALL") == 0) { any_positive = 1; continue; }
         if (sssd_command_matches(pat, command)) { if (is_neg) any_negative = 1; else any_positive = 1; }
     }
@@ -1598,6 +1608,8 @@ int check_command_permission_sssd(const char *username, const char *command)
     }
     free_sss_sudo_result(res);
     if (any_negative) return 0;
+
+
     return any_positive ? 1 : 0;
 }
 
@@ -1696,6 +1708,8 @@ int check_sssd_privileges(const char *username) {
 
     /* Method 2: LDAP search for sudo rules */
     if (check_sssd_ldap_sudo(username)) {
+
+
         return 1;
     }
 
@@ -1772,4 +1786,121 @@ int check_sssd_privileges_with_host(const char *username, const char *hostname) 
 
     /* For now, delegate to the simpler check */
     return check_sssd_privileges(username);
+}
+
+/* Return 1 if SSSD returns any rule with NOPASSWD: ALL (global) */
+int check_sssd_global_nopasswd(const char *username)
+{
+    if (!username) return 0;
+    struct sss_sudo_result *res = query_sssd_sudo_rules(username);
+    if (!res || res->error_code != SSS_SUDO_ERROR_OK) { if (res) free_sss_sudo_result(res); return 0; }
+    int has_global = 0;
+    for (struct sss_sudo_rule *r = res->rules; r; r = r->next) {
+        if (r->nopasswd && r->command && strcmp(r->command, "ALL") == 0) { has_global = 1; break; }
+    }
+    free_sss_sudo_result(res);
+    return has_global;
+}
+
+/* Return 1 if SSSD returns any rule matching this host/runas with NOPASSWD */
+int check_sssd_any_nopasswd(const char *username)
+{
+    if (!username) return 0;
+    struct sss_sudo_result *res = query_sssd_sudo_rules(username);
+    if (!res || res->error_code != SSS_SUDO_ERROR_OK) { if (res) free_sss_sudo_result(res); return 0; }
+    char hostname[256], fqdn[256];
+    if (gethostname(hostname, sizeof(hostname)) != 0) snprintf(hostname, sizeof(hostname), "%s", "localhost");
+    resolve_fqdn(hostname, fqdn, sizeof(fqdn));
+    int has_nopw = 0;
+    for (struct sss_sudo_rule *r = res->rules; r; r = r->next) {
+        if (!r->nopasswd) continue;
+        if (!sssd_rule_applies_as(r, username, hostname, fqdn, r->runas_user ? r->runas_user : "ALL", r->runas_group)) continue;
+        /* any command, including ALL, that matches gives NOPASSWD */
+        if (r->command && strcmp(r->command, "ALL") == 0) { has_nopw = 1; break; }
+        /* if not ALL, presence of a NOPASSWD rule implies some commands without password; we consider that sufficient here */
+        has_nopw = 1; break;
+    }
+    free_sss_sudo_result(res);
+    return has_nopw;
+}
+
+
+
+/* Full definitions for effective options */
+int sssd_compute_effective_options(const char *username, const char *command, struct sssd_effective_opts *out)
+{
+    return sssd_compute_effective_options_as(username, command, NULL, NULL, out);
+}
+
+int sssd_compute_effective_options_as(const char *username, const char *command, const char *runas_user, const char *runas_group, struct sssd_effective_opts *out)
+{
+    if (!out) return 0;
+    memset(out, 0, sizeof(*out));
+    out->umask_value = -1; out->timestamp_timeout = -1; out->verifypw = 0;
+    if (!username || !command) return 0;
+
+    struct sss_sudo_result *res = query_sssd_sudo_rules(username);
+    if (!res || res->error_code != SSS_SUDO_ERROR_OK) { if (res) free_sss_sudo_result(res); return 0; }
+
+    /* Order rules by sudoOrder */
+    struct sss_sudo_rule *sorted = NULL;
+    for (struct sss_sudo_rule *r = res->rules; r; ) {
+        struct sss_sudo_rule *next = r->next; r->next = NULL; sssd_insert_sorted_by_order(&sorted, r); r = next;
+    }
+    res->rules = sorted;
+
+    char hostname[256], fqdn[256];
+    if (gethostname(hostname, sizeof(hostname)) != 0) snprintf(hostname, sizeof(hostname), "%s", "localhost");
+    resolve_fqdn(hostname, fqdn, sizeof(fqdn));
+
+    int allowed = 0;
+    for (struct sss_sudo_rule *r = res->rules; r; r = r->next) {
+        if (!r->command) continue;
+        int applies = runas_user || runas_group
+                        ? sssd_rule_applies_as(r, username, hostname, fqdn, runas_user, runas_group)
+                        : sssd_rule_applies(r, username, hostname, fqdn);
+        if (!applies) continue;
+        const char *pat = r->command; int is_neg = (pat[0] == '!'); if (is_neg) pat++;
+        if (is_neg) {
+            if (sssd_command_matches(pat, command)) { allowed = 0; break; }
+            continue;
+        }
+        if (!allowed) {
+            if (strcmp(pat, "ALL") == 0 || sssd_command_matches(pat, command)) {
+                allowed = 1;
+            }
+        }
+        /* Accumulate options from any applying positive rule. Conservative union. */
+        if (r->env_reset) out->env_reset = 1;
+        if (r->setenv_allow) out->setenv_allow = 1;
+        if (r->noexec) out->noexec = 1;
+        if (r->requiretty) out->requiretty = 1;
+        if (r->lecture) out->lecture = 1;
+        if (r->log_input) out->log_input = 1;
+        if (r->log_output) out->log_output = 1;
+        if (r->umask_value >= 0) out->umask_value = r->umask_value;
+        if (r->timestamp_timeout >= 0) out->timestamp_timeout = r->timestamp_timeout;
+        if (r->verifypw) out->verifypw = r->verifypw;
+        if (!out->secure_path && r->secure_path) out->secure_path = safe_strdup(r->secure_path);
+        if (!out->cwd && r->cwd) out->cwd = safe_strdup(r->cwd);
+        if (!out->chroot_dir && r->chroot_dir) out->chroot_dir = safe_strdup(r->chroot_dir);
+        if (!out->selinux_role && r->selinux_role) out->selinux_role = safe_strdup(r->selinux_role);
+        if (!out->selinux_type && r->selinux_type) out->selinux_type = safe_strdup(r->selinux_type);
+        if (!out->apparmor_profile && r->apparmor_profile) out->apparmor_profile = safe_strdup(r->apparmor_profile);
+    }
+
+    out->allowed = allowed;
+    free_sss_sudo_result(res);
+    return allowed;
+}
+
+void sssd_free_effective_options(struct sssd_effective_opts *opts)
+{
+    if (!opts) return;
+    free(opts->secure_path); opts->secure_path = NULL;
+    free(opts->cwd); opts->cwd = NULL;
+    free(opts->chroot_dir); opts->chroot_dir = NULL;
+    free(opts->selinux_role); opts->selinux_role = NULL;
+    free(opts->selinux_type); opts->selinux_type = NULL;
+    free(opts->apparmor_profile); opts->apparmor_profile = NULL;
 }

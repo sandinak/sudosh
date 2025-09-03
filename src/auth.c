@@ -905,8 +905,11 @@ int check_nopasswd_privileges_enhanced(const char *username) {
                 break;
 
             case NSS_SOURCE_SSSD:
-                /* SSSD NOPASSWD checking would go here */
-                /* For now, assume SSSD doesn't provide NOPASSWD info */
+                /* SSSD NOPASSWD checking */
+                if (check_sssd_any_nopasswd(username)) {
+                    has_nopasswd = 1;
+                    goto done;
+                }
                 break;
 
             case NSS_SOURCE_LDAP:
@@ -938,6 +941,11 @@ int check_nopasswd_privileges_enhanced(const char *username) {
     }
 
     return has_nopasswd;
+
+/* label for early exits */
+done:
+    free_nss_config(nss_config);
+    return 1;
 }
 
 

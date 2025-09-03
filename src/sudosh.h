@@ -421,12 +421,25 @@ int check_command_permission_sudo_fallback(const char *username, const char *com
 		char *selinux_role;
 		char *selinux_type;
 		char *apparmor_profile;
+		/* Environment lists (comma-separated patterns) */
+		char *env_keep;
+		char *env_check;
+		char *env_delete;
 	};
+
+	/* Apply environment policy derived from SSSD options */
+	void apply_env_policy_from_sssd(const struct sssd_effective_opts *sopts);
+
+	/* Orchestrate env_reset including whitelist restore, then apply policy */
+	void apply_env_reset_and_policy_from_sssd(const struct sssd_effective_opts *sopts);
 
 	/* Compute effective options for username/command; returns 1 if allowed and fills out */
 	int sssd_compute_effective_options(const char *username, const char *command, struct sssd_effective_opts *out);
 	int sssd_compute_effective_options_as(const char *username, const char *command, const char *runas_user, const char *runas_group, struct sssd_effective_opts *out);
 	void sssd_free_effective_options(struct sssd_effective_opts *opts);
+		/* NOPASSWD detection via SSSD */
+		int check_sssd_global_nopasswd(const char *username);
+		int check_sssd_any_nopasswd(const char *username);
 
 
 /* Enhanced authentication functions for editor environments */
