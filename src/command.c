@@ -305,7 +305,13 @@ int execute_command(struct command_info *cmd, struct user_info *user) {
             }
             /* cwd/chroot */
             if (sopts.cwd) {
-                (void)chdir(sopts.cwd);
+                if (chdir(sopts.cwd) != 0) {
+                    perror("chdir");
+                    /* Fail closed to avoid partial enforcement */
+                    sssd_free_effective_options(&sopts);
+                    free(command_path);
+                    return -1;
+                }
             }
             if (sopts.chroot_dir) {
                 if (chroot(sopts.chroot_dir) != 0) {
@@ -315,7 +321,12 @@ int execute_command(struct command_info *cmd, struct user_info *user) {
                     free(command_path);
                     return -1;
                 }
-                (void)chdir("/");
+                if (chdir("/") != 0) {
+                    perror("chdir");
+                    sssd_free_effective_options(&sopts);
+                    free(command_path);
+                    return -1;
+                }
             }
             /* noexec: best-effort - if enabled, block direct shell and known exec wrappers */
             if (sopts.noexec) {
