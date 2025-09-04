@@ -6,7 +6,7 @@
 # logging, security protections, and audit capabilities.
 
 # Compiler and flags
-CC = gcc
+CC ?= gcc
 CFLAGS = -Wall -Wextra -std=c99 -O2
 
 # Detect clang vs gcc for coverage handling
