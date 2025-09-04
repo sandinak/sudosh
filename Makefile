@@ -58,13 +58,9 @@ endif
 
 # Check for PAM availability (robust across CentOS 7, AlmaLinux 8, etc.)
 # Prefer a compile+link probe on Linux to ensure both headers and libpam are available.
-ifeq ($(UNAME_S),Linux)
+# Use a compile+link probe everywhere to avoid header-only false positives
 PAM_AVAILABLE := $(shell printf '#include <security/pam_appl.h>\nint main(void){return 0;}\n' | $(CC) -x c - -o /dev/null -lpam >/dev/null 2>&1 && echo yes || echo no)
 PAM_MISC_AVAILABLE := $(shell printf '#include <security/pam_misc.h>\nint main(void){return 0;}\n' | $(CC) -x c - -o /dev/null -lpam_misc >/dev/null 2>&1 && echo yes || echo no)
-else
-PAM_AVAILABLE := $(shell echo '\#include <security/pam_appl.h>' | $(CC) -E - >/dev/null 2>&1 && echo yes || echo no)
-PAM_MISC_AVAILABLE := no
-endif
 
 # Enable test mode for objects compiled from tests/* to expose test helpers
 TEST_CFLAGS = $(CFLAGS) -DSUDOSH_TEST_MODE=1
