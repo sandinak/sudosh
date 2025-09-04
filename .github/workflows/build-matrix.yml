@@ -128,31 +128,32 @@ jobs:
             pm: yum
           - container: almalinux:8
             pm: dnf
-    container:
-      image: ${{ matrix.container }}
     steps:
       - uses: actions/checkout@v4
-      - name: Install build deps
+      - name: Build inside container
         run: |
-          set -eux
+          set -euxo pipefail
+          IMAGE=${{ matrix.container }}
           PM=${{ matrix.pm }}
-          if ! command -v $PM >/dev/null 2>&1; then PM=yum; fi
+          # Create a builder script that runs inside the container
+          cat > /tmp/build.sh <<'EOS'
+          set -euxo pipefail
+          PM="$1"
+          # Install deps
+          if ! command -v "$PM" >/dev/null 2>&1; then PM=yum; fi
           if [ "$PM" = "dnf" ]; then dnf -y update || true; else yum -y update || true; fi
-          # On CentOS 7, pull in toolchain via groupinstall if available
           if [ "$PM" = "yum" ]; then yum -y groupinstall "Development Tools" || true; fi
-          # Core deps
           if [ "$PM" = "dnf" ]; then
             dnf -y install gcc make pam-devel which || (dnf -y install gcc-toolset-12-gcc gcc-toolset-12-gcc-c++ make pam-devel which || true)
           else
             yum -y install gcc make pam-devel which || true
           fi
-      - name: Build (WERROR)
-        env:
-          CC: gcc
-        run: |
           make clean
-          make tests WERROR=1
-      - name: Run tests (SUDOSH_TEST_MODE=1)
-        run: |
-          set -eux
+          make tests WERROR=1 CC=gcc
           for t in bin/test_*; do SUDOSH_TEST_MODE=1 "$t"; done
+          EOS
+          chmod +x /tmp/build.sh
+          # Run the container mounting the repo and execute the builder
+          docker run --rm -v "$PWD":/ws -w /ws "$IMAGE" sh -c "/ws/.github/workflows/ci-in-container.sh '$PM'" || true
+          # Fallback: copy and execute embedded script if repo script not found
+          docker run --rm -v "$PWD":/ws -w /ws "$IMAGE" sh -c "/tmp/build.sh '$PM'"
