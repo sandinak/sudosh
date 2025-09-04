@@ -135,25 +135,17 @@ jobs:
           set -euxo pipefail
           IMAGE=${{ matrix.container }}
           PM=${{ matrix.pm }}
-          # Create a builder script that runs inside the container
-          cat > /tmp/build.sh <<'EOS'
-          set -euxo pipefail
-          PM="$1"
-          # Install deps
-          if ! command -v "$PM" >/dev/null 2>&1; then PM=yum; fi
-          if [ "$PM" = "dnf" ]; then dnf -y update || true; else yum -y update || true; fi
-          if [ "$PM" = "yum" ]; then yum -y groupinstall "Development Tools" || true; fi
-          if [ "$PM" = "dnf" ]; then
-            dnf -y install gcc make pam-devel which || (dnf -y install gcc-toolset-12-gcc gcc-toolset-12-gcc-c++ make pam-devel which || true)
-          else
-            yum -y install gcc make pam-devel which || true
-          fi
-          make clean
-          make tests WERROR=1 CC=gcc
-          for t in bin/test_*; do SUDOSH_TEST_MODE=1 "$t"; done
-          EOS
-          chmod +x /tmp/build.sh
-          # Run the container mounting the repo and execute the builder
-          docker run --rm -v "$PWD":/ws -w /ws "$IMAGE" sh -c "/ws/.github/workflows/ci-in-container.sh '$PM'" || true
-          # Fallback: copy and execute embedded script if repo script not found
-          docker run --rm -v "$PWD":/ws -w /ws "$IMAGE" sh -c "/tmp/build.sh '$PM'"
+          docker run --rm -v "$PWD":/ws -w /ws "$IMAGE" sh -euxc '
+            PM="'$PM'";
+            if ! command -v "$PM" >/dev/null 2>&1; then PM=yum; fi
+            if [ "$PM" = dnf ]; then dnf -y update || true; else yum -y update || true; fi
+            if [ "$PM" = yum ]; then yum -y groupinstall "Development Tools" || true; fi
+            if [ "$PM" = dnf ]; then
+              dnf -y install gcc make pam-devel which || (dnf -y install gcc-toolset-12-gcc gcc-toolset-12-gcc-c++ make pam-devel which || true)
+            else
+              yum -y install gcc make pam-devel which || true
+            fi
+            make clean
+            make tests WERROR=1 CC=gcc
+            for t in bin/test_*; do SUDOSH_TEST_MODE=1 "$t"; done
+          '
