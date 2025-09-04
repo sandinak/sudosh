@@ -26,7 +26,12 @@ int main(void)
     /* Simulate application in our process: apply env policy */
     /* Clear then apply to simulate command.c behavior */
     if (out.env_reset) {
+#ifdef __APPLE__
+        extern void sudosh_clearenv(void);
+        sudosh_clearenv();
+#else
         clearenv();
+#endif
         setenv("TERM", "xterm-256color", 1);
         setenv("PATH", "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", 1);
     }
