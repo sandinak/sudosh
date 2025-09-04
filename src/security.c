@@ -170,6 +170,31 @@ void sanitize_environment(void) {
 }
 
 
+/* Portable clearenv wrapper: macOS lacks clearenv; provide a fallback */
+#if defined(__APPLE__)
+#include <crt_externs.h>
+static void sudosh_clearenv(void)
+{
+    /* Iterate current environment and unset each name safely */
+    char **envp = *_NSGetEnviron();
+    if (!envp) return;
+    for (char **e = envp; *e; ++e) {
+        const char *eq = strchr(*e, '=');
+        if (eq) {
+            size_t n = (size_t)(eq - *e);
+            if (n > 0 && n < 256) {
+                char name[256];
+                memcpy(name, *e, n);
+                name[n] = '\0';
+                unsetenv(name);
+            }
+        }
+    }
+}
+#else
+#define sudosh_clearenv clearenv
+#endif
+
 /* Apply environment policy derived from SSSD options */
 void apply_env_policy_from_sssd(const struct sssd_effective_opts *sopts)
 {
@@ -266,7 +291,7 @@ void apply_env_reset_and_policy_from_sssd(const struct sssd_effective_opts *sopt
         }
 
         /* Now clear environment */
-        clearenv();
+        sudosh_clearenv();
         setenv("PATH", "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", 1);
         setenv("TERM", "xterm-256color", 1);
 

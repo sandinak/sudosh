@@ -148,21 +148,23 @@ int test_help_includes_rules() {
     /* Capture stdout to test help output */
     FILE *original_stdout = stdout;
     char help_buffer[4096];
+    memset(help_buffer, 0, sizeof(help_buffer));
     FILE *help_stream = fmemopen(help_buffer, sizeof(help_buffer), "w");
     if (!help_stream) {
         printf("FAIL: Could not create help stream for testing\n");
         return 1;
     }
-    
+
     stdout = help_stream;
-    
+
     /* Call print_help function */
     print_help();
-    
+    fflush(help_stream);
+
     /* Restore stdout */
     fclose(help_stream);
     stdout = original_stdout;
-    
+
     /* Check that 'rules' is mentioned in help */
     if (!strstr(help_buffer, "rules")) {
         printf("FAIL: 'rules' command not found in help output\n");
@@ -184,21 +186,23 @@ int test_commands_includes_rules() {
     /* Capture stdout to test commands output */
     FILE *original_stdout = stdout;
     char commands_buffer[4096];
+    memset(commands_buffer, 0, sizeof(commands_buffer));
     FILE *commands_stream = fmemopen(commands_buffer, sizeof(commands_buffer), "w");
     if (!commands_stream) {
         printf("FAIL: Could not create commands stream for testing\n");
         return 1;
     }
-    
+
     stdout = commands_stream;
-    
+
     /* Call print_commands function */
     print_commands();
-    
+    fflush(commands_stream);
+
     /* Restore stdout */
     fclose(commands_stream);
     stdout = original_stdout;
-    
+
     /* Check that 'rules' is mentioned in commands list */
     if (!strstr(commands_buffer, "rules")) {
         printf("FAIL: 'rules' command not found in commands output\n");
