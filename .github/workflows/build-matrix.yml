@@ -129,7 +129,7 @@ jobs:
         include:
           - container: centos:7
             pm: yum
-          - container: almalinux:8
+          - container: almalinux:8.9
             pm: dnf
     steps:
       - uses: actions/checkout@v4

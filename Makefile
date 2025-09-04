@@ -601,6 +601,7 @@ print-pam-detection:
 	@echo "CC=$(CC)"
 	@echo "PAM_AVAILABLE=$(PAM_AVAILABLE)"
 	@echo "PAM_MISC_AVAILABLE=$(PAM_MISC_AVAILABLE)"
+	@echo "LDFLAGS=$(LDFLAGS)"
 
 	@echo "  coverage-report          - Generate coverage report"
 	@echo "  static-analysis          - Run static code analysis"
