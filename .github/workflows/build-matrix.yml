@@ -115,3 +115,44 @@ jobs:
             coverage.xml
             gcovr*.txt
 
+
+
+  centos:
+    name: CentOS/Alma • ${{ matrix.container }}
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - container: centos:7
+            pm: yum
+          - container: almalinux:8
+            pm: dnf
+    container:
+      image: ${{ matrix.container }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build deps
+        run: |
+          set -eux
+          PM=${{ matrix.pm }}
+          if ! command -v $PM >/dev/null 2>&1; then PM=yum; fi
+          if [ "$PM" = "dnf" ]; then dnf -y update || true; else yum -y update || true; fi
+          # On CentOS 7, pull in toolchain via groupinstall if available
+          if [ "$PM" = "yum" ]; then yum -y groupinstall "Development Tools" || true; fi
+          # Core deps
+          if [ "$PM" = "dnf" ]; then
+            dnf -y install gcc make pam-devel which || (dnf -y install gcc-toolset-12-gcc gcc-toolset-12-gcc-c++ make pam-devel which || true)
+          else
+            yum -y install gcc make pam-devel which || true
+          fi
+      - name: Build (WERROR)
+        env:
+          CC: gcc
+        run: |
+          make clean
+          make tests WERROR=1
+      - name: Run tests (SUDOSH_TEST_MODE=1)
+        run: |
+          set -eux
+          for t in bin/test_*; do SUDOSH_TEST_MODE=1 "$t"; done
