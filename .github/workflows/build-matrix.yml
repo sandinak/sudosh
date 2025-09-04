@@ -77,6 +77,9 @@ jobs:
           brew install cppcheck || true
       - name: Build with WERROR${{ matrix.sanitize && format(' + SANITIZE={0}', matrix.sanitize) || '' }}
         run: |
+          echo "==> $(uname -s) $(uname -r) CC=$CC"
+          echo "==> Probing PAM availability..."
+          make -n print-pam-detection 2>/dev/null || true
           make clean
           if [ -n "${{ matrix.sanitize }}" ]; then
             make tests WERROR=1 SANITIZE=${{ matrix.sanitize }}

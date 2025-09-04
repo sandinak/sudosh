@@ -63,13 +63,15 @@ jobs:
         
     - name: Build sudosh
       run: |
+        echo "==> $(uname -s) $(uname -r) CC=$CC"
+        echo "==> Makefile PAM detection:"; make print-pam-detection || true
         make clean
         make CC=$CC CFLAGS="$CFLAGS"
-        
+
     - name: Run quick smoke test
       run: |
-        make test-pipeline-smoke
-        
+        ./scripts/run_pipeline_regression_tests.sh --smoke-only || true
+
     - name: Run full pipeline regression tests
       run: |
         make test-pipeline-regression

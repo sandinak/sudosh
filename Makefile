@@ -593,6 +593,15 @@ help:
 	@echo "  rebuild                  - Clean and rebuild"
 	@echo "  debug                    - Build with debug symbols"
 	@echo "  coverage                 - Build with coverage support"
+
+# Debug target to print PAM detection results
+.PHONY: print-pam-detection
+print-pam-detection:
+	@echo "UNAME_S=$(UNAME_S)"
+	@echo "CC=$(CC)"
+	@echo "PAM_AVAILABLE=$(PAM_AVAILABLE)"
+	@echo "PAM_MISC_AVAILABLE=$(PAM_MISC_AVAILABLE)"
+
 	@echo "  coverage-report          - Generate coverage report"
 	@echo "  static-analysis          - Run static code analysis"
 	@echo "  rpm                      - Build RPM package for DNF-based systems"
