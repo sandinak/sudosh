@@ -168,8 +168,9 @@ static struct sss_sudo_rule * build_list_from_test_rules(const sssd_test_rule *r
             nr->lecture = tr->lecture;
             nr->log_input = tr->log_input;
             nr->log_output = tr->log_output;
-            nr->umask_value = tr->umask_value;
-            nr->timestamp_timeout = tr->timestamp_timeout;
+            /* In test API, treat 0 as 'unset' for fields where -1 denotes unset */
+            nr->umask_value = (tr->umask_value != 0) ? tr->umask_value : -1;
+            nr->timestamp_timeout = (tr->timestamp_timeout != 0) ? tr->timestamp_timeout : -1;
             nr->verifypw = tr->verifypw;
             nr->secure_path = tr->secure_path;
             nr->cwd = tr->cwd;

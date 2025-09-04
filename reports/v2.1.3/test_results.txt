@@ -1,0 +1,1473 @@
+Running full test suite (SUDOSH_TEST_MODE=1)...
+Running bin/test_alias_rc_import...
+Running test_import_safe_aliases_from_rc... PASS
+Running test_reject_unsafe_aliases_from_rc... PASS
+Running test_various_safe_alias_values... PASS
+Running test_quoted_edge_cases... PASS
+
+=== RC Alias Import Tests ===
+Total tests: 4
+Passed: 4
+Failed: 0
+
+Running bin/test_alias_security...
+sudosh: shell commands are not permitted
+sudosh: shell commands are not permitted
+sudosh: sudoedit commands are not permitted for security reasons
+sudosh: use regular editors like vi, vim, nano instead
+sudosh: you should only ssh as your user, not root
+sudosh: command 'rm -rf' requires sudo privileges or authentication
+Running test_alias_name_validation... PASS
+Running test_alias_value_validation_blocks_shells_and_ops... PASS
+Running test_alias_expansion_and_runtime_validation_safe... PASS
+Running test_alias_expansion_blocks_dangerous_at_runtime... PASS
+Running test_alias_length_limits... PASS
+
+=== Alias Security Tests ===
+Total tests: 5
+Passed: 5
+Failed: 0
+
+Running bin/test_alias_validation...
+=== Alias Validation Tests ===
+Running test_check_dangerous_alias_patterns... PASS
+Running test_validate_alias_expansion_safety... sudosh: command 'rm -rf / test_arg' requires sudo privileges or authentication
+PASS
+Running test_validate_expanded_alias_command... sudosh: command 'rm -rf /' requires sudo privileges or authentication
+sudosh: Redirection to system configuration directory (/etc/) is not allowed for security reasons
+sudosh: Safe redirection targets: /tmp/, /var/tmp/, or your home directory
+PASS
+Running test_expand_aliases_security... sudosh: command 'rm -rf /' requires sudo privileges or authentication
+PASS
+Running test_expand_aliases_internal... PASS
+Running test_alias_validation_integration... sudosh: 'su' is not permitted; use the sudosh interactive shell instead
+sudosh: command 'rm -rf /' requires sudo privileges or authentication
+sudosh: shell commands are not permitted
+PASS
+Running test_alias_validation_edge_cases... PASS
+
+=== Test Results ===
+Total tests: 7
+Passed: 7
+Failed: 0
+All tests passed!
+
+Running bin/test_ansible_detection...
+=== Ansible Detection Unit Tests ===
+Running test_ansible_env_vars_detected... PASS
+Running test_ansible_validate_command_passthrough... PASS
+Running test_ansible_env_prefix_and_count... PASS
+Running test_ansible_execution_context_score... PASS
+Running test_ansible_confidence_threshold_and_details... PASS
+
+=== Test Results ===
+Total tests: 5
+Passed: 5
+Failed: 0
+All tests passed!
+
+Running bin/test_auth_cache...
+=== Authentication Cache Tests ===
+Running test_create_auth_cache_dir... PASS
+Running test_get_auth_cache_path... PASS
+Running test_check_auth_cache_nonexistent... PASS
+Running test_auth_cache_update_and_check... PASS
+Running test_clear_auth_cache... PASS
+Running test_cleanup_auth_cache... PASS
+Running test_authenticate_user_cached... PASS
+Running test_cache_file_security... PASS
+Running test_cache_timeout... PASS
+
+=== Test Results ===
+Total tests: 9
+Passed: 9
+Failed: 0
+All authentication cache tests passed!
+
+Note: Some tests may have limited functionality when not running as root,
+which is expected behavior for security reasons.
+
+Running bin/test_awk_sed_support...
+=== Awk/Sed Support Tests ===
+Running test_basic_functionality... sudosh: awk command with system() calls blocked
+sudosh: sed command with shell escape patterns blocked
+Testing basic awk/sed functionality...
+✓ Basic awk/sed functionality tests passed
+PASS
+
+=== Awk/Sed Support Test Summary ===
+Total tests: 1
+Passed: 1
+Failed: 0
+✅ All awk/sed support tests passed!
+
+Running bin/test_awk_sed_support_clean...
+=== Awk/Sed Support Tests ===
+Running test_basic_functionality... sudosh: awk command with system() calls blocked
+sudosh: sed command with shell escape patterns blocked
+Testing basic awk/sed functionality...
+✓ Basic awk/sed functionality tests passed
+PASS
+
+=== Awk/Sed Support Test Summary ===
+Total tests: 1
+Passed: 1
+Failed: 0
+✅ All awk/sed support tests passed!
+
+Running bin/test_color_functionality...
+=== Color Functionality Tests ===
+Running test_detect_terminal_colors... PASS
+Running test_init_color_config... PASS
+Running test_parse_ps1_colors... PASS
+Running test_preserve_color_environment... PASS
+Running test_cleanup_color_config... PASS
+
+=== Test Results ===
+Total tests: 5
+Passed: 5
+Failed: 0
+All color functionality tests passed!
+
+Running bin/test_command_parsing...
+=== Command Parsing Unit Tests ===
+Running test_expand_equals_expression... PASS
+Running test_parse_command_basic... PASS
+Running test_parse_command_with_redirection_parsed_via_shell_ops... PASS
+Running test_contains_shell_operators... PASS
+
+=== Test Results ===
+Total tests: 4
+Passed: 4
+Failed: 0
+All tests passed!
+
+Running bin/test_config_module...
+=== Config Module Unit Tests ===
+Running test_config_parse_and_validate... PASS
+Running test_config_invalid_threshold_logs_warning... PASS
+
+=== Test Results ===
+Total tests: 2
+Passed: 2
+Failed: 0
+All tests passed!
+
+Running bin/test_ctrl_c_feature...
+Testing Ctrl-C Line Clearing Feature
+====================================
+
+Test 1: Ctrl-C with empty line
+------------------------------
+sudosh> (simulating empty line)
+^C
+sudosh> Line cleared by Ctrl-C
+Result: pos=0, len=0, buffer=''
+Expected: pos=0, len=0, buffer=''
+Status: ✅ PASS
+
+Test 2: Ctrl-C with text on line
+--------------------------------
+sudosh> ls -la /tmp (simulating typed text)
+[Ksudosh> Line cleared by Ctrl-C
+Result: pos=0, len=0, buffer=''
+Expected: pos=0, len=0, buffer=''
+Status: ✅ PASS
+
+Test 3: Ctrl-C with partial command
+-----------------------------------
+sudosh> vi /etc/pass (simulating partial command)
+[Ksudosh> Line cleared by Ctrl-C
+Result: pos=0, len=0, buffer=''
+Expected: pos=0, len=0, buffer=''
+Status: ✅ PASS
+
+Test 4: Multiple Ctrl-C presses
+-------------------------------
+Press 1: sudosh> test command
+[Ksudosh> Line cleared by Ctrl-C
+Press 2: sudosh> test command
+[Ksudosh> Line cleared by Ctrl-C
+Press 3: sudosh> test command
+[Ksudosh> Line cleared by Ctrl-C
+✅ PASS - All presses work correctly
+
+Test 5: Signal flag reset
+------------------------
+Signal flag set: YES
+Signal flag after reset: NO
+Status: ✅ PASS
+
+Summary
+=======
+The Ctrl-C feature provides the following functionality:
+✅ Clears current line when Ctrl-C is pressed
+✅ Resets cursor position and buffer length
+✅ Resets history navigation state
+✅ Resets tab completion state
+✅ Shows visual feedback (^C for empty line)
+✅ Starts fresh prompt after clearing
+✅ Handles multiple Ctrl-C presses correctly
+✅ Properly resets signal flags
+
+Expected behavior in sudosh:
+- User types: 'vi /etc/passwd'
+- User presses Ctrl-C
+- Line is cleared and fresh prompt appears
+- User can start typing new command immediately
+
+This matches standard shell behavior where Ctrl-C
+cancels the current line editing and starts fresh.
+
+Running bin/test_dangerous_commands_module...
+=== Dangerous Commands Unit Tests ===
+Running test_critical_dangerous_detection... PASS
+Running test_moderate_dangerous_detection... PASS
+Running test_sensitive_paths_and_patterns... PASS
+Running test_requires_password_in_editor_and_explanation... PASS
+
+=== Test Results ===
+Total tests: 4
+Passed: 4
+Failed: 0
+All tests passed!
+
+Running bin/test_directory_completion_fix...
+=== Directory Completion Fix Tests ===
+Running test_directory_end_detection... PASS
+Running test_directory_completion_behavior... PASS
+Running test_partial_completion_unchanged... PASS
+Running test_relative_directory_completion... PASS
+Running test_edge_cases... PASS
+
+=== Test Results ===
+Total tests: 5
+Passed: 5
+Failed: 0
+✅ All directory completion fix tests passed!
+
+Directory completion fix validated:
+• 'ls /etc/' + Tab displays list (no auto-complete)
+• 'ls /etc/host' + Tab still auto-completes (unchanged)
+• 'ls src/' + Tab displays list (relative paths work)
+• Edge cases handled correctly
+• Regression prevention ensured
+
+Running bin/test_editor_detection_module...
+=== Editor Detection Unit Tests ===
+Running test_editor_env_vars_detection... PASS
+Running test_editor_terminal_type_detection... PASS
+Running test_remote_editor_session_detection... PASS
+
+=== Test Results ===
+Total tests: 3
+Passed: 3
+Failed: 0
+All tests passed!
+
+Running bin/test_editor_regression...
+Testing Secure Editor Regression
+================================
+
+Testing secure editors (should be ALLOWED):
+Testing: vi /tmp/test.txt
+  → Secure editor detected: vi /tmp/test.txt
+  is_secure_editor: YES
+  is_interactive_editor: NO
+  validate_command: ALLOWED
+  ✅ PASS: Secure editor works correctly
+
+Testing: vim /etc/passwd
+  → Secure editor detected: vim /etc/passwd
+  is_secure_editor: YES
+  is_interactive_editor: NO
+  validate_command: ALLOWED
+  ✅ PASS: Secure editor works correctly
+
+Testing: nano /etc/hosts
+  → Secure editor detected: nano /etc/hosts
+  is_secure_editor: YES
+  is_interactive_editor: NO
+  validate_command: ALLOWED
+  ✅ PASS: Secure editor works correctly
+
+Testing: pico /tmp/config.conf
+  → Secure editor detected: pico /tmp/config.conf
+  is_secure_editor: YES
+  is_interactive_editor: NO
+  validate_command: ALLOWED
+  ✅ PASS: Secure editor works correctly
+
+Testing: view /var/log/syslog
+  → Secure editor detected: view /var/log/syslog
+  is_secure_editor: YES
+  is_interactive_editor: NO
+  validate_command: ALLOWED
+  ✅ PASS: Secure editor works correctly
+
+Testing dangerous editors (should be BLOCKED):
+Testing: emacs /tmp/test.txt
+  → Interactive editor blocked: emacs /tmp/test.txt
+  is_secure_editor: NO
+  is_interactive_editor: YES
+  validate_command: BLOCKED
+  ✅ PASS: Dangerous editor correctly blocked
+
+Testing: joe /tmp/test.txt
+  → Interactive editor blocked: joe /tmp/test.txt
+  is_secure_editor: NO
+  is_interactive_editor: YES
+  validate_command: BLOCKED
+  ✅ PASS: Dangerous editor correctly blocked
+
+Testing: mcedit /tmp/test.txt
+  → Interactive editor blocked: mcedit /tmp/test.txt
+  is_secure_editor: NO
+  is_interactive_editor: YES
+  validate_command: BLOCKED
+  ✅ PASS: Dangerous editor correctly blocked
+
+Testing: nvim /tmp/test.txt
+  → Interactive editor blocked: nvim /tmp/test.txt
+  is_secure_editor: NO
+  is_interactive_editor: YES
+  validate_command: BLOCKED
+  ✅ PASS: Dangerous editor correctly blocked
+
+FINAL RESULT:
+=============
+✅ ALL TESTS PASSED - No regression detected
+✅ Secure editors (vi, vim, nano, pico) are allowed
+✅ Dangerous editors (emacs, joe, nvim) are blocked
+
+Running bin/test_enhanced_rules_command...
+=== Enhanced Rules Command Tests ===
+Running test_safe_commands_section... Testing safe commands section...
+Always Safe Commands (no privilege required):
+============================================
+These commands can always be executed without special permissions:
+
+System Information:
+  ls, pwd, whoami, id, date, uptime, w, who
+
+Text Processing:
+  grep, egrep, fgrep, sed, awk, cut, sort, uniq
+  head, tail, wc, cat, echo
+
+✓ Safe commands section tests passed
+PASS
+Running test_blocked_commands_section... Testing blocked commands section...
+Always Blocked Commands:
+=========================
+Commands are categorized by security risk and access requirements:
+
+Sections: System Control:, Disk Operations:, Network Security:, Communication:
+
+  Privilege Escalation: su, sudo, pkexec, sudoedit
+  Shell Operations: sh, bash, zsh, csh, tcsh, ksh, fish, dash
+                    Interactive shells and shell-like interpreters
+
+Conditionally Blocked Commands (Require Sudo Privileges):
+  System Control: init, shutdown, halt, reboot, poweroff, telinit
+                  systemctl poweroff/reboot/halt/emergency/rescue
+  Disk Operations: fdisk, parted, gparted, mkfs, fsck, dd, shred, wipe
+                   mount, umount, swapon, swapoff
+  Network Security: iptables, ip6tables, ufw, firewall-cmd
+  Communication: wall, write, mesg
+
+Access Requirements:
+• Conditionally blocked commands are allowed if you have:
+  - Valid password authentication AND sudo privileges, OR
+  - Explicit sudo rules granting access to specific commands, OR
+  - ALL commands privilege (unrestricted access)
+• Always blocked commands are never permitted for security reasons
+• Shell commands redirect to secure interactive shell when appropriate
+• All command executions are logged for audit purposes
+✓ Blocked commands section tests passed
+PASS
+Running test_pager_functionality... Testing pager functionality...
+✓ Pager functionality tests passed
+PASS
+Running test_rules_command_integration... Testing rules command integration...
+Sudo privileges for testuser on phx-obs-lnxb01:
+=====================================
+
+LDAP/SSSD-Based Rules:
+    No LDAP/SSSD-based rules found
+
+Direct Sudoers Rules (from /etc/sudoers):
+    No direct sudoers rules found for user testuser
+
+Summary:
+✗ User testuser has no sudo privileges on phx-obs-lnxb01
+User is not in any admin groups and has no explicit sudoers rules
+
+Always Safe Commands (no privilege required):
+============================================
+These commands can always be executed without special permissions:
+
+System Information:
+  ls, pwd, whoami, id, date, uptime, w, who
+
+Text Processing:
+  grep, egrep, fgrep, sed, awk, cut, sort, uniq
+  head, tail, wc, cat, echo
+
+
+Always Blocked Commands:
+=========================
+Commands are categorized by security risk and access requirements:
+
+Sections: System Control:, Disk Operations:, Network Security:, Communication:
+
+  Privilege Escalation: su, sudo, pkexec, sudoedit
+  Shell Operations: sh, bash, zsh, csh, tcsh, ksh, fish, dash
+                    Interactive shells and shell-like interpreters
+
+Conditionally Blocked Commands (Require Sudo Privileges):
+  System Control: init, shutdown, halt, reboot, poweroff, telinit
+                  systemctl poweroff/reboot/halt/emergency/rescue
+  Disk Operations: fdisk, parted, gparted, mkfs, fsck, dd, shred, wipe
+                   mount, umount, swapon, swapoff
+  Network Security: iptables, ip6tables, ufw, firewall-cmd
+  Communication: wall, write, mesg
+
+Access Requirements:
+• Conditionally blocked commands are allowed if you have:
+  - Valid password authentication AND sudo privileges, OR
+  - Explicit sudo rules granting access to specific commands, OR
+  - ALL commands privilege (unrestricted access)
+• Always blocked commands are never permitted for security reasons
+• Shell commands redirect to secure interactive shell when appropriate
+• All command executions are logged for audit purposes
+✓ Rules command integration tests passed
+PASS
+Running test_command_categorization... Testing command categorization accuracy...
+✓ Command categorization tests passed
+PASS
+Running test_output_formatting... Testing output formatting and structure...
+Always Safe Commands (no privilege required):
+============================================
+These commands can always be executed without special permissions:
+
+System Information:
+  ls, pwd, whoami, id, date, uptime, w, who
+
+Text Processing:
+  grep, egrep, fgrep, sed, awk, cut, sort, uniq
+  head, tail, wc, cat, echo
+
+✓ Output formatting tests passed
+PASS
+
+=== Enhanced Rules Command Test Summary ===
+Total tests: 6
+Passed: 6
+Failed: 0
+
+Running bin/test_enhancement_integration...
+=== Enhancement Integration Tests ===
+Running test_existing_functionality_unchanged... sudosh: command 'rm -rf /' requires sudo privileges or authentication
+sudosh: dangerous recursive operation is not permitted
+PASS
+Running test_nss_fallback_mechanisms...   (NSS privilege check result: no privileges) PASS
+Running test_different_sudoers_configurations...   (sudoers privilege check for root: no privileges) PASS
+Running test_sssd_integration...   (SSSD privilege check: no privileges) PASS
+Running test_performance_impact...   (NSS user lookup 100x: 0.000317 seconds)   (Pipeline validation 100x: 0.003720 seconds) PASS
+Running test_memory_usage... PASS
+Running test_integrated_functionality... sudosh: command 'sudo' is not whitelisted for pipeline use
+  (User brmathes has privileges: no) PASS
+Running test_comprehensive_error_handling... PASS
+Running test_concurrent_access... PASS
+Running test_command_parsing_edge_cases... PASS
+Running test_framework_compatibility... PASS
+
+=== Test Results ===
+Total tests: 11
+Passed: 11
+Failed: 0
+All tests passed!
+
+Running bin/test_filelock...
+=== File Locking Unit Tests ===
+Running test_init_file_locking_in_test_mode... PASS
+Running test_acquire_and_release_lock... sudosh: Error: /tmp/sudosh_lock_test_file.txt is currently being edited by user 'brmathes' since 2025-09-04 12:24:43. Please try again later.
+PASS
+Running test_check_file_lock_info... PASS
+
+=== Test Results ===
+Total tests: 3
+Passed: 3
+Failed: 0
+All tests passed!
+
+Running bin/test_integration_basic...
+=== Integration Tests - Basic ===
+Running test_command_line_options... PASS
+Running test_binary_properties... PASS
+Running test_sudosh_startup... PASS
+Running test_logging_integration...   (Logging integration completed without errors) PASS
+Running test_security_integration... PASS
+Running test_command_integration... PASS
+Running test_user_integration...   (User brmathes lacks sudo privileges) PASS
+
+=== Test Results ===
+Total tests: 7
+Passed: 7
+Failed: 0
+All tests passed!
+
+Running bin/test_list_commands...
+=== Testing -l/--list functionality ===
+
+Testing list_available_commands function...
+Testing with user: brmathes
+PASS: list_available_commands produced expected output
+Testing list_available_commands with NULL user...
+PASS: list_available_commands handled NULL user correctly
+
+=== Test completed ===
+
+Running bin/test_logging_comprehensive...
+=== Comprehensive Logging Tests ===
+Running test_logging_initialization...   (Logging initialization handled correctly) PASS
+Running test_command_logging_comprehensive...   (Command logging tested with various scenarios) PASS
+Running test_authentication_logging_comprehensive...   (Authentication logging tested comprehensively) PASS
+Running test_session_logging_comprehensive...   (Session logging tested comprehensively) PASS
+Running test_error_logging_comprehensive...   (Error logging tested comprehensively) PASS
+Running test_security_violation_logging_comprehensive...   (Security violation logging tested comprehensively) PASS
+Running test_logging_stress...   (Stress testing completed successfully) PASS
+Running test_logging_concurrent...   (Concurrent logging test completed) PASS
+
+=== Test Results ===
+Total tests: 8
+Passed: 8
+Failed: 0
+All tests passed!
+
+Running bin/test_no_group_privs_in_l_basic...
+basic -l group-privs hidden: PASS
+
+Running bin/test_nopasswd_sudo_command...
+=== Regression - NOPASSWD sudo command execution ===
+Running test_nopasswd_sudo_runs_command_without_prompt... PASS
+
+=== Test Results ===
+Total tests: 1
+Passed: 1
+Failed: 0
+All tests passed!
+
+Running bin/test_nopasswd_zsh_validate...
+=== Regression - NOPASSWD sudo -v behavior ===
+Running test_nopasswd_sudo_v_skip_prompt... PASS
+
+=== Test Results ===
+Total tests: 1
+Passed: 1
+Failed: 0
+All tests passed!
+
+Running bin/test_nss_enhancements...
+=== NSS Enhancement Tests ===
+Running test_get_user_info_files_valid... PASS
+Running test_get_user_info_files_invalid... PASS
+Running test_get_user_info_files_null... PASS
+Running test_check_admin_groups_files_root...   (root admin status: not admin) PASS
+Running test_check_admin_groups_files_invalid... PASS
+Running test_check_admin_groups_files_null... PASS
+Running test_check_sudo_privileges_nss...   (user brmathes sudo privileges: does not have) PASS
+Running test_check_sudo_privileges_nss_null... PASS
+Running test_check_command_permission_nss...   (user brmathes ls permission: denied) PASS
+Running test_check_command_permission_nss_null... PASS
+Running test_missing_passwd_file... PASS
+Running test_nss_config_reading... PASS
+Running test_get_user_info_nss... PASS
+Running test_nss_no_sudo_dependency... PASS
+
+=== Test Results ===
+Total tests: 14
+Passed: 14
+Failed: 0
+All tests passed!
+
+Running bin/test_nss_parsing...
+=== NSS Parsing Unit Tests ===
+Running test_read_nss_config_basic... PASS
+
+=== Test Results ===
+Total tests: 1
+Passed: 1
+Failed: 0
+All tests passed!
+
+Running bin/test_path_validator...
+=== Path Validator Integration Tests ===
+Running test_path_validator_quiet_secure... FAIL: tests/integration/test_path_validator.c:16: secure PATH should exit 0 (expected: 0, actual: 127)
+FAIL
+Running test_path_validator_quiet_insecure... FAIL: tests/integration/test_path_validator.c:24: insecure PATH should exit 1 (expected: 1, actual: 127)
+FAIL
+Running test_path_validator_clean_output... FAIL: tests/integration/test_path_validator.c:32: -c should exit 0 (expected: 0, actual: 127)
+FAIL
+Running test_path_validator_help... FAIL: tests/integration/test_path_validator.c:45: --help should exit 0 (expected: 0, actual: 127)
+FAIL
+
+=== Test Results ===
+Total tests: 4
+Passed: 0
+Failed: 0
+All tests passed!
+
+Running bin/test_pipeline_redirection_fix...
+=== Pipeline Redirection Fix Tests ===
+Running test_exact_reported_issue... PASS
+Running test_redirection_type_parsing... PASS
+Running test_pipeline_redirection_types... PASS
+Running test_complex_pipeline_redirection... PASS
+Running test_regular_command_compatibility... PASS
+Running test_redirection_error_handling... sudosh: Redirection to system configuration directory (/etc/) is not allowed for security reasons
+sudosh: Safe redirection targets: /tmp/, /var/tmp/, or your home directory
+sudosh: Redirection target is not in a safe directory. Use /tmp/, /var/tmp/, or your home directory instead
+sudosh: Safe redirection targets: /tmp/, /var/tmp/, or your home directory
+PASS
+Running test_redirect_type_bug_regression... PASS
+
+=== Test Results ===
+Total tests: 7
+Passed: 7
+Failed: 0
+All tests passed!
+
+Running bin/test_pipeline_security...
+=== Pipeline Security Tests ===
+Running test_parse_pipeline_valid... PASS
+Running test_parse_pipeline_invalid... PASS
+Running test_validate_pipeline_security_valid... PASS
+Running test_validate_pipeline_security_invalid... sudosh: command 'rm' is not allowed in pipelines
+PASS
+Running test_validate_secure_pipeline... sudosh: command 'rm' is not whitelisted for pipeline use
+PASS
+Running test_is_whitelisted_pipe_command... PASS
+Running test_pipeline_dangerous_find... sudosh: dangerous find option '-exec' not allowed in pipelines
+PASS
+Running test_pipeline_safe_find... PASS
+Running test_complex_valid_pipeline... PASS
+Running test_pipeline_command_injection... PASS
+Running test_head_tail_pipeline_functionality... PASS
+Running test_pipeline_audit_logging... PASS
+Running test_validate_pipeline_with_permissions...   (pipeline permission for brmathes: allowed) PASS
+Running test_single_command_pipeline... PASS
+Running test_pipeline_memory_management... PASS
+
+=== Test Results ===
+Total tests: 15
+Passed: 15
+Failed: 0
+All tests passed!
+
+Running bin/test_prompt_option...
+=== Unit Tests - Prompt Option ===
+Running test_set_custom_password_prompt_api... PASS
+
+=== Test Results ===
+Total tests: 1
+Passed: 1
+Failed: 0
+All tests passed!
+
+Running bin/test_redirection_parsing...
+=== Redirection Parsing Tests ===
+Running test_contains_shell_operators... PASS
+Running test_parse_command_with_redirection... sudosh: Redirection to system configuration directory (/etc/) is not allowed for security reasons
+sudosh: Safe redirection targets: /tmp/, /var/tmp/, or your home directory
+PASS
+Running test_enhanced_parse_command... sudosh: pipe operations should be handled by pipeline parser
+sudosh: command chaining operators are not allowed for security reasons
+sudosh: command chaining operators are not allowed for security reasons
+sudosh: command substitution is not allowed for security reasons
+PASS
+Running test_tokenize_command_line... PASS
+Running test_trim_whitespace_inplace... PASS
+Running test_redirection_integration... PASS
+Running test_redirection_edge_cases... sudosh: Redirection target is not in a safe directory. Use /tmp/, /var/tmp/, or your home directory instead
+sudosh: Safe redirection targets: /tmp/, /var/tmp/, or your home directory
+sudosh: Redirection target is not in a safe directory. Use /tmp/, /var/tmp/, or your home directory instead
+sudosh: Safe redirection targets: /tmp/, /var/tmp/, or your home directory
+PASS
+Running test_pipeline_redirection_integration... PASS
+
+=== Test Results ===
+Total tests: 8
+Passed: 8
+Failed: 0
+All tests passed!
+
+Running bin/test_regression_sudo_make_install...
+=== Unit: sudo make install regression ===
+Running test_sudo_compat_runs_c_command... Testing sudo-compat with -c executes via sudosh...
+PASS
+
+=== Test Results ===
+Total tests: 1
+Passed: 1
+Failed: 0
+All tests passed!
+
+Running bin/test_rules_command...
+=== Rules Command and Enhanced Error Messages Tests ===
+Testing 'rules' built-in command...
+Sudo privileges for brmathes on phx-obs-lnxb01:
+=====================================
+
+LDAP/SSSD-Based Rules:
+    No LDAP/SSSD-based rules found
+
+Direct Sudoers Rules (from /etc/sudoers):
+    No direct sudoers rules found for user brmathes
+
+Summary:
+✗ User brmathes has no sudo privileges on phx-obs-lnxb01
+User is not in any admin groups and has no explicit sudoers rules
+
+Always Safe Commands (no privilege required):
+============================================
+These commands can always be executed without special permissions:
+
+System Information:
+  ls, pwd, whoami, id, date, uptime, w, who
+
+Text Processing:
+  grep, egrep, fgrep, sed, awk, cut, sort, uniq
+  head, tail, wc, cat, echo
+
+
+Always Blocked Commands:
+=========================
+Commands are categorized by security risk and access requirements:
+
+Sections: System Control:, Disk Operations:, Network Security:, Communication:
+
+  Privilege Escalation: su, sudo, pkexec, sudoedit
+  Shell Operations: sh, bash, zsh, csh, tcsh, ksh, fish, dash
+                    Interactive shells and shell-like interpreters
+
+Conditionally Blocked Commands (Require Sudo Privileges):
+  System Control: init, shutdown, halt, reboot, poweroff, telinit
+                  systemctl poweroff/reboot/halt/emergency/rescue
+  Disk Operations: fdisk, parted, gparted, mkfs, fsck, dd, shred, wipe
+                   mount, umount, swapon, swapoff
+  Network Security: iptables, ip6tables, ufw, firewall-cmd
+  Communication: wall, write, mesg
+
+Access Requirements:
+• Conditionally blocked commands are allowed if you have:
+  - Valid password authentication AND sudo privileges, OR
+  - Explicit sudo rules granting access to specific commands, OR
+  - ALL commands privilege (unrestricted access)
+• Always blocked commands are never permitted for security reasons
+• Shell commands redirect to secure interactive shell when appropriate
+• All command executions are logged for audit purposes
+  'rules' command recognized as built-in: PASS
+Sudo privileges for brmathes on phx-obs-lnxb01:
+=====================================
+
+LDAP/SSSD-Based Rules:
+    No LDAP/SSSD-based rules found
+
+Direct Sudoers Rules (from /etc/sudoers):
+    No direct sudoers rules found for user brmathes
+
+Summary:
+✗ User brmathes has no sudo privileges on phx-obs-lnxb01
+User is not in any admin groups and has no explicit sudoers rules
+
+Always Safe Commands (no privilege required):
+============================================
+These commands can always be executed without special permissions:
+
+System Information:
+  ls, pwd, whoami, id, date, uptime, w, who
+
+Text Processing:
+  grep, egrep, fgrep, sed, awk, cut, sort, uniq
+  head, tail, wc, cat, echo
+
+
+Always Blocked Commands:
+=========================
+Commands are categorized by security risk and access requirements:
+
+Sections: System Control:, Disk Operations:, Network Security:, Communication:
+
+  Privilege Escalation: su, sudo, pkexec, sudoedit
+  Shell Operations: sh, bash, zsh, csh, tcsh, ksh, fish, dash
+                    Interactive shells and shell-like interpreters
+
+Conditionally Blocked Commands (Require Sudo Privileges):
+  System Control: init, shutdown, halt, reboot, poweroff, telinit
+                  systemctl poweroff/reboot/halt/emergency/rescue
+  Disk Operations: fdisk, parted, gparted, mkfs, fsck, dd, shred, wipe
+                   mount, umount, swapon, swapoff
+  Network Security: iptables, ip6tables, ufw, firewall-cmd
+  Communication: wall, write, mesg
+
+Access Requirements:
+• Conditionally blocked commands are allowed if you have:
+  - Valid password authentication AND sudo privileges, OR
+  - Explicit sudo rules granting access to specific commands, OR
+  - ALL commands privilege (unrestricted access)
+• Always blocked commands are never permitted for security reasons
+• Shell commands redirect to secure interactive shell when appropriate
+• All command executions are logged for audit purposes
+  'rules' command with arguments handled: PASS
+Testing enhanced redirect error messages...
+  Enhanced redirect error message: PASS
+Testing enhanced pipe error messages...
+  Enhanced pipe error message: PASS
+Testing help command includes 'rules'...
+  'rules' command found in help: PASS
+Testing commands list includes 'rules'...
+  'rules' command found in commands list: PASS
+
+=== Test Results ===
+✅ All rules command and error message tests PASSED!
+New features are working correctly.
+
+Running bin/test_secure_editors_mandatory...
+sudosh: interactive editors are not permitted (use sudoedit instead)
+sudosh: editors like nvim/emacs/joe can execute shell commands and bypass security
+sudosh: vi/vim/nano are allowed with security restrictions
+sudosh: interactive editors are not permitted (use sudoedit instead)
+sudosh: editors like nvim/emacs/joe can execute shell commands and bypass security
+sudosh: vi/vim/nano are allowed with security restrictions
+🔒 MANDATORY SECURE EDITOR TEST
+===============================
+This test MUST PASS for every change to sudosh.
+Failure indicates a regression in secure editor functionality.
+
+=== Testing Secure Editor Identification ===
+✅ PASS: vi command identified as secure editor
+✅ PASS: vim command identified as secure editor
+✅ PASS: nano command identified as secure editor
+✅ PASS: pico command identified as secure editor
+✅ PASS: view command identified as secure editor
+✅ PASS: /usr/bin/vi identified as secure editor
+✅ PASS: /bin/nano identified as secure editor
+✅ PASS: emacs NOT identified as secure editor
+✅ PASS: joe NOT identified as secure editor
+✅ PASS: ls NOT identified as secure editor
+✅ PASS: cat NOT identified as secure editor
+
+=== Testing Secure Editors Are Not Blocked ===
+✅ PASS: vi NOT blocked by interactive editor check
+✅ PASS: vim NOT blocked by interactive editor check
+✅ PASS: nano NOT blocked by interactive editor check
+✅ PASS: pico NOT blocked by interactive editor check
+✅ PASS: view NOT blocked by interactive editor check
+✅ PASS: emacs correctly blocked by interactive editor check
+✅ PASS: joe correctly blocked by interactive editor check
+✅ PASS: mcedit correctly blocked by interactive editor check
+
+=== Testing Command Validation Allows Secure Editors ===
+✅ PASS: vi command passes validation
+✅ PASS: vim command passes validation
+✅ PASS: nano command passes validation
+✅ PASS: pico command passes validation
+✅ PASS: view command passes validation
+✅ PASS: emacs command correctly blocked
+✅ PASS: joe command correctly blocked
+
+=== Testing Secure Editor Environment Setup ===
+✅ PASS: SHELL set to /bin/false
+✅ PASS: VISUAL set to /bin/false
+✅ PASS: EDITOR set to /bin/false
+✅ PASS: VIMINIT contains secure settings
+
+=== Testing File Locking Integration ===
+✅ PASS: File locking system initializes successfully
+✅ PASS: vi detected as editing command for locking
+✅ PASS: vim detected as editing command for locking
+✅ PASS: nano detected as editing command for locking
+✅ PASS: File argument extracted from vi command
+✅ PASS: File argument extracted from vim command
+✅ PASS: File argument extracted from nano command
+
+=== Testing Complete Secure Editor Workflow ===
+✅ PASS: Complete workflow: vi identified as secure editor
+✅ PASS: Complete workflow: vi NOT blocked as interactive editor
+✅ PASS: Complete workflow: vi command passes validation
+✅ PASS: Complete workflow: vi detected for file locking
+✅ PASS: Complete workflow: file argument extracted
+✅ CRITICAL: Complete secure editor workflow passes all checks
+==================================================
+TEST RESULTS SUMMARY
+==================================================
+Total Tests: 42
+Passed: 42
+Failed: 0
+
+🎉 ALL TESTS PASSED - Secure editors work correctly!
+✅ vi, vim, nano, pico can be executed securely
+✅ Shell escapes are prevented by environment restrictions
+✅ File locking integration works properly
+✅ No regressions detected
+
+Running bin/test_security_auth_bypass...
+=== Security Tests - Authentication Bypass ===
+Testing: NOPASSWD privilege bypass... SECURE (attack blocked)
+Testing: Sudo group membership bypass... SECURE (attack blocked)
+Testing: PAM authentication bypass... DEBUG: Username 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' too long (355 >= 256)
+SECURE (attack blocked)
+Testing: Session hijacking attack... SECURE (attack blocked)
+Testing: Credential stuffing attack... SECURE (attack blocked)
+Testing: Authentication privilege escalation... SECURE (attack blocked)
+Testing: Timing attack on authentication... DEBUG: Username 'nonexistent_user_98765' failed existence check
+SECURE (attack blocked)
+Testing: Authentication state manipulation... DEBUG: Username 'invalid_user' failed existence check
+DEBUG: Username 'invalid_user' failed existence check
+DEBUG: Username 'invalid_user' failed existence check
+DEBUG: Username 'invalid_user' failed existence check
+DEBUG: Username 'invalid_user' failed existence check
+SECURE (attack blocked)
+Testing: Sudoers file manipulation... SECURE (attack blocked)
+Testing: SSSD integration bypass... SECURE (attack blocked)
+Testing logging for: Authentication logging bypass... SECURE (attack logged)
+
+=== Authentication Bypass Test Results ===
+Total tests: 11
+Secure (attacks blocked): 11
+Vulnerable (attacks succeeded): 0
+✅ All authentication bypass attacks were blocked!
+
+Running bin/test_security_command_injection...
+=== Security Tests - Command Injection ===
+Testing: Shell metacharacter injection (;, |, &&, ||, `, $())... sudosh: command chaining operators are not allowed for security reasons
+SECURE (attack blocked)
+Testing: Null byte injection bypass... SECURE (attack blocked)
+Testing: Buffer overflow via long command... SECURE (attack blocked)
+Testing: Path traversal injection (../, ..\)... SECURE (attack blocked)
+Testing: Environment variable injection... sudosh: command chaining operators are not allowed for security reasons
+SECURE (attack blocked)
+Testing: I/O redirection injection (>, >>, <, |)... sudosh: Redirection to system configuration directory (/etc/) is not allowed for security reasons
+sudosh: Safe redirection targets: /tmp/, /var/tmp/, or your home directory
+sudosh: Redirection to system configuration directory (/etc/) is not allowed for security reasons
+sudosh: Safe redirection targets: /tmp/, /var/tmp/, or your home directory
+sudosh: Redirection to device directory (/dev/) is not allowed for security reasons
+sudosh: Safe redirection targets: /tmp/, /var/tmp/, or your home directory
+SECURE (attack blocked)
+Testing: Special character injection... sudosh: command 'whoami' is not allowed as a pipeline sink
+sudosh: insecure pipeline blocked
+sudosh: only whitelisted commands are allowed in pipelines
+sudosh: all commands in pipeline must be individually authorized
+SECURE (attack blocked)
+Testing: Unicode and encoding injection... SECURE (attack blocked)
+Testing: Format string injection... SECURE (attack blocked)
+
+=== Command Injection Test Results ===
+Total tests: 9
+Secure (attacks blocked): 9
+Vulnerable (attacks succeeded): 0
+✅ All command injection attacks were blocked!
+
+Running bin/test_security_comprehensive...
+=== Comprehensive Security Assessment ===
+Running all security test suites...
+
+1. Command Injection Tests...
+2. Privilege Escalation Tests...
+3. Authentication Bypass Tests...
+4. Logging Evasion Tests...
+5. Race Condition Tests...
+
+=== Generating Security Report ===
+📋 Security report generated: /tmp/sudosh_security_report.md
+
+=== Final Security Assessment Results ===
+Total Security Tests: 8
+Tests Passed: 4
+Tests Failed: 0
+Race Condition Issues: 4 (may be false positives)
+
+✅ SECURITY ASSESSMENT PASSED
+Core security tests passed. Race condition warnings noted.
+
+Running bin/test_security_enhanced_fixes...
+sudosh: Redirection to system configuration directory (/etc/) is not allowed for security reasons
+sudosh: Safe redirection targets: /tmp/, /var/tmp/, or your home directory
+sudosh: Redirection to device directory (/dev/) is not allowed for security reasons
+sudosh: Safe redirection targets: /tmp/, /var/tmp/, or your home directory
+=== Enhanced Security Fixes Tests ===
+Testing: Enhanced command injection protection... SECURE (attack blocked)
+Testing: Enhanced authentication validation... DEBUG: Username 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' too long (299 >= 256)
+SECURE (attack blocked)
+Testing: Authentication cache race protection... === Enhanced Security Fixes Tests ===
+Testing: Enhanced command injection protection... SECURE (attack blocked)
+Testing: Enhanced authentication validation... DEBUG: Username 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' too long (299 >= 256)
+SECURE (attack blocked)
+Testing: Authentication cache race protection... SECURE (race condition prevented)
+Testing: PATH hijacking protection... SECURE (PATH sanitized)
+Testing: File descriptor sanitization... SECURE (FDs properly sanitized)
+Testing: Environment variable sanitization... SECURE (dangerous env vars removed)
+
+=== Enhanced Security Fixes Test Results ===
+Total tests: 6
+Secure (attacks blocked): 6
+Vulnerable (attacks succeeded): 0
+✅ All enhanced security fixes are working!
+
+Running bin/test_security_enhancements...
+=== Security Enhancement Regression Tests ===
+Running test_nss_command_injection_prevention... PASS
+Running test_path_traversal_prevention... PASS
+Running test_shell_escape_prevention... sudosh: sed command with shell escape patterns blocked
+sudosh: sed command with shell escape patterns blocked
+sudosh: sed command with shell escape patterns blocked
+sudosh: awk command with system() calls blocked
+sudosh: awk command with system() calls blocked
+sudosh: awk command with system() calls blocked
+sudosh: grep with execution flags blocked
+PASS
+Running test_privilege_escalation_prevention... sudosh: command 'sudo' is not whitelisted for pipeline use
+sudosh: command 'su' is not whitelisted for pipeline use
+sudosh: command 'passwd' is not whitelisted for pipeline use
+sudosh: command 'sh' is not whitelisted for pipeline use
+sudosh: command 'kill' is not whitelisted for pipeline use
+PASS
+Running test_buffer_overflow_protection... PASS
+Running test_null_byte_injection_prevention... PASS
+Running test_symlink_attack_prevention...   (symlink safety: allowed) PASS
+Running test_race_condition_prevention... PASS
+Running test_memory_leak_prevention... PASS
+Running test_input_validation_edge_cases... PASS
+Running test_backward_compatibility... sudosh: command 'rm -rf /' requires sudo privileges or authentication
+sudosh: dangerous recursive operation is not permitted
+sudosh: 'su' is not permitted; use the sudosh interactive shell instead
+PASS
+
+=== Test Results ===
+Total tests: 11
+Passed: 11
+Failed: 0
+All tests passed!
+
+Running bin/test_security_env...
+=== Security Environment Tests ===
+Running test_sanitize_environment_basic... PASS
+
+=== Test Results ===
+Total tests: 1
+Passed: 1
+Failed: 0
+All tests passed!
+
+Running bin/test_security_logging_evasion...
+=== Security Tests - Logging and Monitoring Evasion ===
+Testing logging for: Command execution logging evasion... SECURE (attack logged)
+Testing: Log file manipulation... sh: line 1: /var/log/syslog: Permission denied
+SECURE (attack blocked)
+Testing logging for: Syslog bypass attempt... SECURE (attack logged)
+Testing logging for: Session logging evasion... SECURE (attack logged)
+Testing logging for: Security violation logging evasion... SECURE (attack logged)
+Testing logging for: Log rotation interference... SECURE (attack logged)
+Testing logging for: Log timestamp manipulation... SECURE (attack logged)
+Testing logging for: Remote logging bypass... SECURE (attack logged)
+Testing logging for: Log level manipulation... SECURE (attack logged)
+Testing logging for: Audit trail manipulation... sh: line 1: /var/log/audit/audit.log: Permission denied
+SECURE (attack logged)
+Testing logging for: Concurrent logging interference... SECURE (attack logged)
+Testing: Log injection attack... SECURE (attack blocked)
+
+=== Logging Evasion Test Results ===
+Total tests: 12
+Secure (logging intact): 12
+Vulnerable (logging bypassed): 0
+✅ All logging evasion attacks were blocked!
+
+Running bin/test_security_privilege_escalation...
+=== Security Tests - Privilege Escalation ===
+Testing: PATH hijacking attack... SECURE (attack blocked)
+Testing: LD_PRELOAD privilege escalation... SECURE (attack blocked)
+Testing: Environment variable manipulation... SECURE (attack blocked)
+Testing: Setuid binary exploitation... SECURE (attack blocked)
+Testing: Privilege dropping bypass... SECURE (attack blocked)
+Testing: File descriptor manipulation... SECURE (attack blocked)
+Testing: Umask manipulation... SECURE (attack blocked)
+Testing: Signal handler manipulation... SECURE (attack blocked)
+Testing: Resource limit bypass... SECURE (attack blocked)
+
+=== Privilege Escalation Test Results ===
+Total tests: 9
+Secure (attacks blocked): 9
+Vulnerable (attacks succeeded): 0
+✅ All privilege escalation attacks were blocked!
+
+Running bin/test_security_race_conditions...
+=== Security Tests - Race Conditions and Timing Attacks ===
+Testing: Privilege checking race condition... SECURE (attack blocked)
+Testing: Authentication race condition... SECURE (attack blocked)
+Testing: TOCTOU (Time of Check Time of Use) vulnerability... VULNERABLE (attack succeeded)
+Testing: Signal handler race condition... SECURE (attack blocked)
+Testing: File descriptor race condition... VULNERABLE (attack succeeded)
+Testing: Memory corruption race condition... SECURE (attack blocked)
+Testing: Timing attack on privilege checking... VULNERABLE (attack succeeded)
+Testing: Concurrent session management race... VULNERABLE (attack succeeded)
+
+=== Race Condition Test Results ===
+Total tests: 8
+Secure (race conditions prevented): 4
+Vulnerable (race conditions detected): 4
+⚠️  4 potential race conditions detected (may be false positives in test environment)
+   These are theoretical vulnerabilities that may not be exploitable in practice.
+   Details logged to /tmp/sudosh_vulnerabilities.log for review.
+
+Running bin/test_shell_enhancements...
+=== Shell Enhancements Tests ===
+Running test_tab_completion... PASS
+Running test_ctrl_d_handling... root@phx-obs-lnxb01:/home/ds.iotcc.cisco.com/brmathes/git/sudosh## PASS
+Running test_signal_handling... PASS
+Running test_command_execution_signals... PASS
+Running test_directory_structure... PASS
+Running test_insert_completion... PASS
+Running test_which_command... PASS
+
+=== Test Results ===
+Total tests: 7
+Passed: 7
+Failed: 0
+All tests passed!
+
+Running bin/test_shell_env_vars...
+=== Shell Env Management Unit Tests ===
+Running test_validate_env_var_name... PASS
+Running test_export_safe_var... export LESS=more
+PASS
+Running test_export_dangerous_var_blocked... export: 'PATH' is not a safe environment variable
+PASS
+Running test_unset_safe_var... PASS
+Running test_unset_dangerous_var_blocked... unset: 'PATH' is not a safe environment variable
+PASS
+
+=== Test Results ===
+Total tests: 5
+Passed: 5
+Failed: 0
+All tests passed!
+
+Running bin/test_shell_redirection...
+=== Shell Redirection Tests ===
+Running test_shell_command_detection... Testing shell command detection...
+✓ Shell command detection tests passed
+PASS
+Running test_shell_redirection_handler... sudosh: redirecting 'bash' to secure interactive shell
+sudosh: provides enhanced logging and security controls
+sudosh: see 'man sudosh' for details, 'help' for commands
+sudosh: redirecting 'sh' to secure interactive shell
+sudosh: provides enhanced logging and security controls
+sudosh: see 'man sudosh' for details, 'help' for commands
+sudosh: redirecting 'zsh' to secure interactive shell
+sudosh: provides enhanced logging and security controls
+sudosh: see 'man sudosh' for details, 'help' for commands
+Testing shell redirection handler...
+✓ Shell redirection handler tests passed
+PASS
+Running test_sudo_compat_mode_behavior... sudosh: redirecting 'bash' to secure interactive shell
+sudosh: provides enhanced logging and security controls
+sudosh: see 'man sudosh' for details, 'help' for commands
+Testing sudo compatibility mode behavior...
+✓ Sudo compatibility mode behavior tests passed
+PASS
+Running test_redirection_message_content... Testing redirection message content...
+Testing redirection message content...
+✓ Redirection message content tests passed
+PASS
+Running test_edge_cases... sudosh: redirecting 'bash' to secure interactive shell
+sudosh: provides enhanced logging and security controls
+sudosh: see 'man sudosh' for details, 'help' for commands
+Testing edge cases and error handling...
+✓ Edge cases and error handling tests passed
+PASS
+Running test_validation_integration... sudosh: redirecting 'bash' to secure interactive shell
+sudosh: provides enhanced logging and security controls
+sudosh: see 'man sudosh' for details, 'help' for commands
+sudosh: redirecting 'sh' to secure interactive shell
+sudosh: provides enhanced logging and security controls
+sudosh: see 'man sudosh' for details, 'help' for commands
+sudosh: redirecting 'zsh' to secure interactive shell
+sudosh: provides enhanced logging and security controls
+sudosh: see 'man sudosh' for details, 'help' for commands
+sudosh: redirecting 'bash' to secure interactive shell
+sudosh: provides enhanced logging and security controls
+sudosh: see 'man sudosh' for details, 'help' for commands
+sudosh: redirecting 'bash' to secure interactive shell
+sudosh: provides enhanced logging and security controls
+sudosh: see 'man sudosh' for details, 'help' for commands
+Testing integration with command validation...
+✓ Validation integration tests passed
+PASS
+
+=== Shell Redirection Test Summary ===
+Total tests: 6
+Passed: 6
+Failed: 0
+
+Running bin/test_special_probe...
+sudosh: command 'whoami' is not allowed as a pipeline sink
+sudosh: insecure pipeline blocked
+sudosh: only whitelisted commands are allowed in pipelines
+sudosh: all commands in pipeline must be individually authorized
+0 ls && whoami
+0 ls || whoami
+0 ls & whoami
+0 ls; whoami
+0 ls | whoami
+0 ls `whoami`
+0 ls $(whoami)
+0 ls ${USER}
+0 ls $USER
+0 ls 'test'
+0 ls "test"
+0 ls \test
+
+Running bin/test_sssd_effective_options_testmode...
+sssd_effective_options testmode: PASS
+
+Running bin/test_sssd_effective_options_union...
+sssd_effective_options union: PASS
+
+Running bin/test_sssd_env_check_validation...
+sssd_env_check_validation: PASS
+
+Running bin/test_sssd_env_keep_whitelist...
+sssd_env_keep_whitelist: PASS
+
+Running bin/test_sssd_env_semantics...
+sssd_env_semantics: PASS
+
+Running bin/test_sssd_eval...
+sssd_eval test suite passed (non-deterministic allowances skipped).
+
+Running bin/test_sssd_eval_compound_tlv...
+Compound TLV payload parsed with 2 commands.
+
+Running bin/test_sssd_eval_wildcards...
+sssd_eval wildcard tests passed.
+
+Running bin/test_sssd_mock_payload...
+Mock payload parsed with 2 command TLVs
+
+Running bin/test_sssd_payload_parser...
+OK: parsed 1 rule(s)
+
+Running bin/test_sudo_compat...
+=== Integration Tests - Sudo Compat Mode ===
+Running test_sudo_compat_help_banner... PASS
+Running test_sudo_compat_version_flag... PASS
+Running test_sudo_compat_non_interactive_v... PASS
+Running test_sudo_compat_unsupported_flags... PASS
+
+=== Test Results ===
+Total tests: 4
+Passed: 4
+Failed: 0
+All tests passed!
+
+Running bin/test_sudo_make_install...
+=== Regression: sudo make install via sudosh ===
+Running test_sudo_compat_executes_commands... Testing sudo-compat executes commands without fallback...
+PASS
+
+=== Test Results ===
+Total tests: 1
+Passed: 1
+Failed: 0
+All tests passed!
+
+Running bin/test_sudoers_parsing...
+=== Sudoers Parsing Unit Tests ===
+Running test_parse_sudoers_simple_rule... PASS
+
+=== Test Results ===
+Total tests: 1
+Passed: 1
+Failed: 0
+All tests passed!
+
+Running bin/test_text_processing_redirection...
+=== Text Processing and Redirection Tests ===
+Running test_is_text_processing_command... PASS
+Running test_validate_text_processing_safe... PASS
+Running test_validate_text_processing_dangerous_sed... sudosh: sed command with shell escape patterns blocked
+sudosh: sed command with shell escape patterns blocked
+sudosh: sed command with shell escape patterns blocked
+sudosh: sed command with shell escape patterns blocked
+sudosh: sed command with shell escape patterns blocked
+PASS
+Running test_validate_text_processing_dangerous_awk... sudosh: awk command with system() calls blocked
+sudosh: awk command with system() calls blocked
+sudosh: awk command with system() calls blocked
+PASS
+Running test_validate_text_processing_dangerous_grep... sudosh: grep with execution flags blocked
+sudosh: grep with dangerous include pattern blocked
+sudosh: grep with dangerous include pattern blocked
+PASS
+Running test_validate_text_processing_command_injection... sudosh: command substitution in text processing command blocked
+sudosh: command substitution in text processing command blocked
+sudosh: shell metacharacters in text processing command blocked
+sudosh: shell metacharacters in text processing command blocked
+sudosh: shell metacharacters in text processing command blocked
+sudosh: shell metacharacters in text processing command blocked
+PASS
+Running test_is_safe_redirection_target... PASS
+Running test_validate_safe_redirection... PASS
+Running test_text_processing_in_safe_commands... PASS
+Running test_text_processing_dangerous_blocked... sudosh: sed command with shell escape patterns blocked
+sudosh: awk command with system() calls blocked
+sudosh: grep with execution flags blocked
+PASS
+Running test_text_processing_with_redirection... PASS
+Running test_redirection_edge_cases... PASS
+
+=== Test Results ===
+Total tests: 12
+Passed: 12
+Failed: 0
+All tests passed!
+
+Running bin/test_unit_auth...
+=== Unit Tests - Authentication ===
+Running test_check_sudo_privileges...   (User brmathes does not have sudo privileges)   (Root user does not have sudo privileges) PASS
+Running test_authenticate_user_mock...   (Skipping - PAM authentication active) PASS
+Running test_get_password...   (Skipping interactive password test - requires terminal) PASS
+Running test_group_membership...   (wheel group found)   (sudo group not found) PASS
+Running test_authentication_logging...   (Logging functions called without errors) PASS
+Running test_session_logging...   (Session logging functions called without errors) PASS
+Running test_error_logging...   (Error logging functions called without errors) PASS
+Running test_command_logging...   (Command logging functions called without errors) PASS
+
+=== Test Results ===
+Total tests: 8
+Passed: 8
+Failed: 0
+All tests passed!
+
+Running bin/test_unit_security...
+=== Unit Tests - Security ===
+Running test_sanitize_environment... PASS
+Running test_check_privileges...   (Current process has root privileges) PASS
+Running test_setup_signal_handlers...   (Signal handlers set up without errors) PASS
+Running test_set_current_username...   (Username setting functions called without errors) PASS
+Running test_validate_command_security... sudosh: shell commands are not permitted
+sudosh: shell commands are not permitted
+sudosh: you should only ssh as your user, not root
+sudosh: you should only ssh as your user, not root
+sudosh: you should only ssh as your user, not root
+sudosh: you should only ssh as your user, not root
+sudosh: interactive editors are not permitted (use sudoedit instead)
+sudosh: editors like nvim/emacs/joe can execute shell commands and bypass security
+sudosh: vi/vim/nano are allowed with security restrictions
+sudosh: interactive editors are not permitted (use sudoedit instead)
+sudosh: editors like nvim/emacs/joe can execute shell commands and bypass security
+sudosh: vi/vim/nano are allowed with security restrictions
+  (null byte test result: 1) PASS
+Running test_dangerous_command_detection... PASS
+Running test_ssh_command_detection... PASS
+Running test_interactive_editor_detection... PASS
+Running test_safe_command_detection... PASS
+Running test_signal_handling... PASS
+Running test_secure_terminal...   (Terminal security measures applied) PASS
+Running test_init_security...   (Security initialization components tested) PASS
+Running test_is_interrupted...   (Interrupt status: not interrupted) PASS
+Running test_cleanup_security...   (Security cleanup completed without errors) PASS
+Running test_drop_privileges...   (Privileges dropped successfully) PASS
+
+=== Test Results ===
+Total tests: 15
+Passed: 15
+Failed: 0
+All tests passed!
+
+Running bin/test_unit_utils...
+=== Unit Tests - Utilities ===
+Running test_trim_whitespace... PASS
+Running test_is_empty_command... PASS
+Running test_is_whitespace_only... PASS
+Running test_safe_strdup... PASS
+Running test_get_current_username... PASS
+Running test_user_info... PASS
+Running test_parse_command... PASS
+Running test_validate_command...   (null byte test result: 1) PASS
+
+=== Test Results ===
+Total tests: 8
+Passed: 8
+Failed: 0
+All tests passed!
+
+Running bin/test_v2_0_features...
+=== Sudosh v2.0 Comprehensive Regression Tests ===
+Running test_shell_redirection_feature... sudosh: redirecting 'bash' to secure interactive shell
+sudosh: provides enhanced logging and security controls
+sudosh: see 'man sudosh' for details, 'help' for commands
+sudosh: redirecting 'sh' to secure interactive shell
+sudosh: provides enhanced logging and security controls
+sudosh: see 'man sudosh' for details, 'help' for commands
+sudosh: redirecting 'zsh' to secure interactive shell
+sudosh: provides enhanced logging and security controls
+sudosh: see 'man sudosh' for details, 'help' for commands
+sudosh: redirecting 'bash' to secure interactive shell
+sudosh: provides enhanced logging and security controls
+sudosh: see 'man sudosh' for details, 'help' for commands
+sudosh: shell commands are not permitted
+sudosh: shell commands are not permitted
+Testing shell redirection feature...
+✓ Shell redirection feature tests passed
+PASS
+Running test_enhanced_rules_command... Testing enhanced rules command...
+✓ Enhanced rules command tests passed
+PASS
+Running test_awk_sed_support... sudosh: awk command with system() calls blocked
+sudosh: sed command with shell escape patterns blocked
+Testing awk/sed support...
+✓ Awk/sed support tests passed
+PASS
+Running test_pipeline_security... sudosh: command 'rm' is not whitelisted for pipeline use
+sudosh: command 'bash' is not whitelisted for pipeline use
+Testing pipeline security enhancements...
+✓ Pipeline security tests passed
+PASS
+Running test_command_categorization... Testing command categorization...
+✓ Command categorization tests passed
+PASS
+Running test_redirection_security... Testing redirection security...
+✓ Redirection security tests passed
+PASS
+Running test_backward_compatibility... sudosh: command 'rm -rf /' requires sudo privileges or authentication
+sudosh: command 'dd if=/dev/zero of=/dev/sda' requires sudo privileges or authentication
+sudosh: command 'iptables -F' requires sudo privileges or authentication
+sudosh: shell commands are not permitted
+sudosh: shell commands are not permitted
+Testing backward compatibility...
+✓ Backward compatibility tests passed
+PASS
+Running test_error_handling... Testing error handling and edge cases...
+✓ Error handling tests passed
+PASS
+Running test_feature_integration... sudosh: redirecting 'bash' to secure interactive shell
+sudosh: provides enhanced logging and security controls
+sudosh: see 'man sudosh' for details, 'help' for commands
+sudosh: Redirection to system configuration directory (/etc/) is not allowed for security reasons
+sudosh: Safe redirection targets: /tmp/, /var/tmp/, or your home directory
+sudosh: insecure pipeline blocked
+sudosh: only whitelisted commands are allowed in pipelines
+sudosh: all commands in pipeline must be individually authorized
+Testing feature integration...
+✓ Feature integration tests passed
+PASS
+
+=== v2.0 Regression Test Summary ===
+Total tests: 9
+Passed: 9
+Failed: 0
+
+🎉 All v2.0 features working correctly - ready for release!
+

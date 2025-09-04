@@ -270,8 +270,14 @@ void apply_env_reset_and_policy_from_sssd(const struct sssd_effective_opts *sopt
         setenv("PATH", "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", 1);
         setenv("TERM", "xterm-256color", 1);
 
-        /* Restore whitelisted vars */
+        /* Restore whitelisted vars, but never override baseline TERM normalization */
         for (size_t i = 0; i < kept_n; i++) {
+            if (kept[i].name && strcmp(kept[i].name, "TERM") == 0) {
+                /* Enforce normalized TERM even if env_keep includes it */
+                if (kept[i].name) free((void*)kept[i].name);
+                if (kept[i].value) free(kept[i].value);
+                continue;
+            }
             if (kept[i].name && kept[i].value) setenv(kept[i].name, kept[i].value, 1);
             if (kept[i].name) free((void*)kept[i].name);
             if (kept[i].value) free(kept[i].value);
