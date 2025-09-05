@@ -146,10 +146,16 @@ jobs:
             if [ "$PM" = dnf ]; then
               dnf -y install gcc make pam-devel which || (dnf -y install gcc-toolset-12-gcc gcc-toolset-12-gcc-c++ make pam-devel which || true)
             else
-              # CentOS 7 mirrors are EOL; switch to vault and install minimal toolchain
-              echo '--- BEFORE repo file head ---' && head -n 20 /etc/yum.repos.d/CentOS-Base.repo || true
-              sed -i 's|mirrorlist=http://mirrorlist.centos.org.*|#mirrorlist disabled|g; s|#\?baseurl=http://mirror.centos.org/centos/|baseurl=http://vault.centos.org/7.9.2009/os/$basearch/|g' /etc/yum.repos.d/CentOS-*.repo || true
-              echo '--- AFTER repo file head ---' && head -n 20 /etc/yum.repos.d/CentOS-Base.repo || true
+              # CentOS 7 mirrors are EOL; replace Base.repo with exact vault path and disable fastestmirror
+              echo "--- Writing CentOS-Base.repo for 7.9.2009 ---"
+              printf "%s\n" "[base]" "name=CentOS-7.9 - Base" "baseurl=http://vault.centos.org/7.9.2009/os/\$basearch/" "gpgcheck=1" "gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-CentOS-7" > /etc/yum.repos.d/CentOS-Base.repo
+              printf "%s\n" "[updates]" "name=CentOS-7.9 - Updates" "baseurl=http://vault.centos.org/7.9.2009/updates/\$basearch/" "gpgcheck=1" "gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-CentOS-7" >> /etc/yum.repos.d/CentOS-Base.repo
+              printf "%s\n" "[extras]" "name=CentOS-7.9 - Extras" "baseurl=http://vault.centos.org/7.9.2009/extras/\$basearch/" "gpgcheck=1" "gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-CentOS-7" >> /etc/yum.repos.d/CentOS-Base.repo
+              echo "--- AFTER repo file head ---" && head -n 20 /etc/yum.repos.d/CentOS-Base.repo || true
+              if [ -f /etc/yum/pluginconf.d/fastestmirror.conf ]; then sed -i "s/^enabled=.*/enabled=0/" /etc/yum/pluginconf.d/fastestmirror.conf || true; fi
+              if grep -q '^fastestmirror' /etc/yum.conf 2>/dev/null; then sed -i "s/^fastestmirror=.*/fastestmirror=0/" /etc/yum.conf || true; else echo "fastestmirror=0" >> /etc/yum.conf; fi
+              yum clean all || true
+              yum -y makecache || true
               yum -y install gcc make pam-devel which || true
             fi
             make clean
