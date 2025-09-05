@@ -117,6 +117,14 @@ extern int sudo_compat_mode_flag;     /* argv[0]=="sudo" */
 
 /* Ansible detection constants */
 #define MAX_PROCESS_NAME_LENGTH 256
+
+/* Portable clearenv wrapper (implemented in security.c). On Linux it maps to clearenv. */
+#if defined(__APPLE__)
+void sudosh_clearenv(void);
+#else
+#define sudosh_clearenv clearenv
+#endif
+
 #define MAX_PROCESS_TREE_DEPTH 10
 #define ANSIBLE_ENV_VAR_COUNT 20
 #define MAX_ALIASES 256
@@ -198,13 +206,6 @@ typedef enum {
 
 /* Structure to hold command information */
 struct command_info {
-
-/* Portable clearenv wrapper (implemented in security.c). On Linux it maps to clearenv. */
-#if defined(__APPLE__)
-void sudosh_clearenv(void);
-#else
-#define sudosh_clearenv clearenv
-#endif
 
     char *command;
     char **argv;
