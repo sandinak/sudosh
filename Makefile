@@ -6,7 +6,7 @@
 # logging, security protections, and audit capabilities.
 
 # Compiler and flags
-CC = gcc
+CC ?= gcc
 CFLAGS = -Wall -Wextra -std=c99 -O2
 
 # Detect clang vs gcc for coverage handling
@@ -36,7 +36,7 @@ BINDIR_INSTALL = $(PREFIX)/bin
 MANDIR = $(PREFIX)/share/man/man1
 # Build-time version (override with: make VERSION=x.y.z)
 # Fallback defaults to latest release when no tags are present
-VERSION ?= 2.1.2
+VERSION ?= 2.1.3
 CFLAGS += -DSUDOSH_VERSION=\"$(VERSION)\"
 # Provide build-info via environment variables passed by CI or set here
 export SUDOSH_BUILD_GIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
@@ -56,8 +56,11 @@ else
 SYSTEM_SUDO := sudo
 endif
 
-# Check for PAM availability
-PAM_AVAILABLE := $(shell echo '\#include <security/pam_appl.h>' | $(CC) -E - >/dev/null 2>&1 && echo yes || echo no)
+# Check for PAM availability (robust across CentOS 7, AlmaLinux 8, etc.)
+# Prefer a compile+link probe on Linux to ensure both headers and libpam are available.
+# Use a compile+link probe everywhere to avoid header-only false positives
+PAM_AVAILABLE := $(shell printf '\#include <security/pam_appl.h>\nint main(void){return 0;}\n' | $(CC) -x c - -o /dev/null -lpam >/dev/null 2>&1 && echo yes || echo no)
+PAM_MISC_AVAILABLE := $(shell printf '\#include <security/pam_misc.h>\nint main(void){return 0;}\n' | $(CC) -x c - -o /dev/null -lpam_misc >/dev/null 2>&1 && echo yes || echo no)
 
 # Enable test mode for objects compiled from tests/* to expose test helpers
 TEST_CFLAGS = $(CFLAGS) -DSUDOSH_TEST_MODE=1
@@ -66,7 +69,10 @@ ifeq ($(UNAME_S),Linux)
     CFLAGS += -D_GNU_SOURCE
     LDFLAGS += -ldl
     ifeq ($(PAM_AVAILABLE),yes)
-        LDFLAGS += -lpam -lpam_misc
+        LDFLAGS += -lpam
+        ifeq ($(PAM_MISC_AVAILABLE),yes)
+            LDFLAGS += -lpam_misc
+        endif
     else
         CFLAGS += -DMOCK_AUTH
         # leave LDFLAGS as-is to preserve sanitizer/coverage flags
@@ -237,8 +243,8 @@ $(BINDIR)/test_%: $(OBJDIR)/$(TESTDIR)/regression/test_%.o $(LIB_OBJECTS) $(TEST
 $(BINDIR)/test_security_race_conditions: $(OBJDIR)/$(TESTDIR)/security/test_security_race_conditions.o $(LIB_OBJECTS) $(TEST_SUPPORT_OBJECTS) | $(BINDIR)
 	$(CC) $^ -o $@ $(LDFLAGS) -lpthread
 
-# Build all tests (also ensure sudosh binary exists for script-based tests)
-tests: $(TARGET) $(LIB_OBJECTS) | $(OBJDIR)/$(TESTDIR)
+# Build all tests (also ensure sudosh binary and path-validator exist for script-based and integration tests)
+tests: $(TARGET) $(LIB_OBJECTS) $(BINDIR)/path-validator | $(OBJDIR)/$(TESTDIR)
 tests: $(TEST_TARGETS)
 
 # Run all tests
@@ -587,6 +593,16 @@ help:
 	@echo "  rebuild                  - Clean and rebuild"
 	@echo "  debug                    - Build with debug symbols"
 	@echo "  coverage                 - Build with coverage support"
+
+# Debug target to print PAM detection results
+.PHONY: print-pam-detection
+print-pam-detection:
+	@echo "UNAME_S=$(UNAME_S)"
+	@echo "CC=$(CC)"
+	@echo "PAM_AVAILABLE=$(PAM_AVAILABLE)"
+	@echo "PAM_MISC_AVAILABLE=$(PAM_MISC_AVAILABLE)"
+	@echo "LDFLAGS=$(LDFLAGS)"
+
 	@echo "  coverage-report          - Generate coverage report"
 	@echo "  static-analysis          - Run static code analysis"
 	@echo "  rpm                      - Build RPM package for DNF-based systems"

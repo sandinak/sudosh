@@ -38,13 +38,23 @@ LIBS=""
 _detect_pam_and_libs() {
     local os
     os=$(uname -s)
-    if echo '#include <security/pam_appl.h>' | "$CC" -E - >/dev/null 2>&1; then
+    local have_pam=no
+    local have_pam_misc=no
+    # Use compile+link probes to avoid header-only false positives
+    if printf '#include <security/pam_appl.h>\nint main(void){return 0;}\n' | "$CC" -x c - -o /dev/null -lpam >/dev/null 2>&1; then
+        have_pam=yes
+    fi
+    if printf '#include <security/pam_misc.h>\nint main(void){return 0;}\n' | "$CC" -x c - -o /dev/null -lpam_misc >/dev/null 2>&1; then
+        have_pam_misc=yes
+    fi
+    if [[ "$have_pam" == "yes" ]]; then
+        LIBS="-lpam"
+        if [[ "$os" == "Linux" && "$have_pam_misc" == "yes" ]]; then
+            LIBS+=" -lpam_misc"
+        fi
+        # Linux needs -ldl for some dlopen/dlsym usage
         if [[ "$os" == "Linux" ]]; then
-            LIBS="-lpam -lpam_misc"
-        elif [[ "$os" == "Darwin" ]]; then
-            LIBS="-lpam"
-        else
-            LIBS="-lpam"
+            LIBS+=" -ldl"
         fi
     else
         CFLAGS+=" -DMOCK_AUTH"

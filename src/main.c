@@ -94,13 +94,25 @@ static int execute_single_command(const char *command_str, const char *target_us
         effective_user = target_user ? target_user : "root";
     }
 
-    /* Check if user has NOPASSWD privileges, considering command danger and environment */
-    int has_nopasswd = check_nopasswd_privileges_with_command(username, command_str);
+    /* Check if user has NOPASSWD privileges.
+     * Prefer a fast global NOPASSWD path first (matches sudo -v behavior),
+     * then fall back to command-aware checks.
+     */
+    int has_nopasswd = 0;
+    if (check_global_nopasswd_privileges_enhanced(username) || check_sssd_global_nopasswd(username)) {
+        has_nopasswd = 1;
+    } else {
+        has_nopasswd = check_nopasswd_privileges_with_command(username, command_str);
+    }
+    /* If already running setuid-root (euid==0), skip authentication entirely (sudo behavior) */
+    if (geteuid() == 0) {
+        has_nopasswd = 1;
+    }
     /* In automated test mode, bypass interactive authentication to allow tests to run */
     if (test_mode) {
         has_nopasswd = 1;
     }
-    diag_logf("-c mode nopasswd=%d (test_mode=%d)", has_nopasswd, test_mode);
+    diag_logf("-c mode nopasswd=%d (test_mode=%d euid=%d)", has_nopasswd, test_mode, (int)geteuid());
 
     if (!has_nopasswd) {
         /* Authenticate user - authenticate as current user, but may execute as effective_user */
@@ -664,7 +676,17 @@ int main(int argc, char *argv[]) {
             /* sudo-compat: -v = validate/update timestamp (no command execution) */
             char *username = get_current_username();
             if (username) {
-                if (check_auth_cache(username)) {
+                /* If user has global NOPASSWD (SSSD/sudoers), skip prompting */
+                int has_global_nopw = 0;
+                if (check_global_nopasswd_privileges_enhanced(username)) {
+                    has_global_nopw = 1;
+                } else if (check_sssd_global_nopasswd(username)) {
+                    has_global_nopw = 1;
+                }
+                if (has_global_nopw) {
+                    update_auth_cache(username);
+                    if (verbose_mode) printf("sudosh: NOPASSWD detected, refreshed auth cache for %s\n", username);
+                } else if (check_auth_cache(username)) {
                     update_auth_cache(username);
                     if (verbose_mode) printf("sudosh: refreshed authentication cache for %s\n", username);
                 } else {

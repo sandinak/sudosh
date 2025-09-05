@@ -77,6 +77,9 @@ jobs:
           brew install cppcheck || true
       - name: Build with WERROR${{ matrix.sanitize && format(' + SANITIZE={0}', matrix.sanitize) || '' }}
         run: |
+          echo "==> $(uname -s) $(uname -r) CC=$CC"
+          echo "==> Probing PAM availability..."
+          make -n print-pam-detection 2>/dev/null || true
           make clean
           if [ -n "${{ matrix.sanitize }}" ]; then
             make tests WERROR=1 SANITIZE=${{ matrix.sanitize }}
@@ -115,3 +118,44 @@ jobs:
             coverage.xml
             gcovr*.txt
 
+
+
+  centos:
+    name: CentOS/Alma • ${{ matrix.container }}
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - container: almalinux:8.9
+            pm: dnf
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build inside container
+        run: |
+          set -euxo pipefail
+          IMAGE=${{ matrix.container }}
+          PM=${{ matrix.pm }}
+          docker run --rm -e PM="${{ matrix.pm }}" -v "$PWD":/ws -w /ws "$IMAGE" sh -euxc '
+            if ! command -v "$PM" >/dev/null 2>&1; then PM=yum; fi
+            if [ "$PM" = dnf ]; then dnf -y update || true; else yum -y update || true; fi
+            if [ "$PM" = yum ]; then yum -y install gcc make pam-devel which || yum -y groupinstall "Development Tools" || true; fi
+            if [ "$PM" = dnf ]; then
+              dnf -y install gcc make pam-devel which || (dnf -y install gcc-toolset-12-gcc gcc-toolset-12-gcc-c++ make pam-devel which || true)
+            else
+              # CentOS 7 mirrors are EOL; replace Base.repo with exact vault path and disable fastestmirror
+              echo "--- Writing CentOS-Base.repo for 7.9.2009 ---"
+              printf "%s\n" "[base]" "name=CentOS-7.9 - Base" "baseurl=http://vault.centos.org/7.9.2009/os/\$basearch/" "gpgcheck=1" "gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-CentOS-7" > /etc/yum.repos.d/CentOS-Base.repo
+              printf "%s\n" "[updates]" "name=CentOS-7.9 - Updates" "baseurl=http://vault.centos.org/7.9.2009/updates/\$basearch/" "gpgcheck=1" "gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-CentOS-7" >> /etc/yum.repos.d/CentOS-Base.repo
+              printf "%s\n" "[extras]" "name=CentOS-7.9 - Extras" "baseurl=http://vault.centos.org/7.9.2009/extras/\$basearch/" "gpgcheck=1" "gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-CentOS-7" >> /etc/yum.repos.d/CentOS-Base.repo
+              echo "--- AFTER repo file head ---" && head -n 20 /etc/yum.repos.d/CentOS-Base.repo || true
+              if [ -f /etc/yum/pluginconf.d/fastestmirror.conf ]; then sed -i "s/^enabled=.*/enabled=0/" /etc/yum/pluginconf.d/fastestmirror.conf || true; fi
+              if grep -q "^fastestmirror" /etc/yum.conf 2>/dev/null; then sed -i "s/^fastestmirror=.*/fastestmirror=0/" /etc/yum.conf || true; else echo "fastestmirror=0" >> /etc/yum.conf; fi
+              yum clean all || true
+              yum -y makecache || true
+              yum -y install gcc make pam-devel which || true
+            fi
+            make clean
+            make tests WERROR=1 CC=gcc
+            for t in bin/test_*; do SUDOSH_TEST_MODE=1 "$t"; done
+          '

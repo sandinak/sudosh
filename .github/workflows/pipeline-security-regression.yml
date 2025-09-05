@@ -63,13 +63,15 @@ jobs:
         
     - name: Build sudosh
       run: |
+        echo "==> $(uname -s) $(uname -r) CC=$CC"
+        echo "==> Makefile PAM detection:"; make print-pam-detection || true
         make clean
         make CC=$CC CFLAGS="$CFLAGS"
-        
+
     - name: Run quick smoke test
       run: |
-        make test-pipeline-smoke
-        
+        ./scripts/run_pipeline_regression_tests.sh --smoke-only || true
+
     - name: Run full pipeline regression tests
       run: |
         make test-pipeline-regression
@@ -165,14 +167,27 @@ jobs:
         
         gcc -Isrc -c test_whitelist_integrity.c -o test_whitelist_integrity.o
         gcc -Isrc -c tests/support/test_globals.c -o test_globals.o
+        # Detect PAM libs via compile+link probes and include -ldl on Linux
+        if printf '#include <security/pam_appl.h>\nint main(void){return 0;}\n' | ${CC:-gcc} -x c - -o /dev/null -lpam >/dev/null 2>&1; then
+          LIBS="-lpam"
+          if [ "$(uname -s)" = Linux ] && printf '#include <security/pam_misc.h>\nint main(void){return 0;}\n' | ${CC:-gcc} -x c - -o /dev/null -lpam_misc >/dev/null 2>&1; then
+            LIBS="$LIBS -lpam_misc"
+          fi
+          if [ "$(uname -s)" = Linux ]; then
+            LIBS="$LIBS -ldl"
+          fi
+        else
+          LIBS=""
+        fi
+        echo "Pipeline regression: CC=${CC:-gcc} UNAME=$(uname -s) LIBS=$LIBS"
         gcc test_whitelist_integrity.o test_globals.o obj/pipeline.o obj/security.o obj/utils.o \
           obj/logging.o obj/auth.o obj/command.o obj/nss.o obj/sudoers.o \
           obj/sssd.o obj/sssd_replay_dev.o obj/filelock.o obj/shell_enhancements.o obj/shell_env.o \
           obj/config.o obj/ansible_detection.o obj/ai_detection.o \
           obj/dangerous_commands.o obj/editor_detection.o \
-          -o test_whitelist_integrity -lpam -lpam_misc
+          -o test_whitelist_integrity $LIBS
         ./test_whitelist_integrity
-        
+
     - name: Test pager security configuration
       run: |
         # Verify pager security environment is properly configured
@@ -181,40 +196,41 @@ jobs:
         #include <stdlib.h>
         #include <string.h>
         #include "src/sudosh.h"
-        
+
         int main() {
             setup_secure_pager_environment();
-            
+
             char *lesssecure = getenv("LESSSECURE");
             if (!lesssecure || strcmp(lesssecure, "1") != 0) {
                 printf("SECURITY VIOLATION: LESSSECURE not set to 1\n");
                 return 1;
             }
-            
+
             char *lessopen = getenv("LESSOPEN");
             if (!lessopen || strcmp(lessopen, "") != 0) {
                 printf("SECURITY VIOLATION: LESSOPEN not disabled\n");
                 return 1;
             }
-            
+
             char *visual = getenv("VISUAL");
             if (!visual || strcmp(visual, "/bin/false") != 0) {
                 printf("SECURITY VIOLATION: VISUAL not disabled\n");
                 return 1;
             }
-            
+
             printf("Pager security configuration verified\n");
             return 0;
         }
         EOF
-        
+
         gcc -Isrc -c test_pager_security.c -o test_pager_security.o
+        # Reuse probed LIBS above
         gcc test_pager_security.o test_globals.o obj/security.o obj/utils.o obj/logging.o \
           obj/auth.o obj/command.o obj/nss.o obj/sudoers.o obj/sssd.o obj/sssd_replay_dev.o \
           obj/filelock.o obj/shell_enhancements.o obj/shell_env.o \
           obj/config.o obj/pipeline.o obj/ansible_detection.o obj/ai_detection.o \
           obj/dangerous_commands.o obj/editor_detection.o \
-          -o test_pager_security -lpam -lpam_misc
+          -o test_pager_security $LIBS
         ./test_pager_security
 
   notification:

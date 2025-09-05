@@ -117,6 +117,14 @@ extern int sudo_compat_mode_flag;     /* argv[0]=="sudo" */
 
 /* Ansible detection constants */
 #define MAX_PROCESS_NAME_LENGTH 256
+
+/* Portable clearenv wrapper (implemented in security.c). On Linux it maps to clearenv. */
+#if defined(__APPLE__)
+void sudosh_clearenv(void);
+#else
+#define sudosh_clearenv clearenv
+#endif
+
 #define MAX_PROCESS_TREE_DEPTH 10
 #define ANSIBLE_ENV_VAR_COUNT 20
 #define MAX_ALIASES 256
@@ -198,6 +206,7 @@ typedef enum {
 
 /* Structure to hold command information */
 struct command_info {
+
     char *command;
     char **argv;
     int argc;
@@ -421,12 +430,25 @@ int check_command_permission_sudo_fallback(const char *username, const char *com
 		char *selinux_role;
 		char *selinux_type;
 		char *apparmor_profile;
+		/* Environment lists (comma-separated patterns) */
+		char *env_keep;
+		char *env_check;
+		char *env_delete;
 	};
+
+	/* Apply environment policy derived from SSSD options */
+	void apply_env_policy_from_sssd(const struct sssd_effective_opts *sopts);
+
+	/* Orchestrate env_reset including whitelist restore, then apply policy */
+	void apply_env_reset_and_policy_from_sssd(const struct sssd_effective_opts *sopts);
 
 	/* Compute effective options for username/command; returns 1 if allowed and fills out */
 	int sssd_compute_effective_options(const char *username, const char *command, struct sssd_effective_opts *out);
 	int sssd_compute_effective_options_as(const char *username, const char *command, const char *runas_user, const char *runas_group, struct sssd_effective_opts *out);
 	void sssd_free_effective_options(struct sssd_effective_opts *opts);
+		/* NOPASSWD detection via SSSD */
+		int check_sssd_global_nopasswd(const char *username);
+		int check_sssd_any_nopasswd(const char *username);
 
 
 /* Enhanced authentication functions for editor environments */

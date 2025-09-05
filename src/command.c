@@ -284,6 +284,64 @@ int execute_command(struct command_info *cmd, struct user_info *user) {
                     return -1;
                 }
             }
+        /* Enforce SSSD-derived options for this command, if available */
+        struct sssd_effective_opts sopts; memset(&sopts, 0, sizeof(sopts));
+        if (sssd_compute_effective_options(getenv("USER"), cmd->argv[0], &sopts)) {
+            /* requiretty: deny if no controlling TTY */
+            if (sopts.requiretty) {
+                if (!isatty(STDIN_FILENO)) {
+                    fprintf(stderr, "sudosh: a terminal is required (requiretty)\n");
+                    sssd_free_effective_options(&sopts);
+                    free(command_path);
+                    return -1;
+                }
+            }
+            /* env_reset with whitelist and policy application */
+            apply_env_reset_and_policy_from_sssd(&sopts);
+            /* setenv_allow: nothing to enforce here yet (user export is controlled elsewhere) */
+            /* umask */
+            if (sopts.umask_value >= 0) {
+                umask((mode_t)sopts.umask_value);
+            }
+            /* cwd/chroot */
+            if (sopts.cwd) {
+                if (chdir(sopts.cwd) != 0) {
+                    perror("chdir");
+                    /* Fail closed to avoid partial enforcement */
+                    sssd_free_effective_options(&sopts);
+                    free(command_path);
+                    return -1;
+                }
+            }
+            if (sopts.chroot_dir) {
+                if (chroot(sopts.chroot_dir) != 0) {
+                    perror("chroot");
+                    /* Fail closed to avoid partial enforcement */
+                    sssd_free_effective_options(&sopts);
+                    free(command_path);
+                    return -1;
+                }
+                if (chdir("/") != 0) {
+                    perror("chdir");
+                    sssd_free_effective_options(&sopts);
+                    free(command_path);
+                    return -1;
+                }
+            }
+            /* noexec: best-effort - if enabled, block direct shell and known exec wrappers */
+            if (sopts.noexec) {
+                const char *base = strrchr(cmd->argv[0], '/'); base = base ? base + 1 : cmd->argv[0];
+                if (strcmp(base, "sh") == 0 || strcmp(base, "bash") == 0 || strcmp(base, "dash") == 0) {
+                    fprintf(stderr, "sudosh: command blocked by noexec\n");
+                    sssd_free_effective_options(&sopts);
+                    free(command_path);
+                    return -1;
+                }
+                /* TODO: consider LD_PRELOAD/libnoexec if acceptable */
+            }
+            sssd_free_effective_options(&sopts);
+        }
+
         }
     }
 

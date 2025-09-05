@@ -1,0 +1,1 @@
+cppcheck not available, skipping static analysis

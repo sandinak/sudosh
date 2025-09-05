@@ -169,6 +169,151 @@ void sanitize_environment(void) {
     umask(022);
 }
 
+
+/* Portable clearenv wrapper: macOS lacks clearenv; provide a fallback */
+#if defined(__APPLE__)
+#include <crt_externs.h>
+void sudosh_clearenv(void)
+{
+    /* Iterate current environment and unset each name safely */
+    char **envp = *_NSGetEnviron();
+    if (!envp) return;
+    for (char **e = envp; *e; ++e) {
+        const char *eq = strchr(*e, '=');
+        if (eq) {
+            size_t n = (size_t)(eq - *e);
+            if (n > 0 && n < 256) {
+                char name[256];
+                memcpy(name, *e, n);
+                name[n] = '\0';
+                unsetenv(name);
+            }
+        }
+    }
+}
+#else
+#define sudosh_clearenv clearenv
+#endif
+
+/* Apply environment policy derived from SSSD options */
+void apply_env_policy_from_sssd(const struct sssd_effective_opts *sopts)
+{
+    if (!sopts) return;
+
+    /* If env_reset, start from a safe baseline; command.c already clears in some paths */
+    if (sopts->env_reset) {
+        /* Do not clear here to avoid double-clears; set safe PATH if missing */
+        const char *cur = getenv("PATH");
+        if (!cur || !*cur) {
+            setenv("PATH", "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", 1);
+        }
+    }
+
+    /* Apply secure_path override if provided */
+    if (sopts->secure_path) {
+        setenv("PATH", sopts->secure_path, 1);
+    }
+
+    /* env_delete: remove matching variables (comma-separated names or globs) */
+    if (sopts->env_delete) {
+        const char *p = sopts->env_delete;
+        char name[128]; size_t np = 0;
+        for (;;) {
+            char ch = *p++;
+            if (ch == ',' || ch == '\0') {
+                name[np] = '\0';
+                if (np > 0) {
+                    unsetenv(name);
+                }
+                np = 0;
+                if (ch == '\0') break;
+            } else if (np + 1 < sizeof(name)) {
+                name[np++] = ch;
+            }
+        }
+    }
+
+    /* env_check: ensure listed variables exist; otherwise unset */
+    if (sopts->env_check) {
+        const char *p = sopts->env_check;
+        char name[128]; size_t np = 0;
+        for (;;) {
+            char ch = *p++;
+            if (ch == ',' || ch == '\0') {
+                name[np] = '\0';
+                if (np > 0) {
+                    const char *v = getenv(name);
+                    if (!v) unsetenv(name);
+                }
+                np = 0;
+                if (ch == '\0') break;
+            } else if (np + 1 < sizeof(name)) {
+                name[np++] = ch;
+            }
+        }
+    }
+
+    /* env_keep: nothing to actively do here in our model; we already sanitized and blocked env manipulations */
+    (void)sopts->env_keep;
+}
+
+/* Clear environment, then restore whitelisted variables from env_keep, then apply policy */
+void apply_env_reset_and_policy_from_sssd(const struct sssd_effective_opts *sopts)
+{
+    if (!sopts) return;
+
+    if (sopts->env_reset) {
+        /* Snapshot whitelist before clearing */
+        const char *keep = sopts->env_keep;
+        struct { const char *name; char *value; } kept[64];
+        size_t kept_n = 0;
+
+        if (keep && *keep) {
+            const char *p = keep; char name[128]; size_t np = 0;
+            for (;;) {
+                char ch = *p++;
+                if (ch == ',' || ch == '\0') {
+                    name[np] = '\0';
+                    if (np > 0 && kept_n < 64) {
+                        const char *v = getenv(name);
+                        if (v) {
+                            kept[kept_n].name = strdup(name);
+                            kept[kept_n].value = strdup(v);
+                            kept_n++;
+                        }
+                    }
+                    np = 0;
+                    if (ch == '\0') break;
+                } else if (np + 1 < sizeof(name)) {
+                    name[np++] = ch;
+                }
+            }
+        }
+
+        /* Now clear environment */
+        sudosh_clearenv();
+        setenv("PATH", "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", 1);
+        setenv("TERM", "xterm-256color", 1);
+
+        /* Restore whitelisted vars, but never override baseline TERM normalization */
+        for (size_t i = 0; i < kept_n; i++) {
+            if (kept[i].name && strcmp(kept[i].name, "TERM") == 0) {
+                /* Enforce normalized TERM even if env_keep includes it */
+                if (kept[i].name) free((void*)kept[i].name);
+                if (kept[i].value) free(kept[i].value);
+                continue;
+            }
+            if (kept[i].name && kept[i].value) setenv(kept[i].name, kept[i].value, 1);
+            if (kept[i].name) free((void*)kept[i].name);
+            if (kept[i].value) free(kept[i].value);
+        }
+    }
+
+    /* After reset, apply remaining policy (secure_path, env_delete/check, etc.) */
+    apply_env_policy_from_sssd(sopts);
+}
+
+
 /**
  * Drop privileges back to original user
  */

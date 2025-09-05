@@ -107,6 +107,23 @@ struct sss_sudo_rule {
     long order;
     time_t not_before;
     time_t not_after;
+    /* options (test-only mirror) */
+    int env_reset;
+    int setenv_allow;
+    int noexec;
+    int requiretty;
+    int lecture;
+    int log_input;
+    int log_output;
+    int umask_value;        /* -1 if unset */
+    int timestamp_timeout;  /* minutes; -1 if unset */
+    int verifypw;           /* 0=unset, 1=always, 2=any, 3=never */
+    const char *secure_path;
+    const char *cwd;
+    const char *chroot_dir;
+    const char *env_keep;
+    const char *env_check;
+    const char *env_delete;
     struct sss_sudo_rule *next;
 };
 
@@ -143,6 +160,24 @@ static struct sss_sudo_rule * build_list_from_test_rules(const sssd_test_rule *r
             if (!nr) continue;
             nr->user = tr->user; nr->host = tr->host; nr->runas_user = tr->runas_user; nr->runas_group = tr->runas_group;
             nr->command = tr->commands[j]; nr->order = tr->order; nr->not_before = tr->not_before; nr->not_after = tr->not_after;
+            /* copy options from test rule */
+            nr->env_reset = tr->env_reset;
+            nr->setenv_allow = tr->setenv_allow;
+            nr->noexec = tr->noexec;
+            nr->requiretty = tr->requiretty;
+            nr->lecture = tr->lecture;
+            nr->log_input = tr->log_input;
+            nr->log_output = tr->log_output;
+            /* In test API, treat 0 as 'unset' for fields where -1 denotes unset */
+            nr->umask_value = (tr->umask_value != 0) ? tr->umask_value : -1;
+            nr->timestamp_timeout = (tr->timestamp_timeout != 0) ? tr->timestamp_timeout : -1;
+            nr->verifypw = tr->verifypw;
+            nr->secure_path = tr->secure_path;
+            nr->cwd = tr->cwd;
+            nr->chroot_dir = tr->chroot_dir;
+            nr->env_keep = (char*)tr->env_keep;
+            nr->env_check = (char*)tr->env_check;
+            nr->env_delete = (char*)tr->env_delete;
             sssd_insert_sorted_by_order(&head, nr);
         }
     }
@@ -189,4 +224,51 @@ int sssd_eval_rules_for_test(const sssd_test_rule *rules, size_t n_rules,
     while (list) { struct sss_sudo_rule *n = list->next; free(list); list = n; }
     if (any_negative) return 0;
     return any_positive ? 1 : 0;
+
+}
+
+int sssd_compute_effective_options_for_test(const sssd_test_rule *rules, size_t n_rules,
+                                            const char *username, const char *short_host, const char *fqdn,
+                                            const char *runas_user, const char *runas_group,
+                                            const char *command,
+                                            sssd_effective_opts_test *out)
+{
+    if (!out) return 0;
+    memset(out, 0, sizeof(*out));
+    out->umask_value = -1; out->timestamp_timeout = -1; out->verifypw = 0;
+    if (!rules || !username || !command || !short_host || !fqdn) return 0;
+
+    struct sss_sudo_rule *list = build_list_from_test_rules(rules, n_rules);
+    int allowed = 0;
+    for (struct sss_sudo_rule *r = list; r; r = r->next) {
+        if (!r->command) continue;
+        if (!rule_applies(r, username, short_host, fqdn, runas_user, runas_group)) continue;
+        const char *pat = r->command; int is_neg = (pat[0] == '!'); if (is_neg) pat++;
+        if (is_neg) {
+            if (sssd_command_matches(pat, command)) { allowed = 0; break; }
+            continue;
+        }
+        if (!allowed) {
+            if (strcmp(pat, "ALL") == 0 || sssd_command_matches(pat, command)) allowed = 1;
+        }
+        /* Accumulate options (union semantics, last non-negative wins for specific values) */
+        if (r->env_reset) out->env_reset = 1;
+        if (r->setenv_allow) out->setenv_allow = 1;
+        if (r->noexec) out->noexec = 1;
+        if (r->requiretty) out->requiretty = 1;
+        if (r->lecture) out->lecture = 1;
+        if (r->log_input) out->log_input = 1;
+        if (r->log_output) out->log_output = 1;
+        if (r->umask_value >= 0) out->umask_value = r->umask_value;
+        if (r->timestamp_timeout >= 0) out->timestamp_timeout = r->timestamp_timeout;
+        if (r->verifypw) out->verifypw = r->verifypw;
+        if (!out->secure_path && r->secure_path) out->secure_path = r->secure_path;
+        if (!out->cwd && r->cwd) out->cwd = r->cwd;
+        if (!out->chroot_dir && r->chroot_dir) out->chroot_dir = r->chroot_dir;
+        if (!out->env_keep && r->env_keep) out->env_keep = r->env_keep;
+        if (!out->env_check && r->env_check) out->env_check = r->env_check;
+        if (!out->env_delete && r->env_delete) out->env_delete = r->env_delete;
+    }
+    while (list) { struct sss_sudo_rule *n = list->next; free(list); list = n; }
+    return allowed;
 }
