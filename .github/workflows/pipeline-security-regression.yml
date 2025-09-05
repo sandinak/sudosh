@@ -179,6 +179,7 @@ jobs:
         else
           LIBS=""
         fi
+        echo "Pipeline regression: CC=${CC:-gcc} UNAME=$(uname -s) LIBS=$LIBS"
         gcc test_whitelist_integrity.o test_globals.o obj/pipeline.o obj/security.o obj/utils.o \
           obj/logging.o obj/auth.o obj/command.o obj/nss.o obj/sudoers.o \
           obj/sssd.o obj/sssd_replay_dev.o obj/filelock.o obj/shell_enhancements.o obj/shell_env.o \
