@@ -243,8 +243,8 @@ $(BINDIR)/test_%: $(OBJDIR)/$(TESTDIR)/regression/test_%.o $(LIB_OBJECTS) $(TEST
 $(BINDIR)/test_security_race_conditions: $(OBJDIR)/$(TESTDIR)/security/test_security_race_conditions.o $(LIB_OBJECTS) $(TEST_SUPPORT_OBJECTS) | $(BINDIR)
 	$(CC) $^ -o $@ $(LDFLAGS) -lpthread
 
-# Build all tests (also ensure sudosh binary exists for script-based tests)
-tests: $(TARGET) $(LIB_OBJECTS) | $(OBJDIR)/$(TESTDIR)
+# Build all tests (also ensure sudosh binary and path-validator exist for script-based and integration tests)
+tests: $(TARGET) $(LIB_OBJECTS) $(BINDIR)/path-validator | $(OBJDIR)/$(TESTDIR)
 tests: $(TEST_TARGETS)
 
 # Run all tests

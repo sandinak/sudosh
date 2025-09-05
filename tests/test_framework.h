@@ -111,9 +111,10 @@
 
 #define TEST_SUITE_BEGIN(suite_name) \
     int main(void) { \
-        int test_count = 0; \
-        int test_passes = 0; \
-        int test_failures = 0; \
+        /* initialize global counters (avoid shadowing by redeclaring) */ \
+        test_count = 0; \
+        test_passes = 0; \
+        test_failures = 0; \
         printf("=== %s ===\n", suite_name);
 
 #define TEST_SUITE_END() \

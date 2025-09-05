@@ -144,26 +144,55 @@ int test_pipe_error_messages() {
  */
 int test_help_includes_rules() {
     printf("Testing help command includes 'rules'...\n");
-    
-    /* Capture stdout to test help output */
-    FILE *original_stdout = stdout;
-    char help_buffer[4096];
-    memset(help_buffer, 0, sizeof(help_buffer));
-    FILE *help_stream = fmemopen(help_buffer, sizeof(help_buffer), "w");
-    if (!help_stream) {
-        printf("FAIL: Could not create help stream for testing\n");
+
+    /* Capture stdout using a pipe to be portable across libcs */
+    int saved_stdout_fd = dup(STDOUT_FILENO);
+    if (saved_stdout_fd == -1) {
+        printf("FAIL: Could not dup STDOUT\n");
         return 1;
     }
 
-    stdout = help_stream;
+    int pipefd[2];
+    if (pipe(pipefd) != 0) {
+        printf("FAIL: Could not create pipe for capturing stdout\n");
+        close(saved_stdout_fd);
+        return 1;
+    }
+
+    /* Redirect stdout to the write end of the pipe */
+    fflush(stdout);
+    if (dup2(pipefd[1], STDOUT_FILENO) == -1) {
+        printf("FAIL: Could not dup2 to STDOUT\n");
+        close(pipefd[0]);
+        close(pipefd[1]);
+        close(saved_stdout_fd);
+        return 1;
+    }
+    close(pipefd[1]); /* writer now is STDOUT */
 
     /* Call print_help function */
     print_help();
-    fflush(help_stream);
+    fflush(stdout);
 
-    /* Restore stdout */
-    fclose(help_stream);
-    stdout = original_stdout;
+    /* Restore original stdout */
+    if (dup2(saved_stdout_fd, STDOUT_FILENO) == -1) {
+        printf("FAIL: Could not restore STDOUT\n");
+        close(pipefd[0]);
+        close(saved_stdout_fd);
+        return 1;
+    }
+    close(saved_stdout_fd);
+
+    /* Read captured output */
+    char help_buffer[4096];
+    ssize_t n, total = 0;
+    memset(help_buffer, 0, sizeof(help_buffer));
+    while ((n = read(pipefd[0], help_buffer + total, (sizeof(help_buffer) - 1) - total)) > 0) {
+        total += n;
+        if (total >= (ssize_t)(sizeof(help_buffer) - 1)) break;
+    }
+    close(pipefd[0]);
+    help_buffer[total] = '\0';
 
     /* Check that 'rules' is mentioned in help */
     if (!strstr(help_buffer, "rules")) {
@@ -171,9 +200,9 @@ int test_help_includes_rules() {
         printf("Help buffer: %s\n", help_buffer);
         return 1;
     }
-    
+
     printf("  'rules' command found in help: PASS\n");
-    
+
     return 0;
 }
 
@@ -182,26 +211,54 @@ int test_help_includes_rules() {
  */
 int test_commands_includes_rules() {
     printf("Testing commands list includes 'rules'...\n");
-    
-    /* Capture stdout to test commands output */
-    FILE *original_stdout = stdout;
-    char commands_buffer[4096];
-    memset(commands_buffer, 0, sizeof(commands_buffer));
-    FILE *commands_stream = fmemopen(commands_buffer, sizeof(commands_buffer), "w");
-    if (!commands_stream) {
-        printf("FAIL: Could not create commands stream for testing\n");
+
+    /* Capture stdout using a pipe to be portable across libcs */
+    int saved_stdout_fd = dup(STDOUT_FILENO);
+    if (saved_stdout_fd == -1) {
+        printf("FAIL: Could not dup STDOUT\n");
         return 1;
     }
 
-    stdout = commands_stream;
+    int pipefd[2];
+    if (pipe(pipefd) != 0) {
+        printf("FAIL: Could not create pipe for capturing stdout\n");
+        close(saved_stdout_fd);
+        return 1;
+    }
+
+    fflush(stdout);
+    if (dup2(pipefd[1], STDOUT_FILENO) == -1) {
+        printf("FAIL: Could not dup2 to STDOUT\n");
+        close(pipefd[0]);
+        close(pipefd[1]);
+        close(saved_stdout_fd);
+        return 1;
+    }
+    close(pipefd[1]); /* writer now is STDOUT */
 
     /* Call print_commands function */
     print_commands();
-    fflush(commands_stream);
+    fflush(stdout);
 
-    /* Restore stdout */
-    fclose(commands_stream);
-    stdout = original_stdout;
+    /* Restore original stdout */
+    if (dup2(saved_stdout_fd, STDOUT_FILENO) == -1) {
+        printf("FAIL: Could not restore STDOUT\n");
+        close(pipefd[0]);
+        close(saved_stdout_fd);
+        return 1;
+    }
+    close(saved_stdout_fd);
+
+    /* Read captured output */
+    char commands_buffer[4096];
+    ssize_t n, total = 0;
+    memset(commands_buffer, 0, sizeof(commands_buffer));
+    while ((n = read(pipefd[0], commands_buffer + total, (sizeof(commands_buffer) - 1) - total)) > 0) {
+        total += n;
+        if (total >= (ssize_t)(sizeof(commands_buffer) - 1)) break;
+    }
+    close(pipefd[0]);
+    commands_buffer[total] = '\0';
 
     /* Check that 'rules' is mentioned in commands list */
     if (!strstr(commands_buffer, "rules")) {
@@ -209,9 +266,9 @@ int test_commands_includes_rules() {
         printf("Commands buffer: %s\n", commands_buffer);
         return 1;
     }
-    
+
     printf("  'rules' command found in commands list: PASS\n");
-    
+
     return 0;
 }
 
