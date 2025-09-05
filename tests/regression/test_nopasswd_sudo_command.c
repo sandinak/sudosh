@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include <limits.h>
 #include <sys/stat.h>
+#include <pwd.h>
 #include "../test_framework.h"
 
 /* Regression: invoking via sudo-compat with a real command should skip auth when NOPASSWD: ALL is present */
@@ -18,8 +19,12 @@ int test_nopasswd_sudo_runs_command_without_prompt() {
     TEST_ASSERT(symlink(target, "/tmp/sudo") == 0 || access("/tmp/sudo", F_OK) == 0, "symlink sudo -> sudosh");
 
     /* Prepare a temporary sudoers file granting NOPASSWD: ALL to current user */
-    const char *user = getenv("USER");
-    TEST_ASSERT(user && *user, "USER env present");
+    const char *user = getenv("SUDO_USER");
+    if (!user || !*user) {
+        struct passwd *pw = getpwuid(getuid());
+        TEST_ASSERT(pw && pw->pw_name, "resolve current username");
+        user = pw->pw_name;
+    }
     char sudoers_content[256];
     snprintf(sudoers_content, sizeof(sudoers_content), "%s ALL=(ALL) NOPASSWD: ALL\n", user);
     char *sudoers_path = create_temp_file(sudoers_content);
