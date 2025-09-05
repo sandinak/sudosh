@@ -147,7 +147,9 @@ jobs:
               dnf -y install gcc make pam-devel which || (dnf -y install gcc-toolset-12-gcc gcc-toolset-12-gcc-c++ make pam-devel which || true)
             else
               # CentOS 7 mirrors are EOL; switch to vault and install minimal toolchain
+              echo '--- BEFORE repo file head ---' && head -n 20 /etc/yum.repos.d/CentOS-Base.repo || true
               sed -i 's|mirrorlist=http://mirrorlist.centos.org.*|#mirrorlist disabled|g; s|#\?baseurl=http://mirror.centos.org/centos/|baseurl=http://vault.centos.org/centos/|g' /etc/yum.repos.d/CentOS-*.repo || true
+              echo '--- AFTER repo file head ---' && head -n 20 /etc/yum.repos.d/CentOS-Base.repo || true
               yum -y install gcc make pam-devel which || true
             fi
             make clean
