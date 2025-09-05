@@ -198,6 +198,14 @@ typedef enum {
 
 /* Structure to hold command information */
 struct command_info {
+
+/* Portable clearenv wrapper (implemented in security.c). On Linux it maps to clearenv. */
+#if defined(__APPLE__)
+void sudosh_clearenv(void);
+#else
+#define sudosh_clearenv clearenv
+#endif
+
     char *command;
     char **argv;
     int argc;

@@ -173,7 +173,7 @@ void sanitize_environment(void) {
 /* Portable clearenv wrapper: macOS lacks clearenv; provide a fallback */
 #if defined(__APPLE__)
 #include <crt_externs.h>
-static void sudosh_clearenv(void)
+void sudosh_clearenv(void)
 {
     /* Iterate current environment and unset each name safely */
     char **envp = *_NSGetEnviron();

@@ -30,7 +30,7 @@ int main(void)
         extern void sudosh_clearenv(void);
         sudosh_clearenv();
 #else
-        clearenv();
+        sudosh_clearenv();
 #endif
         setenv("TERM", "xterm-256color", 1);
         setenv("PATH", "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", 1);
