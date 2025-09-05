@@ -127,8 +127,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - container: centos:7.9.2009
-            pm: yum
           - container: almalinux:8.9
             pm: dnf
     steps:
