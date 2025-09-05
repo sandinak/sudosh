@@ -138,11 +138,10 @@ jobs:
           set -euxo pipefail
           IMAGE=${{ matrix.container }}
           PM=${{ matrix.pm }}
-          docker run --rm -v "$PWD":/ws -w /ws "$IMAGE" sh -euxc '
-            PM="'$PM'";
+          docker run --rm -e PM="${{ matrix.pm }}" -v "$PWD":/ws -w /ws "$IMAGE" sh -euxc '
             if ! command -v "$PM" >/dev/null 2>&1; then PM=yum; fi
             if [ "$PM" = dnf ]; then dnf -y update || true; else yum -y update || true; fi
-            if [ "$PM" = yum ]; then yum -y groupinstall "Development Tools" || true; fi
+            if [ "$PM" = yum ]; then yum -y install gcc make pam-devel which || yum -y groupinstall "Development Tools" || true; fi
             if [ "$PM" = dnf ]; then
               dnf -y install gcc make pam-devel which || (dnf -y install gcc-toolset-12-gcc gcc-toolset-12-gcc-c++ make pam-devel which || true)
             else
@@ -153,7 +152,7 @@ jobs:
               printf "%s\n" "[extras]" "name=CentOS-7.9 - Extras" "baseurl=http://vault.centos.org/7.9.2009/extras/\$basearch/" "gpgcheck=1" "gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-CentOS-7" >> /etc/yum.repos.d/CentOS-Base.repo
               echo "--- AFTER repo file head ---" && head -n 20 /etc/yum.repos.d/CentOS-Base.repo || true
               if [ -f /etc/yum/pluginconf.d/fastestmirror.conf ]; then sed -i "s/^enabled=.*/enabled=0/" /etc/yum/pluginconf.d/fastestmirror.conf || true; fi
-              if grep -q '^fastestmirror' /etc/yum.conf 2>/dev/null; then sed -i "s/^fastestmirror=.*/fastestmirror=0/" /etc/yum.conf || true; else echo "fastestmirror=0" >> /etc/yum.conf; fi
+              if grep -q "^fastestmirror" /etc/yum.conf 2>/dev/null; then sed -i "s/^fastestmirror=.*/fastestmirror=0/" /etc/yum.conf || true; else echo "fastestmirror=0" >> /etc/yum.conf; fi
               yum clean all || true
               yum -y makecache || true
               yum -y install gcc make pam-devel which || true
